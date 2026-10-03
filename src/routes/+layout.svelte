@@ -3,15 +3,22 @@
 	import favicon from '#lib/assets/favicon.svg';
 	import DashboardHeader from '#lib/components/DashboardHeader.svelte';
 	import DashboardSidebar from '#lib/components/DashboardSidebar.svelte';
+	import { provideLanguage } from '#lib/i18n/language.svelte.ts';
+	import type { LayoutProps } from './$types';
 
-	let { children } = $props();
+	let { children, data }: LayoutProps = $props();
+	const language = provideLanguage(() => data.language);
+
+	$effect(() => {
+		document.documentElement.lang = language.current;
+	});
 </script>
 
 <svelte:head>
 	<link rel="icon" href={favicon} />
 </svelte:head>
 
-<a class="skip-link" href="#main-content">Skip to content</a>
+<a class="skip-link" href="#main-content">{language.messages.accessibility.skipToContent}</a>
 
 <div class="dashboard-shell">
 	<DashboardHeader />
@@ -49,8 +56,9 @@
 		z-index: 1;
 		padding: 0.75rem 1rem;
 		border-radius: 0.5rem;
-		background: var(--color-text);
-		color: var(--color-surface);
+		background: var(--color-surface);
+		color: var(--color-text);
+		border: 1px solid var(--color-accent);
 		text-decoration: none;
 		transform: translateY(calc(-100% - 2rem));
 	}

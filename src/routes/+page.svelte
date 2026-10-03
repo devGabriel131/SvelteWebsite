@@ -1,12 +1,18 @@
+<script lang="ts">
+	import { useLanguage } from '#lib/i18n/language.svelte.ts';
+
+	const language = useLanguage();
+</script>
+
 <svelte:head>
-	<title>Student dashboard</title>
-	<meta name="description" content="Your student dashboard." />
+	<title>{language.messages.home.pageTitle}</title>
+	<meta name="description" content={language.messages.home.description} />
 </svelte:head>
 
 <div class="dashboard-home">
-	<p class="eyebrow">Your workspace</p>
-	<h1>Student dashboard</h1>
-	<p class="introduction">One place for your student tools.</p>
+	<p class="eyebrow">{language.messages.home.eyebrow}</p>
+	<h1>{language.messages.home.title}</h1>
+	<p class="introduction">{language.messages.home.introduction}</p>
 
 	<section class="empty-state" aria-labelledby="empty-state-title">
 		<span class="placeholder-icon" aria-hidden="true">
@@ -15,8 +21,8 @@
 				<path d="M3 9h18M9 9v11" />
 			</svg>
 		</span>
-		<h2 id="empty-state-title">Room for what's next</h2>
-		<p>This is where each feature will be displayed. We'll build them one at a time.</p>
+		<h2 id="empty-state-title">{language.messages.home.emptyTitle}</h2>
+		<p>{language.messages.home.emptyDescription}</p>
 	</section>
 </div>
 
@@ -30,16 +36,19 @@
 		margin: 0 0 0.5rem;
 		color: var(--color-accent);
 		font-size: 0.75rem;
-		font-weight: 650;
+		font-weight: 700;
 		letter-spacing: 0.1em;
 		text-transform: uppercase;
 	}
 
 	h1 {
 		margin: 0;
-		font-size: clamp(1.75rem, 3vw, 2.25rem);
-		font-weight: 650;
-		letter-spacing: -0.04em;
+		font-family: var(--font-display);
+		font-size: clamp(1.5rem, 3vw, 2.25rem);
+		font-weight: 700;
+		letter-spacing: -0.02em;
+		text-transform: uppercase;
+		overflow-wrap: anywhere;
 		line-height: 1.2;
 	}
 
@@ -71,7 +80,7 @@
 		margin-bottom: 1.25rem;
 		border-radius: 0.875rem;
 		background: var(--color-background);
-		color: var(--color-muted);
+		color: var(--color-accent);
 	}
 
 	svg {
@@ -85,7 +94,7 @@
 	h2 {
 		margin: 0;
 		font-size: 1rem;
-		font-weight: 600;
+		font-weight: 700;
 	}
 
 	.empty-state p {

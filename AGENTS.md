@@ -21,6 +21,7 @@
 ## Stack and tools
 
 - Build the website with SvelteKit.
+- Build every new interface feature in both English and Spanish using the shared translations in `src/lib/i18n/translations.ts`, including accessibility labels and page metadata. Do not hardcode interface text in components.
 - Use Bun for package management and project commands. Fall back to pnpm only if Bun fails; explain the failure and the fallback.
 - Never use Python for project work, scripts, or tooling.
 - Before implementing custom tooling, check whether existing project tools, framework features, or available tools already solve the need.

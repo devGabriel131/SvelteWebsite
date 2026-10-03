@@ -1,10 +1,13 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
+	import { useLanguage } from '#lib/i18n/language.svelte.ts';
+
+	const language = useLanguage();
 </script>
 
 <aside class="dashboard-sidebar">
-	<nav aria-label="Dashboard navigation">
+	<nav aria-label={language.messages.navigation.label}>
 		<a
 			class="dashboard-link"
 			href={resolve('/')}
@@ -16,12 +19,12 @@
 				<rect x="3" y="14" width="7" height="7" rx="1.5" />
 				<rect x="14" y="14" width="7" height="7" rx="1.5" />
 			</svg>
-			Dashboard
+			{language.messages.navigation.dashboard}
 		</a>
 
 		<div class="features-placeholder">
-			<h2>Features</h2>
-			<p>Your features will appear here as we build them.</p>
+			<h2>{language.messages.navigation.features}</h2>
+			<p>{language.messages.navigation.featuresDescription}</p>
 		</div>
 	</nav>
 </aside>
@@ -41,7 +44,7 @@
 		border-radius: 0.625rem;
 		color: var(--color-muted);
 		font-size: 0.875rem;
-		font-weight: 600;
+		font-weight: 700;
 		text-decoration: none;
 	}
 
@@ -65,9 +68,9 @@
 
 	h2 {
 		margin: 0 0 0.75rem;
-		color: var(--color-muted);
+		color: var(--color-accent-secondary);
 		font-size: 0.6875rem;
-		font-weight: 650;
+		font-weight: 700;
 		letter-spacing: 0.12em;
 		text-transform: uppercase;
 	}

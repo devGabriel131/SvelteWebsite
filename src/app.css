@@ -1,5 +1,38 @@
+@font-face {
+	font-family: 'Syncopate';
+	font-style: normal;
+	font-weight: 700;
+	font-display: swap;
+	src: url('./lib/assets/fonts/syncopate-700-latin.woff2') format('woff2');
+}
+
+@font-face {
+	font-family: 'Space Grotesk';
+	font-style: normal;
+	font-weight: 500;
+	font-display: swap;
+	src: url('./lib/assets/fonts/space-grotesk-500-latin.woff2') format('woff2');
+}
+
+@font-face {
+	font-family: 'Space Grotesk';
+	font-style: normal;
+	font-weight: 700;
+	font-display: swap;
+	src: url('./lib/assets/fonts/space-grotesk-700-latin.woff2') format('woff2');
+}
+
 :root {
-	font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+	--brand-cream: #fff5d9;
+	--brand-slate: #7b949c;
+	--brand-sage: #b7c690;
+
+
+	--font-display: 'Syncopate', 'Trebuchet MS', sans-serif;
+	--font-body: 'Space Grotesk', 'Avenir Next', sans-serif;
+
+	font-family: var(--font-body);
+	font-weight: 500;
 	color-scheme: dark;
 	color: var(--color-text);
 	background: var(--color-background);
@@ -9,11 +42,12 @@
 
 	--color-background: #11151c;
 	--color-surface: #191f28;
-	--color-text: #edf2f7;
-	--color-muted: #a5b0c0;
-	--color-border: #303a48;
-	--color-accent: #8dd8df;
-	--color-accent-soft: #223a41;
+	--color-text: var(--brand-cream);
+	--color-muted: color-mix(in srgb, var(--brand-cream) 72%, transparent);
+	--color-border: color-mix(in srgb, var(--brand-slate) 30%, transparent);
+	--color-accent: var(--brand-sage);
+	--color-accent-secondary: var(--brand-slate);
+	--color-accent-soft: color-mix(in srgb, var(--brand-sage) 14%, var(--color-surface));
 }
 
 * {
@@ -26,8 +60,7 @@ body {
 	line-height: 1.5;
 }
 
-a:focus-visible,
-button:focus-visible {
+:focus-visible {
 	outline: 2px solid var(--color-accent);
 	outline-offset: 4px;
 }
