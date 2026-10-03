@@ -1,0 +1,98 @@
+<svelte:head>
+	<title>Student dashboard</title>
+	<meta name="description" content="Your student dashboard." />
+</svelte:head>
+
+<div class="dashboard-home">
+	<p class="eyebrow">Your workspace</p>
+	<h1>Student dashboard</h1>
+	<p class="introduction">One place for your student tools.</p>
+
+	<section class="empty-state" aria-labelledby="empty-state-title">
+		<span class="placeholder-icon" aria-hidden="true">
+			<svg viewBox="0 0 24 24" fill="none">
+				<rect x="3" y="4" width="18" height="16" rx="2" />
+				<path d="M3 9h18M9 9v11" />
+			</svg>
+		</span>
+		<h2 id="empty-state-title">Room for what's next</h2>
+		<p>This is where each feature will be displayed. We'll build them one at a time.</p>
+	</section>
+</div>
+
+<style>
+	.dashboard-home {
+		max-width: 70rem;
+		margin-inline: auto;
+	}
+
+	.eyebrow {
+		margin: 0 0 0.5rem;
+		color: var(--color-accent);
+		font-size: 0.75rem;
+		font-weight: 650;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+	}
+
+	h1 {
+		margin: 0;
+		font-size: clamp(1.75rem, 3vw, 2.25rem);
+		font-weight: 650;
+		letter-spacing: -0.04em;
+		line-height: 1.2;
+	}
+
+	.introduction {
+		margin: 0.75rem 0 0;
+		color: var(--color-muted);
+		font-size: 0.9375rem;
+	}
+
+	.empty-state {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		min-height: 20rem;
+		margin-top: 2rem;
+		padding: 2rem;
+		border: 1px dashed var(--color-border);
+		border-radius: 1rem;
+		background: var(--color-surface);
+		text-align: center;
+	}
+
+	.placeholder-icon {
+		display: grid;
+		place-items: center;
+		width: 3rem;
+		height: 3rem;
+		margin-bottom: 1.25rem;
+		border-radius: 0.875rem;
+		background: var(--color-background);
+		color: var(--color-muted);
+	}
+
+	svg {
+		width: 1.5rem;
+		height: 1.5rem;
+		stroke: currentColor;
+		stroke-width: 1.5;
+		stroke-linecap: round;
+	}
+
+	h2 {
+		margin: 0;
+		font-size: 1rem;
+		font-weight: 600;
+	}
+
+	.empty-state p {
+		max-width: 25rem;
+		margin: 0.5rem 0 0;
+		color: var(--color-muted);
+		font-size: 0.875rem;
+		line-height: 1.75;
+	}
+</style>
