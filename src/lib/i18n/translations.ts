@@ -57,6 +57,7 @@ const english = {
 				measurementsHint: 'Use pounds and inches. Decimal measurements are accepted; no height measurement is needed.',
 				exerciseResults: 'Exercise results',
 				exerciseHint: 'For each exercise, choose “Record a result” to unlock the result fields, or “Unable to complete”. Zero repetitions are a valid recorded result. Do not use a zero time for inability.',
+				nativeExerciseHint: 'Without JavaScript, choosing an exercise option reloads the form and keeps your other entries. Choosing “Unable to complete” clears that exercise’s previous result.',
 				fields: {
 					studentName: 'Student name', sex: 'Sex baseline', age: 'Age (years)',
 					weightLb: 'Weight (lb)', waistIn: 'Waist circumference (in)'
@@ -147,6 +148,7 @@ const spanish: Messages = {
 				measurementsHint: 'Usa libras y pulgadas. Se aceptan medidas decimales; no se necesita la estatura.',
 				exerciseResults: 'Resultados de ejercicio',
 				exerciseHint: 'Para cada ejercicio, elige «Registrar un resultado» para habilitar los campos o «No pude completar» si no lograste completarlo. Un resultado de cero repeticiones es válido. No ingreses un tiempo de cero para indicar que no pudiste completar el ejercicio.',
+				nativeExerciseHint: 'Sin JavaScript, al elegir una opción de ejercicio se recarga el formulario y se conservan los demás datos. Si eliges «No pude completar», se borra el resultado anterior de ese ejercicio.',
 				fields: {
 					studentName: 'Nombre del estudiante', sex: 'Sexo de referencia', age: 'Edad (años)',
 					weightLb: 'Peso (lb)', waistIn: 'Circunferencia de cintura (pulgadas)'

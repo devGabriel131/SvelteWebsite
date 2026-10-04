@@ -96,6 +96,8 @@
 			};
 		}}
 	>
+		<!-- Keep Enter mapped to assessment rather than a native exercise-choice button. -->
+		<noscript><button type="submit" hidden>{messages.submit}</button></noscript>
 		<fieldset class="form-body" disabled={submitting}>
 			<legend class="visually-hidden">{messages.title}</legend>
 			<section class="form-section" aria-labelledby="student-details-title">
@@ -136,6 +138,7 @@
 				<div class="section-heading">
 					<h2 id="exercises-title">{messages.exerciseResults}</h2>
 					<p>{messages.exerciseHint}</p>
+					<noscript><p>{messages.nativeExerciseHint}</p></noscript>
 				</div>
 				<div class="exercises-grid">
 					{#each exerciseKeys as exercise (exercise)}

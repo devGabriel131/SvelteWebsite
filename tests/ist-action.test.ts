@@ -12,12 +12,12 @@ function recordedValues(): IstFormValues {
 	};
 }
 
-async function submit(values: Partial<IstFormValues>, extra?: [IstField, string | File]) {
+async function submit(values: Partial<IstFormValues>, ...extras: [string, string | File][]) {
 	const data = new FormData();
 	for (const field of istFields) {
 		if (values[field] !== undefined) data.append(field, values[field]);
 	}
-	if (extra) data.append(...extra);
+	for (const extra of extras) data.append(...extra);
 	const headers: Record<string, string> = {};
 	const result = await actions.default({
 		request: new Request('http://localhost/ist', { method: 'POST', body: data }),
@@ -30,6 +30,7 @@ describe('IST server form action', () => {
 	test('returns one evaluated snapshot and bilingual PDF downloads without caching personal data', async () => {
 		const { result, headers } = await submit(recordedValues());
 		if ('status' in result) throw new Error(`Unexpected action failure: ${result.status}`);
+		if (!result.assessment || !result.reports) throw new Error('Expected an assessment and PDF reports');
 		expect(headers['cache-control']).toBe('no-store');
 		expect(result.errors).toEqual({});
 		expect(result.serverError).toBe(false);
@@ -48,6 +49,7 @@ describe('IST server form action', () => {
 	test('valid below-baseline results generate a report instead of a validation error', async () => {
 		const { result } = await submit({ ...recordedValues(), pushUpsValue: '0' });
 		if ('status' in result) throw new Error(`Unexpected action failure: ${result.status}`);
+		if (!result.assessment || !result.reports) throw new Error('Expected an assessment and PDF reports');
 		expect(result.assessment.passed).toBe(false);
 		expect(result.assessment.belowBaseline).toEqual(['pushUps']);
 		expect(result.assessment.exercises[0].result).toEqual({ status: 'recorded', value: 0 });
@@ -60,10 +62,98 @@ describe('IST server form action', () => {
 		delete values.runSeconds;
 		const { result } = await submit(values);
 		if ('status' in result) throw new Error(`Unexpected action failure: ${result.status}`);
+		if (!result.assessment) throw new Error('Expected an assessment');
 		expect(result.assessment.input.run).toEqual({ status: 'unable_to_complete' });
 		expect(result.assessment.belowBaseline).toEqual(['run']);
 		expect(result.values.runMinutes).toBe('');
 		expect(result.values.runSeconds).toBe('');
+	});
+
+	const exercises = [
+		{ key: 'pushUps', status: 'pushUpsStatus', fields: ['pushUpsValue'] },
+		{ key: 'sitUps', status: 'sitUpsStatus', fields: ['sitUpsValue'] },
+		{ key: 'plank', status: 'plankStatus', fields: ['plankMinutes', 'plankSeconds'] },
+		{ key: 'run', status: 'runStatus', fields: ['runMinutes', 'runSeconds'] }
+	] as const;
+
+	for (const { key, status, fields } of exercises) {
+		test(`native ${key} choice clears a recorded result before assessment and preserves other entries`, async () => {
+			const original = recordedValues();
+			const { result, headers } = await submit(original, ['exerciseChoice', `${status}:unable_to_complete`]);
+			if ('status' in result) throw new Error(`Unexpected action failure: ${result.status}`);
+			expect(headers['cache-control']).toBe('no-store');
+			expect(result.assessment).toBeNull();
+			expect(result.reports).toBeNull();
+			expect(result.errors).toEqual({});
+			expect(result.serverError).toBe(false);
+			const expected = { ...original, [status]: 'unable_to_complete' };
+			for (const field of fields) expected[field] = '';
+			expect(result.values).toEqual(expected);
+
+			// Native disabled result fields are omitted on the next form submission.
+			const finalValues: Partial<IstFormValues> = { ...result.values };
+			for (const field of fields) delete finalValues[field];
+			const assessment = (await submit(finalValues)).result;
+			if ('status' in assessment || !assessment.assessment || !assessment.reports) {
+				throw new Error('Native exercise transition did not produce an assessment');
+			}
+			expect(assessment.assessment.input[key]).toEqual({ status: 'unable_to_complete' });
+			expect(assessment.assessment.passed).toBe(false);
+			expect(assessment.assessment.belowBaseline).toEqual([key]);
+		});
+
+		test(`native ${key} choice can recover from a contradictory submission without generating a report`, async () => {
+			const invalid = (await submit({ ...recordedValues(), [status]: 'unable_to_complete' })).result;
+			if (!('status' in invalid)) throw new Error('Contradictory input unexpectedly accepted');
+			expect(invalid.status).toBe(400);
+			for (const field of fields) expect(invalid.data.errors[field]).toBe('inconsistent');
+
+			const recovery = (await submit(invalid.data.values, ['exerciseChoice', `${status}:unable_to_complete`])).result;
+			if ('status' in recovery) throw new Error(`Unexpected action failure: ${recovery.status}`);
+			expect(recovery.values[status]).toBe('unable_to_complete');
+			for (const field of fields) expect(recovery.values[field]).toBe('');
+			expect(recovery.errors).toEqual({});
+			expect(recovery.assessment).toBeNull();
+			expect(recovery.reports).toBeNull();
+		});
+
+		test(`native ${key} choice can return to recorded, but still requires a new numeric result`, async () => {
+			const original: Partial<IstFormValues> = { ...recordedValues(), [status]: 'unable_to_complete' };
+			for (const field of fields) delete original[field];
+			const update = (await submit(original, ['exerciseChoice', `${status}:recorded`])).result;
+			if ('status' in update) throw new Error(`Unexpected action failure: ${update.status}`);
+			expect(update.values[status]).toBe('recorded');
+			for (const field of fields) expect(update.values[field]).toBe('');
+			expect(update.assessment).toBeNull();
+
+			const missing = (await submit(update.values)).result;
+			if (!('status' in missing)) throw new Error('Missing recorded result unexpectedly accepted');
+			expect(missing.status).toBe(400);
+			for (const field of fields) expect(missing.data.errors[field]).toBe('required');
+			expect(missing.data.assessment).toBeNull();
+		});
+	}
+
+	test('native choices keep an incomplete form editable and preserve zero repetitions', async () => {
+		const original = { ...recordedValues(), studentName: '', age: '', weightLb: '170abc', pushUpsValue: '0' };
+		const { result } = await submit(original, ['exerciseChoice', 'pushUpsStatus:recorded']);
+		if ('status' in result) throw new Error(`Unexpected action failure: ${result.status}`);
+		expect(result.values).toEqual(original);
+		expect(result.errors).toEqual({});
+		expect(result.assessment).toBeNull();
+		expect(result.reports).toBeNull();
+	});
+
+	test('rejects malformed, duplicate, or uploaded native exercise choices', async () => {
+		for (const choice of [
+			'', 'pushUps:recorded', 'runStatus:unknown', 'weightLb:recorded',
+			'plankStatus:unable_to_complete:recorded', new File(['runStatus:recorded'], 'choice.txt')
+		]) {
+			await expect(submit(recordedValues(), ['exerciseChoice', choice])).rejects.toMatchObject({ status: 400 });
+		}
+		await expect(submit(recordedValues(),
+			['exerciseChoice', 'pushUpsStatus:recorded'], ['exerciseChoice', 'pushUpsStatus:unable_to_complete']
+		)).rejects.toMatchObject({ status: 400 });
 	});
 
 	for (const [field, value, error] of [

@@ -2,10 +2,11 @@
 	import { useLanguage } from '#lib/i18n/language.svelte.ts';
 	import type { IstField, ValidationCode } from '#lib/ist/types.ts';
 
-	let { name, label, choices, value = $bindable(''), error, onchange, hideLabel = false }: {
+	let { name, label, choices, value = $bindable(''), error, onchange, hideLabel = false, submitName }: {
 		name: IstField;
 		label: string;
 		hideLabel?: boolean;
+		submitName?: string;
 		choices: readonly { value: string; label: string }[];
 		value: string;
 		error?: ValidationCode;
@@ -16,19 +17,30 @@
 	const errorId = $derived(`ist-${name}-error`);
 </script>
 
-<fieldset class="choice-group" role="radiogroup" aria-required="true"
+<fieldset class="choice-group" role={submitName ? 'group' : 'radiogroup'} aria-required={submitName ? undefined : 'true'}
 	aria-invalid={error ? 'true' : undefined} aria-describedby={error ? errorId : undefined}>
 	<legend class:visually-hidden={hideLabel}>{label}</legend>
+	{#snippet choiceContent(text: string)}
+		<span>{text}</span>
+		<svg class="selection-check" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+			<path d="m5 12 4 4L19 6" />
+		</svg>
+	{/snippet}
+	{#if submitName}<input type="hidden" {name} {value} />{/if}
 	<div class="choice-buttons">
 		{#each choices as choice (choice.value)}
-			<label class="choice-option">
-				<input class="visually-hidden" type="radio" {name} value={choice.value}
-					bind:group={value} {onchange} required aria-describedby={error ? errorId : undefined} />
-				<span>{choice.label}</span>
-				<svg class="selection-check" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-					<path d="m5 12 4 4L19 6" />
-				</svg>
-			</label>
+			{#if submitName}
+				<button class="choice-option" type="submit" name={submitName} value={`${name}:${choice.value}`}
+					formnovalidate aria-pressed={value === choice.value} aria-describedby={error ? errorId : undefined}>
+					{@render choiceContent(choice.label)}
+				</button>
+			{:else}
+				<label class="choice-option">
+					<input class="visually-hidden" type="radio" {name} value={choice.value}
+						bind:group={value} {onchange} required aria-describedby={error ? errorId : undefined} />
+					{@render choiceContent(choice.label)}
+				</label>
+			{/if}
 		{/each}
 	</div>
 </fieldset>
@@ -79,14 +91,16 @@
 		color: var(--color-text);
 	}
 
-	.choice-option:has(input:checked) {
+	.choice-option:has(input:checked),
+	.choice-option[aria-pressed='true'] {
 		border-color: var(--color-accent);
 		box-shadow: inset 0 0 0 1px var(--color-accent);
 		background: var(--color-accent-soft);
 		color: var(--color-accent);
 	}
 
-	.choice-option:has(input:focus-visible) {
+	.choice-option:has(input:focus-visible),
+	button.choice-option:focus-visible {
 		outline: 2px solid var(--color-accent);
 		outline-offset: 3px;
 	}
@@ -110,7 +124,8 @@
 		display: none;
 	}
 
-	.choice-option:has(input:checked) .selection-check {
+	.choice-option:has(input:checked) .selection-check,
+	.choice-option[aria-pressed='true'] .selection-check {
 		display: block;
 	}
 

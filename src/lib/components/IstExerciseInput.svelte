@@ -32,7 +32,7 @@
 <fieldset class="exercise">
 	<legend>{messages.categories[exercise]}</legend>
 	<IstChoiceGroup name={statusField} label={messages.completion} hideLabel bind:value={values[statusField]}
-		error={errors[statusField]} onchange={changeStatus}
+		error={errors[statusField]} onchange={changeStatus} submitName={enhanced ? undefined : 'exerciseChoice'}
 		choices={[
 			{ value: 'recorded', label: messages.recorded },
 			{ value: 'unable_to_complete', label: messages.unable }
@@ -40,12 +40,12 @@
 	<div class="exercise-values" class:timed>
 		{#if timed}
 			<IstField name={minutesField} label={messages.minutes} bind:value={values[minutesField]}
-				hint={messages.hints.minutes} error={errors[minutesField]} disabled={!recorded && enhanced} required={recorded} />
+				hint={messages.hints.minutes} error={errors[minutesField]} disabled={!recorded} required={recorded} />
 			<IstField name={secondsField} label={messages.seconds} bind:value={values[secondsField]}
-				hint={messages.hints.seconds} error={errors[secondsField]} disabled={!recorded && enhanced} required={recorded} />
+				hint={messages.hints.seconds} error={errors[secondsField]} disabled={!recorded} required={recorded} />
 		{:else}
 			<IstField name={valueField} label={messages.repetitions} bind:value={values[valueField]}
-				hint={messages.hints.repetitions} error={errors[valueField]} disabled={!recorded && enhanced} required={recorded} />
+				hint={messages.hints.repetitions} error={errors[valueField]} disabled={!recorded} required={recorded} />
 		{/if}
 	</div>
 	{#if timed}<p class="duration-hint">{messages.hints.duration}</p>{/if}
@@ -71,8 +71,8 @@
 		margin-top: 1rem;
 	}
 
-	/* Native checked state also unlocks the visual fields without JavaScript. */
-	.exercise:not(:has(:global(input[value='recorded']:checked))) .exercise-values {
+	/* Enhanced radios and native submit buttons share the same selected appearance. */
+	.exercise:not(:has(:global(input[value='recorded']:checked), :global(button[value$=':recorded'][aria-pressed='true']))) .exercise-values {
 		filter: blur(2px);
 		opacity: 0.5;
 		pointer-events: none;
