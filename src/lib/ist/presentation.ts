@@ -12,6 +12,8 @@ export interface IstReportRow {
 }
 
 export interface IstReport {
+	brand: string;
+	brandDescription: string;
 	title: string;
 	subtitle: string;
 	studentName: string;
@@ -77,6 +79,8 @@ export function presentIstAssessment(assessment: IstAssessment, language: Langua
 	});
 
 	return {
+		brand: translations[language].header.brand,
+		brandDescription: translations[language].header.brandDescription,
 		title: messages.report.title,
 		subtitle: messages.report.subtitle,
 		studentName: input.studentName,

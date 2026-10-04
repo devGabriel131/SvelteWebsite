@@ -28,6 +28,7 @@ src/
   lib/                  Shared code and assets, imported through #lib
     assets/             Assets processed by Vite
     components/         Shared dashboard shell and IST form/report components
+    frequency/          Bundled word list, fuzzy Spanish search, and practice-round logic
     i18n/               English/Spanish translations and reactive language context
     ist/                IST types, shared input validation, pure assessment, and presentation
     server/             Server-only PDFKit report generation
@@ -36,10 +37,11 @@ src/
     +layout.server.ts   Saved language preference for the shared layout
     +layout.svelte      Dashboard shell shared by all pages
     +page.svelte        Dashboard home with IST and Speed Math entry points
+    frequency/          English-first frequency flashcard page
     ist/                IST page and server form action
     speed-math/         Timed arithmetic practice page
 static/                 Files served without processing
-tests/                  Bun translation, IST, and Speed Math tests
+tests/                  Bun translation, vocabulary/practice, IST, and Speed Math tests
 vite.config.ts          Vite, SvelteKit, and deployment adapter configuration
 tsconfig.json           Strict TypeScript configuration
 ```
@@ -54,9 +56,17 @@ Open `/ist` to enter the student's name, sex baseline, age, weight in pounds, wa
 
 The shared validator runs in the browser and server. It preserves decimal measurements, rejects blank/malformed/out-of-range inputs and inconsistent exercise states, and blocks raw body-fat estimates outside 0–100% before rounding. Pure assessment functions apply the user-approved Army-based **program baseline**, including the female run thresholds of 585 and 630 seconds. All five categories must pass; there is no combined score or compensation between categories. Reference maxima are not input caps, and the arithmetic midpoint is not a population average.
 
-A successful server submission evaluates the inputs once and creates English and Spanish PDFKit reports from that same result. The on-screen report and downloads share the presentation model. Grades use text as well as color. PDFs use built-in Helvetica fonts for Spanish accents, wrap long content, and repeat table headers over multiple pages. The page works with standard server form submissions when JavaScript is unavailable: exercise choices submit a form update that preserves other entries and clears the exercise’s previous values when inability is chosen, without generating an assessment. Result fields stay disabled until a recorded result is selected. Enhanced submissions add immediate validation and focus handling.
+A successful server submission evaluates the inputs once and creates English and Spanish PDFKit reports from that same result. The on-screen report and downloads share the presentation model. Grades use text as well as color. PDFs feature the Masterminds logo from `static/logo.png`, grouped student details, an upfront readiness summary, and five result cards with textual grade badges, outcomes, and applicable thresholds. Typical reports fit on one Letter page; extended content wraps and paginates with repeated branding and result-column headers. Built-in Helvetica fonts support precomposed Spanish accents. Vite embeds the logo in the server bundle, so generation needs no network requests or deployment-specific filesystem paths. The page works with standard server form submissions when JavaScript is unavailable: exercise choices submit a form update that preserves other entries and clears the exercise’s previous values when inability is chosen, without generating an assessment. Result fields stay disabled until a recorded result is selected. Enhanced submissions add immediate validation and focus handling.
 
 Names are entered manually until authentication is added. Fitness results are not stored in a database, browser storage, or cookies. Assessment responses are marked `Cache-Control: no-store`; PDFs are returned with the assessment and downloaded directly from the page. Results are self-reported, not official military clearance or a medical evaluation.
+
+## English frequency deck
+
+Open `/frequency` from the sidebar to practice the supplied 1,001 English–Spanish pairs. The full list is bundled in `src/lib/frequency/words.json`; there is no runtime CSV upload or external vocabulary request. Every source row, spelling, translation, and frequency position is preserved. To revise the list, edit the JSON and update the source-integrity tests in `tests/frequency.test.ts`.
+
+Cards always show English first, regardless of the website language. The translated interface offers 25-card decks in frequency order (the last deck has one card). Type in Spanish to search the entire answer pool, then tap a suggestion, use arrow keys and Enter, or choose “I don’t know” to reveal the translation. Search tolerates accents, case, and small typos; grading compares the selected option with the stored translation rather than grading a fuzzy query. Duplicate answer suggestions are collapsed without removing English cards.
+
+Each round shows progress and correct/review counts. At the end, students can review missed or skipped cards, repeat the deck, or move to the next one. Round state is kept only in memory for the current visit; reloading, navigating away, or changing decks starts fresh. JavaScript is required for this interactive feature. The supplied list includes questionable/context-dependent translations and strong language; it should be reviewed before treating it as authoritative teaching material.
 
 ## Speed Math
 

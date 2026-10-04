@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { inflateSync } from 'node:zlib';
 import PDFDocument from 'pdfkit';
 import { translations, type Language } from '../src/lib/i18n/translations';
@@ -23,12 +24,22 @@ function makeReport(language: Language, overrides: Partial<IstInput> = {}): IstR
 	return presentIstAssessment(assessIst(makeInput(overrides), assessedAt), language);
 }
 const normalize = (text: string) => text.replace(/\s+/g, ' ').trim();
+const compact = (text: string) => text.replace(/\s/g, '');
+const gradeColors = { green: '#17633d', yellow: '#795600', red: '#a32932' } as const;
 
 type PdfText = { text: string; x: number; baseline: number; size: number; font: string; color: string };
-type PdfPage = { texts: PdfText[] };
+type PdfFill = { left: number; right: number; top: number; bottom: number; color: string };
+type PdfPage = {
+	headerBottom: number;
+	texts: PdfText[];
+	fills: PdfFill[];
+	images: { name: string; width: number; height: number }[];
+	imageDraws: string[];
+};
+type LocatedText = PdfText & { page: number; order: number };
 
-// Read PDFKit's standard-font text operators, not a general-purpose PDF parser.
-// Structural checks and layout assertions need no system PDF utilities or test dependency.
+// Read PDFKit's standard-font text, image references, and untransformed filled paths,
+// not a general-purpose PDF parser. No system PDF utilities or test dependency needed.
 function readPdf(pdf: Buffer): PdfPage[] {
 	const source = pdf.toString('latin1');
 	expect(source.startsWith('%PDF-1.3\n')).toBe(true);
@@ -46,23 +57,63 @@ function readPdf(pdf: Buffer): PdfPage[] {
 		const fonts = new Map([...resources.matchAll(/\/(F\d+) (\d+) 0 R/g)].map((match) => [
 			match[1], objects.get(Number(match[2]))!.match(/\/BaseFont \/([^\s]+)/)![1]
 		]));
+		for (const font of fonts.values()) expect(['Helvetica', 'Helvetica-Bold']).toContain(font);
+		const xObjects = resources.match(/\/XObject\s*<<([\s\S]*?)>>/)?.[1] ?? '';
+		const images = [...xObjects.matchAll(/\/(\S+) (\d+) 0 R/g)].flatMap((match) => {
+			const image = objects.get(Number(match[2]))!;
+			if (!/\/Subtype \/Image\b/.test(image)) return [];
+			expect(image).toContain('stream\n');
+			return [{ name: match[1], width: Number(image.match(/\/Width (\d+)/)?.[1]),
+				height: Number(image.match(/\/Height (\d+)/)?.[1]) }];
+		});
 		const content = objects.get(Number(object.match(/\/Contents (\d+) 0 R/)?.[1]))!;
 		expect(content).toContain('/Filter /FlateDecode');
 		const compressed = Buffer.from(content.match(/stream\n([\s\S]*?)\nendstream/)![1], 'latin1');
 		const commands = inflateSync(compressed).toString('latin1');
 		const texts: PdfText[] = [];
-		for (const match of commands.matchAll(/BT\n([\s\S]*?)\nET/g)) {
-			const matrix = match[1].match(/1 0 0 1 ([\d.-]+) ([\d.-]+) Tm/)!;
-			const font = match[1].match(/\/(F\d+) ([\d.]+) Tf/)!;
-			const bytes = Buffer.concat([...match[1].matchAll(/<([\da-f]+)>/gi)]
-				.map((hex) => Buffer.from(hex[1], 'hex')));
-			const rgb = [...commands.slice(0, match.index).matchAll(/([\d.]+) ([\d.]+) ([\d.]+) scn/g)].at(-1)!;
-			const color = '#' + rgb.slice(1).map((channel) =>
+		const fills: PdfFill[] = [];
+		const imageDraws: string[] = [];
+		const savedColors: string[] = [];
+		let color = '#000000';
+		let headerBottom = 0;
+		let points: number[][] = [];
+		for (const match of commands.matchAll(/BT\n([\s\S]*?)\nET|([^\n]+)/g)) {
+			if (match[1] !== undefined) {
+				const matrix = match[1].match(/1 0 0 1 ([\d.-]+) ([\d.-]+) Tm/)!;
+				const font = match[1].match(/\/(F\d+) ([\d.]+) Tf/)!;
+				const bytes = Buffer.concat([...match[1].matchAll(/<([\da-f]+)>/gi)]
+					.map((hex) => Buffer.from(hex[1], 'hex')));
+				texts.push({ text: decoder.decode(bytes), x: Number(matrix[1]),
+					baseline: 792 - Number(matrix[2]), size: Number(font[2]), font: fonts.get(font[1])!, color });
+				continue;
+			}
+			const command = match[2].trim();
+			if (command === 'q') savedColors.push(color);
+			if (command === 'Q') color = savedColors.pop() ?? '#000000';
+			const rgb = command.match(/^([\d.]+) ([\d.]+) ([\d.]+) scn$/);
+			if (rgb) color = '#' + rgb.slice(1).map((channel) =>
 				Math.round(Number(channel) * 255).toString(16).padStart(2, '0')).join('');
-			texts.push({ text: decoder.decode(bytes), x: Number(matrix[1]),
-				baseline: 792 - Number(matrix[2]), size: Number(font[2]), font: fonts.get(font[1])!, color });
+			const draw = command.match(/^\/(\S+) Do$/);
+			if (draw) imageDraws.push(draw[1]);
+			const tokens = command.split(/\s+/);
+			const operator = tokens.at(-1);
+			const numbers = tokens.slice(0, -1).map(Number);
+			if (operator === 're') {
+				const [x, y, width, height] = numbers;
+				points.push([x, y], [x + width, y + height]);
+			} else if (operator === 'm' || operator === 'l' || operator === 'c') {
+				for (let index = 0; index < numbers.length; index += 2) points.push(numbers.slice(index, index + 2));
+			}
+			if (['f', 'f*', 'B', 'B*', 'b', 'b*'].includes(operator!) && points.length) {
+				fills.push({ left: Math.min(...points.map(([x]) => x)), right: Math.max(...points.map(([x]) => x)),
+					top: Math.min(...points.map(([, y]) => y)), bottom: Math.max(...points.map(([, y]) => y)), color });
+			}
+			if (!headerBottom && operator === 'S' && points.length === 2 && points[0][1] === points[1][1]) {
+				headerBottom = points[0][1];
+			}
+			if (['f', 'f*', 'B', 'B*', 'b', 'b*', 'S', 's', 'n'].includes(operator!)) points = [];
 		}
-		pages.push({ texts });
+		pages.push({ headerBottom, texts, fills, images, imageDraws });
 	}
 	const pageTree = [...objects.values()].find((object) => /\/Type \/Pages\b/.test(object))!;
 	expect(Number(pageTree.match(/\/Count (\d+)/)?.[1])).toBe(pages.length);
@@ -73,13 +124,137 @@ function readPdf(pdf: Buffer): PdfPage[] {
 function pageText(page: PdfPage): string {
 	return normalize(page.texts.map(({ text }) => text).join(' '));
 }
+
+// Learn each text run's position/style from the PDF. Compact concatenation permits
+// soft wraps and split words while still detecting dropped, reordered, or added characters.
+function findTextBlock(pages: PdfPage[], value: string): LocatedText[] | undefined {
+	const groups = new Map<string, LocatedText[]>();
+	let order = 0;
+	for (const [page, { texts, headerBottom }] of pages.entries()) {
+		for (const text of texts) {
+			const located = { ...text, page, order: order++ };
+			if (!compact(text.text)) continue;
+			// A left-aligned masthead can share the disclaimer's font and x position.
+			const key = JSON.stringify([text.x, text.font, text.size, text.baseline < headerBottom]);
+			const group = groups.get(key) ?? [];
+			group.push(located);
+			groups.set(key, group);
+		}
+	}
+	const expected = compact(value);
+	const matches: LocatedText[][] = [];
+	for (const lines of groups.values()) {
+		const start = lines.map(({ text }) => compact(text)).join('').indexOf(expected);
+		if (start < 0) continue;
+		let offset = 0;
+		const matched = lines.filter(({ text }) => {
+			const end = offset + compact(text).length;
+			const overlaps = end > start && offset < start + expected.length;
+			offset = end;
+			return overlaps;
+		});
+		matches.push(matched);
+	}
+	return matches.sort((a, b) => a[0].order - b[0].order)[0];
+}
+
+function renderedBlock(pages: PdfPage[], value: string): LocatedText[] {
+	const lines = findTextBlock(pages, value);
+	expect(lines, `Missing report text: ${value.slice(0, 100)}`).toBeDefined();
+	return lines!;
+}
+
+function expectPreservedBlock(pages: PdfPage[], value: string): LocatedText[] {
+	const lines = renderedBlock(pages, value);
+	expect(compact(lines.map(({ text }) => text).join(''))).toBe(compact(value));
+	return lines;
+}
+
 function expectReportText(pages: PdfPage[], report: IstReport): void {
-	const text = pages.map(pageText).join(' ');
-	for (const value of [report.title, report.subtitle, ...report.details.flatMap(({ label, value }) => [label, value]),
-		...Object.values(report.columns), ...report.rows.flatMap((row) => [row.label, row.result,
-			...row.thresholds, row.gradeLabel, row.outcome]), report.overallLabel, report.overall,
-		report.belowBaselineLabel, report.belowBaseline, report.disclaimer]) {
-		expect(text).toContain(normalize(value));
+	for (const value of [report.brand, report.brandDescription, report.title, report.subtitle,
+		...report.details.flatMap(({ label, value }) => [label, value]), ...Object.values(report.columns),
+		...report.rows.flatMap((row) => [row.label, row.result, ...row.thresholds, row.gradeLabel, row.outcome]),
+		report.overallLabel, report.overall, report.belowBaselineLabel, report.belowBaseline, report.disclaimer]) {
+		renderedBlock(pages, value);
+	}
+}
+
+function cardHeaders(report: IstReport): string[] {
+	return [`${report.columns.category} · ${report.columns.result}`, report.columns.thresholds,
+		`${report.columns.grade} · ${report.columns.outcome}`];
+}
+
+function expectCardHeaders(page: PdfPage, report: IstReport): LocatedText[] {
+	const headers = cardHeaders(report).map((header) => renderedBlock([page], header));
+	expect(headers[0][0].x).toBeLessThan(headers[1][0].x);
+	expect(headers[1][0].x).toBeLessThan(headers[2][0].x);
+	for (const header of headers) {
+		expect(header[0].baseline).toBeCloseTo(headers[0][0].baseline, 2);
+		for (const line of header) expect(line.font).toBe('Helvetica-Bold');
+	}
+	return headers.flat();
+}
+
+function expectSummaryBeforeCards(pages: PdfPage[], report: IstReport): void {
+	const header = renderedBlock(pages, cardHeaders(report)[0])[0];
+	for (const value of [report.overallLabel, report.overall, report.belowBaselineLabel, report.belowBaseline]) {
+		for (const line of renderedBlock(pages, value)) expect(line.order).toBeLessThan(header.order);
+	}
+}
+
+function expectDetailGroups(pages: PdfPage[], report: IstReport): void {
+	const groups = [report.details.slice(0, 2), report.details.slice(2, 5), report.details.slice(5, 7)];
+	for (let index = 7; index < report.details.length; index += 2) groups.push(report.details.slice(index, index + 2));
+	let previous: LocatedText | undefined;
+	for (const details of groups) {
+		const labels = details.map(({ label }) => renderedBlock(pages, label)[0]);
+		for (const [index, label] of labels.entries()) {
+			expect(label.page).toBe(labels[0].page);
+			expect(label.baseline).toBeCloseTo(labels[0].baseline, 2);
+			if (index > 0) expect(label.x).toBeGreaterThan(labels[index - 1].x);
+		}
+		if (previous) expect(labels[0].order).toBeGreaterThan(previous.order);
+		previous = labels.at(-1);
+	}
+}
+
+function expectLogoOnEveryPage(pages: PdfPage[]): void {
+	const logo = readFileSync(new URL('../static/logo.png', import.meta.url));
+	const width = logo.readUInt32BE(16);
+	const height = logo.readUInt32BE(20);
+	for (const [index, page] of pages.entries()) {
+		const logos = page.images.filter((image) => image.width === width && image.height === height);
+		expect(logos.length, `Page ${index + 1} has no logo image XObject`).toBeGreaterThan(0);
+		expect(page.imageDraws.some((name) => logos.some((logo) => logo.name === name)),
+			`Page ${index + 1} does not draw its logo XObject with Do`).toBe(true);
+	}
+}
+
+function expectGradeColors(pages: PdfPage[], report: IstReport): void {
+	const metrics = new PDFDocument({ autoFirstPage: false });
+	try {
+		for (const row of report.rows) {
+			const matches = pages.flatMap((page) => {
+				if (!findTextBlock([page], cardHeaders(report)[1])) return [];
+				const thresholdColumn = renderedBlock([page], cardHeaders(report)[1])[0].x;
+				return page.texts.filter(({ text, font, color, x, baseline, size }) => {
+					if (text !== row.gradeLabel || font !== 'Helvetica-Bold') return false;
+					metrics.font(font).fontSize(size);
+					const right = x + metrics.widthOfString(text);
+					return page.fills.some((fill) => fill.left > thresholdColumn && x >= fill.left
+						&& right <= fill.right + 0.01 && baseline - size * 0.718 >= fill.top - 0.01
+						&& baseline + size * 0.207 <= fill.bottom + 0.01
+						&& (color === gradeColors[row.grade] || fill.color === gradeColors[row.grade]));
+				});
+			});
+			const expectedCount = report.rows.filter((other) =>
+				other.grade === row.grade && other.gradeLabel === row.gradeLabel).length;
+			expect(matches.length, `Missing ${row.grade} grade pill/label/color: ${row.gradeLabel}`)
+				.toBeGreaterThanOrEqual(expectedCount);
+		}
+	} finally {
+		metrics.resume();
+		metrics.end();
 	}
 }
 
@@ -89,18 +264,18 @@ function expectReadable(pages: PdfPage[], report: IstReport): void {
 		for (const [index, page] of pages.entries()) {
 			const footer = page.texts.filter(({ text }) => text === `${report.pageLabel} ${index + 1}`);
 			expect(footer).toHaveLength(1);
-			expect(footer[0].baseline).toBeGreaterThan(756);
 			const boxes = page.texts.map((line) => {
 				metrics.font(line.font).fontSize(line.size);
 				return { line, left: line.x, right: line.x + metrics.widthOfString(line.text),
 					top: line.baseline - line.size * 0.718, bottom: line.baseline + line.size * 0.207 };
 			});
+			expect(boxes.find(({ line }) => line === footer[0])!.top).toBeCloseTo(756, 2);
 			for (const box of boxes) {
 				expect(box.left).toBeGreaterThanOrEqual(41.99);
 				expect(box.right).toBeLessThanOrEqual(570.01);
 				if (box.line !== footer[0]) {
 					expect(box.top).toBeGreaterThanOrEqual(41.99);
-					expect(box.bottom).toBeLessThanOrEqual(736);
+					expect(box.bottom).toBeLessThanOrEqual(736.01);
 				}
 			}
 			for (let first = 0; first < boxes.length; first++) {
@@ -110,7 +285,7 @@ function expectReadable(pages: PdfPage[], report: IstReport): void {
 					const horizontalOverlap = Math.min(a.right, b.right) - Math.max(a.left, b.left);
 					const verticalOverlap = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
 					expect(horizontalOverlap > 0.01 && verticalOverlap > 0.01,
-						`Overlapping text: ${a.line.text} / ${b.line.text}`).toBe(false);
+						`Page ${index + 1} overlapping text: ${a.line.text} / ${b.line.text}`).toBe(false);
 				}
 			}
 		}
@@ -121,6 +296,8 @@ function expectReadable(pages: PdfPage[], report: IstReport): void {
 }
 
 function freezeReport(report: IstReport): void {
+	expect(report.brand).toBeString();
+	expect(report.brandDescription).toBeString();
 	for (const detail of report.details) Object.freeze(detail);
 	for (const row of report.rows) {
 		Object.freeze(row.thresholds);
@@ -138,6 +315,9 @@ describe('IST report presentation', () => {
 			const assessment = assessIst(makeInput(), assessedAt);
 			const report = presentIstAssessment(assessment, language);
 			const messages = translations[language].ist;
+			expect(report).toMatchObject({ brand: translations[language].header.brand,
+				brandDescription: translations[language].header.brandDescription,
+				title: messages.report.title, subtitle: messages.report.subtitle });
 			expect(report.rows.map(({ key }) => key)).toEqual([...exerciseKeys, 'bodyFat']);
 			for (const [index, exercise] of assessment.exercises.entries()) {
 				const row = report.rows[index];
@@ -240,8 +420,9 @@ describe('IST report presentation', () => {
 
 describe('IST PDF generation', () => {
 	for (const language of ['en', 'es'] as const) {
-		test(`${language} produces a readable one-page Letter PDF with all presented text and accented names`, async () => {
+		test(`${language} produces a branded one-page Letter PDF with all failing-report text and accented names`, async () => {
 			const report = makeReport(language);
+			expect(report.passed).toBe(false);
 			const original = structuredClone(report);
 			freezeReport(report);
 			const bytes = await generateIstPdf(report);
@@ -249,45 +430,95 @@ describe('IST PDF generation', () => {
 			const pages = readPdf(bytes);
 			expect(pages).toHaveLength(1);
 			expectReportText(pages, report);
+			expectDetailGroups(pages, report);
+			expectCardHeaders(pages[0], report);
+			expectSummaryBeforeCards(pages, report);
+			expectLogoOnEveryPage(pages);
 			expectReadable(pages, report);
 			expect(report).toEqual(original);
-			const gradeTexts = pages[0].texts.filter(({ x, text }) =>
-				x === 423 && report.rows.some((row) => row.gradeLabel === text));
-			expect(new Set(gradeTexts.map(({ color }) => color)).size).toBe(3);
-			for (const grade of language === 'es' ? ['Excelente', 'Aprobado', 'No Aprobado'] : ['Excellent', 'Passed', 'Not passed']) {
-				const text = gradeTexts.find(({ text }) => text === grade)!;
-				expect(text.font).toBe('Helvetica-Bold');
-				expect(text.color).not.toBe('#172d3b');
-			}
 		});
 
-		test(`${language} prints passing overall readiness and no below-baseline categories`, async () => {
-			const report = makeReport(language, { sitUps: { status: 'recorded', value: 80 } });
-			expect(report.passed).toBe(true);
-			expect(report.belowBaseline).toBe(translations[language].ist.allPassed);
+		test(`${language} retains every grade label and its green, yellow, or red pill color`, async () => {
+			const report = makeReport(language);
+			expect(new Set(report.rows.map(({ grade }) => grade))).toEqual(new Set(['green', 'yellow', 'red']));
 			const pages = readPdf(await generateIstPdf(report));
+			expectGradeColors(pages, report);
 			expectReportText(pages, report);
 			expectReadable(pages, report);
 		});
 
-		test(`${language} wraps a very long name, including unbroken words, without truncation across pages`, async () => {
-			const name = 'José María Muñoz '.repeat(160) + 'Álvarez'.repeat(90) + ' Último apellido';
+		test(`${language} keeps passing readiness before the cards on one page with no below-baseline categories`, async () => {
+			const report = makeReport(language, { sitUps: { status: 'recorded', value: 80 } });
+			expect(report.passed).toBe(true);
+			expect(report.belowBaseline).toBe(translations[language].ist.allPassed);
+			const pages = readPdf(await generateIstPdf(report));
+			expect(pages).toHaveLength(1);
+			expectReportText(pages, report);
+			expectSummaryBeforeCards(pages, report);
+			expectLogoOnEveryPage(pages);
+			expectGradeColors(pages, report);
+			expectReadable(pages, report);
+		});
+
+		test(`${language} renders inability, failing grades, and outcomes for all four exercises`, async () => {
+			const overrides = Object.fromEntries(exerciseKeys.map((key) => [key, { status: 'unable_to_complete' }])) as Partial<IstInput>;
+			const report = makeReport(language, overrides);
+			const messages = translations[language].ist;
+			expect(report.passed).toBe(false);
+			for (const row of report.rows.slice(0, 4)) {
+				expect(row).toMatchObject({ result: messages.unable, grade: 'red',
+					gradeLabel: messages.grades.red, outcome: messages.fail });
+			}
+			const pages = readPdf(await generateIstPdf(report));
+			expect(pages).toHaveLength(1);
+			const text = compact(pages.map(pageText).join(' '));
+			expect(text.split(compact(messages.unable)).length - 1).toBe(4);
+			const headers = expectCardHeaders(pages[0], report);
+			const headerBottom = Math.max(...headers.map(({ baseline }) => baseline));
+			const content = { ...pages[0], texts: pages[0].texts.filter(({ baseline }) => baseline > headerBottom) };
+			const starts = report.rows.map((row) => renderedBlock([content], row.label)[0].order);
+			for (const [index, row] of report.rows.entries()) {
+				const card = { ...content, texts: content.texts.slice(starts[index], starts[index + 1]) };
+				for (const value of [row.label, row.result, ...row.thresholds, row.gradeLabel, row.outcome]) {
+					renderedBlock([card], value);
+				}
+			}
+			expectReportText(pages, report);
+			expectSummaryBeforeCards(pages, report);
+			expectGradeColors(pages, report);
+			expectReadable(pages, report);
+		});
+
+		test(`${language} groups extra student details in pairs after the name/date, age/band/sex, and weight/waist groups`, async () => {
+			const report = makeReport(language);
+			report.details.push(...Array.from({ length: 5 }, (_, index) => ({
+				label: `DatoExtraÑ${index}`, value: `ValorExtraÁ${index}`
+			})));
+			const pages = readPdf(await generateIstPdf(report));
+			expectDetailGroups(pages, report);
+			expectReportText(pages, report);
+			expectSummaryBeforeCards(pages, report);
+			expectReadable(pages, report);
+		});
+
+		test(`${language} preserves every character of a very long accented name and unbroken surname across pages`, async () => {
+			const name = 'ÚrsulaJoséMaríaMuñoz ' + 'José María Muñoz '.repeat(160)
+				+ 'Álvarez'.repeat(90) + ' ÚltimoApellidoÑandú';
 			const report = makeReport(language, { studentName: name });
 			const pages = readPdf(await generateIstPdf(report));
-			expect(pages.length).toBeGreaterThan(1);
-			expect(pages[0].texts.some(({ x, size }) => x === 225 && size === 10)).toBe(true);
-			const detailValues = pages.flatMap(({ texts }) => texts)
-				.filter(({ x, size }) => x === 225 && size === 10).map(({ text }) => text).join('');
-			const compactName = name.replace(/\s/g, '');
-			expect(detailValues.replace(/\s/g, '').slice(0, compactName.length)).toBe(compactName);
-			expect(pages.map(pageText).join(' ')).toContain('Último apellido');
-			expect(pages.map(pageText).join(' ')).toContain(report.overall);
+			const nameLines = expectPreservedBlock(pages, name);
+			expect(new Set(nameLines.map(({ page }) => page)).size).toBeGreaterThan(1);
+			expectReportText(pages, report);
+			expectSummaryBeforeCards(pages, report);
+			expectLogoOnEveryPage(pages);
 			expectReadable(pages, report);
 		});
 	}
 
-	test('uses supplied row text, thresholds, grades, outcomes, and summary without inferring results', async () => {
+	test('uses supplied brand, row text, thresholds, grades, outcomes, and summary without inferring results', async () => {
 		const report = makeReport('es');
+		report.brand = 'Marca conservada';
+		report.brandDescription = 'Descripción conservada';
 		const columns = report.columns;
 		report.columns = { outcome: columns.outcome, grade: columns.grade, thresholds: columns.thresholds,
 			result: columns.result, category: columns.category };
@@ -295,75 +526,131 @@ describe('IST PDF generation', () => {
 			grade: 'red', gradeLabel: 'Calificación conservada', outcome: 'Decisión conservada' };
 		report.overall = 'Preparación conservada';
 		report.belowBaseline = 'Lista conservada';
+		const original = structuredClone(report);
+		freezeReport(report);
 		const pages = readPdf(await generateIstPdf(report));
+		expectReportText(pages, report);
+		expectCardHeaders(pages[0], report);
+		expectSummaryBeforeCards(pages, report);
+		expect(report).toEqual(original);
+		expectReadable(pages, report);
+	});
+
+	test('embeds and draws the logo and brand header on every card-continuation page', async () => {
+		const report = makeReport('es');
+		report.rows = Array.from({ length: 20 }, (_, index) => ({ ...report.rows[index % 5], label: `TarjetaÑ${index}` }));
+		const bytes = await generateIstPdf(report);
+		expect(bytes.toString('latin1')).toContain('/Subtype /Image');
+		const pages = readPdf(bytes);
+		expect(pages.length).toBeGreaterThan(1);
+		expectLogoOnEveryPage(pages);
+		for (const page of pages) {
+			renderedBlock([page], report.brand);
+			renderedBlock([page], report.brandDescription);
+		}
 		expectReportText(pages, report);
 		expectReadable(pages, report);
 	});
 
-	test('splits an oversized Spanish table row and repeats all column headers without losing content', async () => {
+	test('splits an oversized Spanish card, including an unbroken threshold, with repeated three-column headers and no lost characters', async () => {
 		const report = makeReport('es');
 		const thresholds = Array.from({ length: 180 }, (_, index) =>
 			`Umbral ${String(index).padStart(3, '0')}: información de evaluación con mínimo y máximo.`);
+		thresholds.splice(90, 0, 'InicioUmbralÑ' + 'ÁÉÍÓÚÑ'.repeat(180) + 'FinUmbralÑ');
 		report.rows = [{ ...report.rows[0], thresholds }];
 		const pages = readPdf(await generateIstPdf(report));
 		expect(pages.length).toBeGreaterThan(5);
-		const thresholdText = pages.flatMap(({ texts }) => texts)
-			.filter(({ x, font }) => x === 237 && font === 'Helvetica').map(({ text }) => text).join(' ');
-		expect(normalize(thresholdText)).toBe(normalize(thresholds.join(' ')));
-		for (const page of pages.filter(({ texts }) => texts.some(({ x }) => x === 237))) {
-			for (const header of Object.values(report.columns)) expect(pageText(page)).toContain(header);
-			expect(page.texts.some(({ x, font }) => x === 237 && font === 'Helvetica')).toBe(true);
+		const thresholdLines = expectPreservedBlock(pages, thresholds.join('\n'));
+		const cardPages = new Set(thresholdLines.map(({ page }) => page));
+		expect(cardPages.size).toBeGreaterThan(5);
+		for (const [index, page] of pages.entries()) {
+			if (cardPages.has(index)) {
+				const headers = expectCardHeaders(page, report);
+				const content = thresholdLines.filter(({ page }) => page === index);
+				expect(Math.max(...headers.map(({ baseline }) => baseline)))
+					.toBeLessThan(Math.min(...content.map(({ baseline }) => baseline)));
+			} else expect(findTextBlock([page], cardHeaders(report)[0])).toBeUndefined();
 		}
-		expectReadable(pages, report);
-	});
-
-	test('moves a single row and its summary without leaving an orphan table header', async () => {
-		const report = makeReport('es');
-		report.rows = [report.rows[0]];
-		report.details.push(...Array.from({ length: 14 }, (_, index) => ({ label: `Dato ${index}`, value: `Valor ${index}` })));
-		const pages = readPdf(await generateIstPdf(report));
-		expect(pages).toHaveLength(2);
-		expect(pageText(pages[0])).not.toContain(report.columns.category);
-		expect(pageText(pages[1])).toContain(report.columns.category);
-		expect(pageText(pages[1])).toContain(report.rows[0].label);
-		expect(pageText(pages[1])).toContain(report.overall);
 		expectReportText(pages, report);
+		expectSummaryBeforeCards(pages, report);
+		expectLogoOnEveryPage(pages);
 		expectReadable(pages, report);
 	});
 
-	test('wraps oversized below-baseline and disclaimer content over pages without clipping', async () => {
+	test('paginates extra detail pairs and places the top summary before a whole single card without orphan headers', async () => {
 		const report = makeReport('es');
-		report.belowBaseline = Array.from({ length: 120 }, (_, index) => `Categoría ${index}: preparación física`).join(', ');
-		report.disclaimer = Array.from({ length: 60 }, (_, index) => `Nota ${index}: ${report.disclaimer}`).join('\n');
+		report.rows = [{ ...report.rows[0], label: 'TarjetaÚnicaÑ', result: 'ResultadoÚnicoÑ',
+			thresholds: ['UmbralÚnicoÑ: mínimo 17'], gradeLabel: 'CalificaciónÚnicaÑ', outcome: 'DecisiónÚnicaÑ' }];
+		report.details.push(...Array.from({ length: 48 }, (_, index) => ({ label: `DatoÑ${index}`, value: `ValorÁ${index}` })));
+		const pages = readPdf(await generateIstPdf(report));
+		expect(pages.length).toBeGreaterThan(1);
+		const row = report.rows[0];
+		const rowLines = [row.label, row.result, ...row.thresholds, row.gradeLabel, row.outcome]
+			.flatMap((value) => renderedBlock(pages, value));
+		const cardPages = new Set(rowLines.map(({ page }) => page));
+		expect(cardPages.size).toBe(1);
+		for (const [index, page] of pages.entries()) {
+			if (cardPages.has(index)) expectCardHeaders(page, report);
+			else expect(findTextBlock([page], cardHeaders(report)[0])).toBeUndefined();
+		}
+		expectDetailGroups(pages, report);
+		expectReportText(pages, report);
+		expectSummaryBeforeCards(pages, report);
+		expectLogoOnEveryPage(pages);
+		expectReadable(pages, report);
+	});
+
+	test('preserves oversized readiness, below-baseline, and disclaimer text, including unbroken words, across pages', async () => {
+		const report = makeReport('es');
+		report.overall = 'InicioPreparaciónÑ ' + 'PreparaciónÁ'.repeat(700) + ' FinPreparaciónÑ';
+		report.belowBaseline = 'InicioCategoríasÑ ' + Array.from({ length: 120 }, (_, index) =>
+			`Categoría ${index}: preparación física`).join(', ') + ' ' + 'FísicaÑ'.repeat(180) + ' FinCategoríasÑ';
+		report.disclaimer = 'InicioDescargoÑ\n' + Array.from({ length: 60 }, (_, index) =>
+			`Nota ${index}: ${report.disclaimer}`).join('\n') + '\n' + 'EvaluaciónÁ'.repeat(180) + ' FinDescargoÑ';
 		const pages = readPdf(await generateIstPdf(report));
 		expect(pages.length).toBeGreaterThan(4);
-		const texts = pages.flatMap(({ texts }) => texts);
-		const belowBaseline = texts.filter(({ x, font, size }) => x === 42 && font === 'Helvetica' && size === 10)
-			.map(({ text }) => text).join(' ');
-		const disclaimer = texts.filter(({ x, font, size }) => x === 42 && font === 'Helvetica' && size === 9)
-			.map(({ text }) => text).join(' ');
-		expect(normalize(belowBaseline)).toContain(normalize(report.belowBaseline));
-		expect(normalize(disclaimer)).toBe(normalize(report.disclaimer));
+		for (const value of [report.overall, report.belowBaseline, report.disclaimer]) {
+			const lines = expectPreservedBlock(pages, value);
+			expect(new Set(lines.map(({ page }) => page)).size).toBeGreaterThan(1);
+		}
+		expectReportText(pages, report);
+		expectSummaryBeforeCards(pages, report);
+		expectLogoOnEveryPage(pages);
 		expectReadable(pages, report);
 	});
 
-	test('paginates many English rows and keeps the final row with the full summary when possible', async () => {
+	test('paginates many English cards with repeated headers, preserves each whole normal card, and keeps readiness first', async () => {
 		const report = makeReport('en');
-		report.rows = Array.from({ length: 25 }, (_, index) => ({ ...report.rows[index % 5],
-			label: `Row ${String(index).padStart(2, '0')}` }));
+		report.rows = Array.from({ length: 25 }, (_, index) => {
+			const row = report.rows[index % 5];
+			const marker = String(index).padStart(2, '0');
+			return { ...row, label: `Card ${marker}`, result: `Result ${marker}: ${row.result}`,
+				thresholds: row.thresholds.map((threshold) => `Threshold ${marker}: ${threshold}`),
+				gradeLabel: `${row.gradeLabel} ${marker}`, outcome: `${row.outcome} ${marker}` };
+		});
 		const pages = readPdf(await generateIstPdf(report));
 		expect(pages.length).toBeGreaterThan(2);
-		for (const page of pages) {
-			for (const header of Object.values(report.columns)) expect(pageText(page)).toContain(header);
-		}
+		const cardPages = new Set<number>();
 		for (const row of report.rows) {
 			expect(pages.filter((page) => pageText(page).includes(row.label))).toHaveLength(1);
+			const lines = [row.label, row.result, ...row.thresholds, row.gradeLabel, row.outcome]
+				.flatMap((value) => renderedBlock(pages, value));
+			const rowPages = new Set(lines.map(({ page }) => page));
+			expect(rowPages.size, `Normal card split across pages: ${row.label}`).toBe(1);
+			cardPages.add(lines[0].page);
 		}
-		const lastPage = pageText(pages[pages.length - 1]);
-		expect(lastPage).toContain('Row 24');
-		expect(lastPage).toContain(report.overall);
-		expect(lastPage).toContain(report.belowBaseline);
-		expect(lastPage).toContain(report.disclaimer);
+		for (const [index, page] of pages.entries()) {
+			if (cardPages.has(index)) {
+				const headers = expectCardHeaders(page, report);
+				const labels = report.rows.flatMap((row) => findTextBlock([page], row.label) ?? []);
+				expect(Math.max(...headers.map(({ baseline }) => baseline)))
+					.toBeLessThan(Math.min(...labels.map(({ baseline }) => baseline)));
+			} else expect(findTextBlock([page], cardHeaders(report)[0])).toBeUndefined();
+		}
+		expectReportText(pages, report);
+		expectSummaryBeforeCards(pages, report);
+		expectLogoOnEveryPage(pages);
+		expectGradeColors(pages, report);
 		expectReadable(pages, report);
 	});
 });

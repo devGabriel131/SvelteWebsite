@@ -41,6 +41,17 @@
 				</svg>
 				{language.messages.navigation.speedMath}
 			</a>
+			<a
+				class="dashboard-link"
+				href={resolve('/frequency')}
+				aria-current={page.route.id === '/frequency' ? 'page' : undefined}
+			>
+				<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+					<rect x="7" y="6" width="13" height="15" rx="2" />
+					<path d="M16 6V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h2m4-8h5m-5 4h3" />
+				</svg>
+				{language.messages.navigation.frequency}
+			</a>
 		</div>
 	</nav>
 </aside>

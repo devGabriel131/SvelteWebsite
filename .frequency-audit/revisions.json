@@ -1,0 +1,23 @@
+[
+	{"rank":53,"addAlternatives":["pozo"],"appendNote":{"en":"As a noun, well can mean pozo.","es":"Como sustantivo, well puede significar pozo."}},
+	{"rank":57,"spanish":"ir a","addAlternatives":["va a"]},
+	{"rank":79,"spanish":"-ría","note":{"en":"Grammar cue, not a standalone word: would is often expressed by the main verb's conditional ending ('would go' → 'iría'). Solía fits past habits; iba a can express future viewed from the past.","es":"Pista gramatical, no una palabra independiente: would suele expresarse con la terminación condicional del verbo ('would go' → 'iría'). Solía corresponde a hábitos pasados; iba a puede expresar futuro desde el pasado."}},
+	{"rank":115,"addAlternatives":["encantar"],"appendNote":{"en":"Encantar often fits strongly liking a thing or activity.","es":"Encantar suele expresar que una cosa o actividad gusta mucho."}},
+	{"rank":117,"addAlternatives":["tener intención de"],"appendNote":{"en":"Mean to do something can express intention.","es":"Mean to do something puede expresar intención."}},
+	{"rank":190,"addAlternatives":["que"]},
+	{"rank":273,"addAlternatives":["perderse"]},
+	{"rank":332,"addAlternatives":["tengo que"]},
+	{"rank":397,"addAlternatives":["golpeado"]},
+	{"rank":474,"addAlternatives":["disparó","filmó","filmado"]},
+	{"rank":525,"addAlternatives":["claro"],"appendNote":{"en":"For color, light means claro.","es":"Referido al color, light significa claro."}},
+	{"rank":765,"addAlternatives":["no tiene"],"note":{"en":"Probable fragment of hasn't: no ha as a perfect auxiliary; no tiene for possession, including hasn't got. The reading remains provisional.","es":"Probable fragmento de hasn't: no ha como auxiliar de tiempos compuestos; no tiene para posesión, incluido hasn't got. La interpretación sigue siendo provisional."}},
+	{"rank":770,"removeAlternatives":["Jorge"],"note":{"en":"Proper name, normally kept as George in Spanish; it is not automatically changed to Jorge.","es":"Nombre propio que normalmente se conserva como George en español; no se cambia automáticamente a Jorge."}},
+	{"rank":784,"addAlternatives":["hablado"]},
+	{"rank":863,"addAlternatives":["aceptar"],"note":{"en":"Estar de acuerdo or coincidir for a shared opinion; acordar for reaching an agreement; aceptar for agreeing to a request or proposal.","es":"Estar de acuerdo o coincidir para compartir una opinión; acordar para llegar a un acuerdo; aceptar para acceder a una petición o propuesta."}},
+	{"rank":900,"addAlternatives":["se perdió","perdido","extrañado","fallado"],"note":{"en":"Past or participle of miss: perderse an event, perder transport, extrañar someone, or fallar a target. Finite forms depend on the subject.","es":"Pasado o participio de miss: perderse un evento, perder un transporte, extrañar a alguien o fallar un blanco. Las formas conjugadas dependen del sujeto."}},
+	{"rank":904,"addAlternatives":["guardado","ahorrado"]},
+	{"rank":927,"addAlternatives":["pasado","agotado"],"note":{"en":"Past or participle of spend: gastar for money, pasar for time. As an adjective, spent can mean used up or exhausted.","es":"Pasado o participio de spend: gastar para dinero, pasar para tiempo. Como adjetivo, spent puede significar consumido o agotado."}},
+	{"rank":937,"addAlternatives":["movió","movido","mudado"],"note":{"en":"Past or participle of move: mover something, moverse to change position, or mudarse to change residence. Conmovido is the emotional sense.","es":"Pasado o participio de move: mover algo, moverse para cambiar de posición o mudarse para cambiar de vivienda. Conmovido corresponde al sentido emocional."}},
+	{"rank":942,"removeAlternatives":["yo-yo"],"note":{"en":"Appears to be a stuttered I, not a separate vocabulary word; Spanish can repeat yo to reproduce the hesitation.","es":"Parece ser una repetición de I por tartamudeo, no una palabra distinta de vocabulario; el español puede repetir yo para reproducir la vacilación."}},
+	{"rank":968,"spanish":"bien","addAlternatives":["beneficio","por el bien de"],"note":{"en":"Usually appears in an idiom: for someone's sake means por el bien de alguien; for God's sake can mean por Dios. There is no universal word-for-word equivalent.","es":"Suele aparecer en una expresión: for someone's sake significa por el bien de alguien; for God's sake puede significar por Dios. No hay una equivalencia literal universal."}}
+]

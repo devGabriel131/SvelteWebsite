@@ -3,7 +3,7 @@ import type { RequestEvent } from '@sveltejs/kit';
 import type { ResolveOptions } from '@sveltejs/kit/hooks';
 import { handle } from '../src/hooks.server';
 import { load } from '../src/routes/+layout.server';
-import { languageCookie, languages, resolveLanguage, translations } from '../src/lib/i18n/translations';
+import { formatMessage, languageCookie, languages, resolveLanguage, translations } from '../src/lib/i18n/translations';
 import { exerciseKeys } from '../src/lib/ist/types';
 
 function translationKeys(messages: object, prefix = ''): string[] {
@@ -68,6 +68,24 @@ describe('translations', () => {
 		for (const { code } of languages) {
 			expect(translations[code].header.brand).toBe('Masterminds');
 			expect(translations[code].header.brandDescription).toBe('Programa ASVAB');
+		}
+	});
+});
+
+describe('translated message formatting', () => {
+	test('inserts numbers and text without changing untranslated placeholders', () => {
+		expect(formatMessage('Card {current} of {total}', { current: 3, total: 25 })).toBe('Card 3 of 25');
+		expect(formatMessage('{word} · {word}', { word: 'tú' })).toBe('tú · tú');
+		expect(formatMessage('{missing}', {})).toBe('{missing}');
+	});
+
+	test('formats the frequency deck interface in both languages', () => {
+		for (const { code } of languages) {
+			const messages = translations[code].frequency;
+			expect(formatMessage(messages.deckOption, { deck: 41, start: 1001, end: 1001 })).not.toContain('{');
+			expect(formatMessage(messages.completeMessage, { correct: 20, total: 25 })).not.toContain('{');
+			expect(messages.englishShort).toBe('EN');
+			expect(messages.spanishShort).toBe('ES');
 		}
 	});
 });
