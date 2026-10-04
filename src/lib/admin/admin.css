@@ -1,0 +1,63 @@
+.admin-console {
+	--console-bg: #10151a;
+	--console-panel: #171e23;
+	--console-border: #303b3e;
+	--console-text: #f5f0df;
+	--console-muted: #a1adaa;
+	--console-sage: #bed29c;
+	--console-amber: #e8b779;
+	--console-soft: #202b26;
+	--font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+	color: var(--console-text);
+	background: var(--console-bg);
+	min-height: 100dvh;
+	font-size: 0.875rem;
+}
+
+.admin-console button, .admin-console a, .admin-console input, .admin-console select { -webkit-tap-highlight-color: transparent; }
+.admin-console button { cursor: pointer; }
+.admin-console button > svg { flex-shrink: 0; }
+.admin-console button:disabled { cursor: not-allowed; opacity: 0.5; }
+.admin-console :focus-visible { outline: 2px solid var(--console-sage); outline-offset: 4px; }
+.admin-console .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.admin-console .eyebrow { margin: 0; color: var(--console-sage); font-family: var(--font-mono); font-size: 0.65rem; font-weight: 500; letter-spacing: 0.13em; text-transform: uppercase; }
+.admin-console .panel { min-width: 0; border: 1px solid var(--console-border); border-radius: 6px; background: var(--console-panel); }
+.admin-console .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.25rem 1.4rem; border-bottom: 1px solid var(--console-border); }
+.admin-console .panel-title { margin: 0; font-size: 0.95rem; font-weight: 700; letter-spacing: -0.02em; }
+.admin-console .panel-subtitle { margin: 0.3rem 0 0; color: var(--console-muted); font-size: 0.73rem; line-height: 1.6; }
+/* Low-specificity defaults let instrument controls adjust their own spacing. */
+.admin-console :where(.button-primary, .button-secondary, .button-ghost) { display: inline-flex; align-items: center; justify-content: center; gap: 0.55rem; min-height: 2.7rem; padding: 0.65rem 1rem; border: 1px solid transparent; border-radius: 4px; font-size: 0.76rem; font-weight: 700; text-decoration: none; transition: background 150ms, border-color 150ms; }
+.admin-console .button-primary { color: #1c261d; background: var(--console-sage); border-color: var(--console-sage); }
+.admin-console .button-primary:hover { background: #d0e2b2; }
+.admin-console .button-secondary { background: #1e282c; border-color: #45534f; color: var(--console-text); }
+.admin-console .button-secondary:hover { background: #293832; border-color: var(--console-sage); }
+.admin-console .button-ghost { color: var(--console-muted); background: transparent; }
+.admin-console .button-ghost:hover { color: var(--console-sage); background: #243028; }
+.admin-console .text-link { display: inline-flex; align-items: center; gap: 0.45rem; padding: 0; border: 0; background: transparent; color: var(--console-sage); font-size: 0.72rem; font-weight: 700; text-decoration: none; }
+.admin-console .text-link:hover { color: #e0eccd; }
+.admin-console .status-badge { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.22rem 0.5rem; border: 1px solid #465346; border-radius: 3px; color: var(--console-sage); background: #232d25; font-family: var(--font-mono); font-size: 0.59rem; line-height: 1.6; white-space: nowrap; }
+.admin-console .status-badge::before { content: ''; width: 4px; height: 4px; border-radius: 50%; background: currentColor; }
+.admin-console .status-badge.invited, .admin-console .status-badge.neutral { color: #b5c4cb; background: #242d34; border-color: #46545b; }
+.admin-console .status-badge.paused, .admin-console .status-badge.warning { color: var(--console-amber); background: #302b22; border-color: #675437; }
+.admin-console .field { display: flex; flex-direction: column; gap: 0.5rem; min-width: 0; color: var(--console-muted); font-size: 0.74rem; }
+.admin-console :where(.field input, .field select, .field textarea) { width: 100%; min-width: 0; min-height: 2.8rem; padding: 0.65rem 0.75rem; border: 1px solid #43504f; border-radius: 4px; color: var(--console-text); background: #10171b; font-size: 0.8rem; }
+.admin-console input::placeholder, .admin-console textarea::placeholder { color: #8f9c99; }
+.admin-console .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.2rem; }
+.admin-console .form-grid .full-width { grid-column: 1 / -1; }
+.admin-console .notice { margin: 1rem 0 0; padding: 0.8rem 1rem; border: 1px solid #4b5e44; border-radius: 4px; color: var(--console-sage); background: #202a22; font-size: 0.77rem; line-height: 1.6; }
+.admin-console .notice.error { border-color: #8e6545; color: #efbf9e; background: #33261e; }
+.admin-console .modal { width: min(36rem, calc(100% - 2rem)); max-height: calc(100dvh - 3rem); padding: 1.6rem; border: 1px solid #64715d; border-radius: 8px; color: var(--console-text); background: var(--console-panel); box-shadow: 0 24px 100px #0009; }
+.admin-console .modal::backdrop { background: #080d12bd; backdrop-filter: blur(5px); }
+.admin-console .modal-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.3rem; }
+.admin-console .modal-heading h2 { margin: 0; font-size: 1.3rem; }
+.admin-console .modal-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 0.65rem; margin-top: 1.5rem; }
+.admin-console .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+
+@media (max-width: 40rem) {
+	.admin-console .panel-heading { padding: 1rem; }
+	.admin-console .form-grid { grid-template-columns: minmax(0, 1fr); }
+	.admin-console .modal { padding: 1.2rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+	.admin-console *, .admin-console *::before, .admin-console *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+}
