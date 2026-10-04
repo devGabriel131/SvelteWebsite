@@ -31,6 +31,16 @@
 				</svg>
 				{language.messages.navigation.ist}
 			</a>
+			<a
+				class="dashboard-link"
+				href={resolve('/speed-math')}
+				aria-current={page.url.pathname === resolve('/speed-math') ? 'page' : undefined}
+			>
+				<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+					<path d="M12 3v3m0 0a8 8 0 1 0 8 8 8 8 0 0 0-8-8Zm-3-3h6m3 4 2-2m-8 6v4l3 2" />
+				</svg>
+				{language.messages.navigation.speedMath}
+			</a>
 		</div>
 	</nav>
 </aside>

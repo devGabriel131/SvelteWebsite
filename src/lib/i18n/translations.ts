@@ -19,6 +19,64 @@ const english = {
 	language: {
 		label: 'Website language'
 	},
+	speedMath: {
+		pageTitle: 'Speed Math | Masterminds ASVAB',
+		description: 'Build mental math speed with timed addition, subtraction, multiplication, and division practice.',
+		eyebrow: 'Mental math practice',
+		title: 'Speed Math',
+		introduction: 'Race the clock, not your accuracy. Answer as many questions correctly as you can.',
+		cardDescription: 'Choose your operation and practice for 5, 10, or 15 minutes. How many can you get right?',
+		open: 'Practice Speed Math',
+		setupTitle: 'Set your challenge',
+		setupHint: 'One operation. One timer. A new question after every answer.',
+		duration: 'Choose your time',
+		minutes: '{minutes} minutes',
+		operation: 'Choose your operation',
+		operations: {
+			addition: 'Addition', subtraction: 'Subtraction', multiplication: 'Multiplication', division: 'Division'
+		},
+		spokenOperations: {
+			addition: 'plus', subtraction: 'minus', multiplication: 'times', division: 'divided by'
+		},
+		operationHints: {
+			addition: 'Add numbers from 0 to 50.',
+			subtraction: 'Subtract numbers from 0 to 50. Answers are never negative.',
+			multiplication: 'Multiplication facts with factors from 1 to 12.',
+			division: 'Division facts from the 1–12 multiplication tables. No remainders.'
+		},
+		rulesTitle: 'Keep your momentum',
+		rules: 'Type your answer and press Enter. Each answer moves to the next question, even if it is incorrect. Only correct answers count toward your score.',
+		timerNote: 'The timer keeps running if you switch tabs. Sessions and scores are not saved after you leave or reload this page.',
+		start: 'Start challenge',
+		challengeLabel: '{operation} · {minutes} minutes',
+		timeRemaining: 'Time left',
+		correct: 'Correct',
+		incorrect: 'Incorrect',
+		accuracy: 'Accuracy',
+		questionNumber: 'Question {number}',
+		question: 'What is {left} {operation} {right}?',
+		answer: 'Your answer',
+		answerPlaceholder: 'Type a number',
+		answerHint: 'Press Enter to answer and keep going.',
+		submit: 'Answer',
+		invalidAnswer: 'Enter a whole number that is zero or greater.',
+		feedbackCorrect: 'Correct! {left} {operation} {right} equals {answer}.',
+		feedbackIncorrect: 'Not quite. {left} {operation} {right} equals {answer}.',
+		lowTime: '30 seconds or less remaining. Keep going!',
+		end: 'End session',
+		timeUp: 'Time’s up!',
+		ended: 'Session complete',
+		resultsTitle: 'Your results',
+		resultsMessage: 'You answered {correct} of {total} questions correctly.',
+		noAnswers: 'No answers this time. Start another challenge and give it a try.',
+		correctAnswers: 'Correct answers',
+		totalAnswered: 'Questions answered',
+		correctPerMinute: 'Correct per minute',
+		elapsed: 'Time practiced',
+		playAgain: 'Try again',
+		changeSettings: 'Change settings',
+		javascriptRequired: 'Turn on JavaScript to use Speed Math and its session timer.'
+	},
 	header: {
 		brand: 'Masterminds',
 		brandDescription: 'Programa ASVAB',
@@ -32,7 +90,8 @@ const english = {
 		dashboard: 'Dashboard',
 		features: 'Features',
 		featuresDescription: 'Your student tools.',
-		ist: 'IST · Physical readiness'
+		ist: 'IST · Physical readiness',
+		speedMath: 'Speed Math',
 	},
 	home: {
 		title: 'Student dashboard',
@@ -110,6 +169,64 @@ const spanish: Messages = {
 	language: {
 		label: 'Idioma del sitio web'
 	},
+	speedMath: {
+		pageTitle: 'Matemáticas rápidas | Masterminds ASVAB',
+		description: 'Mejora tu velocidad de cálculo mental con práctica cronometrada de suma, resta, multiplicación y división.',
+		eyebrow: 'Práctica de cálculo mental',
+		title: 'Matemáticas rápidas',
+		introduction: 'Compite contra el reloj sin sacrificar la precisión. Responde correctamente tantas preguntas como puedas.',
+		cardDescription: 'Elige tu operación y practica durante 5, 10 o 15 minutos. ¿Cuántas puedes acertar?',
+		open: 'Practicar matemáticas rápidas',
+		setupTitle: 'Prepara tu reto',
+		setupHint: 'Una operación. Un cronómetro. Una pregunta nueva después de cada respuesta.',
+		duration: 'Elige tu tiempo',
+		minutes: '{minutes} minutos',
+		operation: 'Elige tu operación',
+		operations: {
+			addition: 'Suma', subtraction: 'Resta', multiplication: 'Multiplicación', division: 'División'
+		},
+		spokenOperations: {
+			addition: 'más', subtraction: 'menos', multiplication: 'por', division: 'dividido entre'
+		},
+		operationHints: {
+			addition: 'Suma números del 0 al 50.',
+			subtraction: 'Resta números del 0 al 50. Las respuestas nunca son negativas.',
+			multiplication: 'Multiplicaciones con factores del 1 al 12.',
+			division: 'Divisiones de las tablas de multiplicar del 1 al 12. Sin residuos.'
+		},
+		rulesTitle: 'Mantén el ritmo',
+		rules: 'Escribe tu respuesta y presiona Enter. Cada respuesta pasa a la siguiente pregunta, aunque sea incorrecta. Solo las respuestas correctas cuentan para tu puntuación.',
+		timerNote: 'El cronómetro sigue corriendo si cambias de pestaña. Las sesiones y puntuaciones no se guardan al salir o recargar esta página.',
+		start: 'Comenzar reto',
+		challengeLabel: '{operation} · {minutes} minutos',
+		timeRemaining: 'Tiempo restante',
+		correct: 'Correctas',
+		incorrect: 'Incorrectas',
+		accuracy: 'Precisión',
+		questionNumber: 'Pregunta {number}',
+		question: '¿Cuánto es {left} {operation} {right}?',
+		answer: 'Tu respuesta',
+		answerPlaceholder: 'Escribe un número',
+		answerHint: 'Presiona Enter para responder y continuar.',
+		submit: 'Responder',
+		invalidAnswer: 'Ingresa un número entero igual o mayor que cero.',
+		feedbackCorrect: '¡Correcto! {left} {operation} {right} es igual a {answer}.',
+		feedbackIncorrect: 'No es correcto. {left} {operation} {right} es igual a {answer}.',
+		lowTime: 'Quedan 30 segundos o menos. ¡Sigue así!',
+		end: 'Terminar sesión',
+		timeUp: '¡Se acabó el tiempo!',
+		ended: 'Sesión completada',
+		resultsTitle: 'Tus resultados',
+		resultsMessage: 'Respondiste correctamente {correct} de {total} preguntas.',
+		noAnswers: 'No hubo respuestas esta vez. Comienza otro reto e inténtalo.',
+		correctAnswers: 'Respuestas correctas',
+		totalAnswered: 'Preguntas respondidas',
+		correctPerMinute: 'Correctas por minuto',
+		elapsed: 'Tiempo de práctica',
+		playAgain: 'Intentar de nuevo',
+		changeSettings: 'Cambiar opciones',
+		javascriptRequired: 'Activa JavaScript para usar matemáticas rápidas y el cronómetro de la sesión.'
+	},
 	header: {
 		brand: 'Masterminds',
 		brandDescription: 'Programa ASVAB',
@@ -123,7 +240,8 @@ const spanish: Messages = {
 		dashboard: 'Panel',
 		features: 'Funciones',
 		featuresDescription: 'Tus herramientas de estudiante.',
-		ist: 'IST · Preparación física'
+		ist: 'IST · Preparación física',
+		speedMath: 'Matemáticas rápidas',
 	},
 	home: {
 		title: 'Panel del estudiante',

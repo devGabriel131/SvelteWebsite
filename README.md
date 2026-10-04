@@ -31,18 +31,20 @@ src/
     i18n/               English/Spanish translations and reactive language context
     ist/                IST types, shared input validation, pure assessment, and presentation
     server/             Server-only PDFKit report generation
+    speed-math/         Pure question generation, session timing, scoring, and statistics
   routes/
     +layout.server.ts   Saved language preference for the shared layout
     +layout.svelte      Dashboard shell shared by all pages
-    +page.svelte        Dashboard home with an IST entry point
+    +page.svelte        Dashboard home with IST and Speed Math entry points
     ist/                IST page and server form action
+    speed-math/         Timed arithmetic practice page
 static/                 Files served without processing
-tests/                  Bun translation, IST validation, assessment, and report tests
+tests/                  Bun translation, IST, and Speed Math tests
 vite.config.ts          Vite, SvelteKit, and deployment adapter configuration
 tsconfig.json           Strict TypeScript configuration
 ```
 
-The dashboard shell has a full-width header, a left sidebar, and a main content area that renders the active route. Navigation stacks above the content on narrow screens. The header pairs the Masterminds logo with its wordmark in one home link. `static/logo.png` has a transparent outer background and was converted from the preserved original `static/logo.jpg`. Student information in the header remains a placeholder; authentication is not implemented. The IST feature is accessible from the sidebar and dashboard home.
+The dashboard shell has a full-width header, a left sidebar, and a main content area that renders the active route. Navigation stacks above the content on narrow screens. The header pairs the Masterminds logo with its wordmark in one home link. `static/logo.png` has a transparent outer background and was converted from the preserved original `static/logo.jpg`. Student information in the header remains a placeholder; authentication is not implemented. The IST and Speed Math features are accessible from the sidebar and dashboard home.
 
 SvelteKit supports server-side TypeScript in route files such as `+page.server.ts` (page data and form actions) and `+server.ts` (HTTP endpoints). Add these as features need them; a separate backend is not required.
 
@@ -55,6 +57,14 @@ The shared validator runs in the browser and server. It preserves decimal measur
 A successful server submission evaluates the inputs once and creates English and Spanish PDFKit reports from that same result. The on-screen report and downloads share the presentation model. Grades use text as well as color. PDFs use built-in Helvetica fonts for Spanish accents, wrap long content, and repeat table headers over multiple pages. The page works with standard server form submissions when JavaScript is unavailable: exercise choices submit a form update that preserves other entries and clears the exercise’s previous values when inability is chosen, without generating an assessment. Result fields stay disabled until a recorded result is selected. Enhanced submissions add immediate validation and focus handling.
 
 Names are entered manually until authentication is added. Fitness results are not stored in a database, browser storage, or cookies. Assessment responses are marked `Cache-Control: no-store`; PDFs are returned with the assessment and downloaded directly from the page. Results are self-reported, not official military clearance or a medical evaluation.
+
+## Speed Math
+
+Open `/speed-math` from the sidebar or dashboard to choose a 5-, 10-, or 15-minute challenge and one operation: addition, subtraction, multiplication, or division. Addition and subtraction use numbers from 0 to 50; subtraction answers are nonnegative. Multiplication uses factors from 1 to 12, and division uses those tables with exact whole-number answers and no zero divisors. Consecutive questions do not repeat.
+
+Type a whole-number answer and press Enter or select Answer. Each valid submission is graded once and immediately advances to the next question, with feedback showing the previous correct answer. Invalid input does not consume a question or affect the score. The practice screen shows time remaining, correct and incorrect counts, and accuracy. When time expires (or the student ends the session early), results also show total questions answered, correct answers per minute, and elapsed practice time. Try again uses the same settings; Change settings returns to setup.
+
+The browser timer reconciles against an absolute deadline, including after switching tabs, and answers at or after the deadline cannot score. All interface text, feedback, accessibility labels, and metadata support English and Spanish. JavaScript is required for this interactive feature. Questions and scores remain in memory only; leaving or reloading the page clears the session. No new dependencies or backend storage are used. The pure game logic lives in `src/lib/speed-math/game.ts` and is covered by Bun tests.
 
 ## Brand styling
 

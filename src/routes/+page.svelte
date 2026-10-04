@@ -25,6 +25,17 @@
 		<p>{language.messages.home.emptyDescription}</p>
 		<a href={resolve('/ist')}>{language.messages.home.openIst}</a>
 	</section>
+
+	<section class="feature-card" aria-labelledby="speed-math-title">
+		<span class="placeholder-icon" aria-hidden="true">
+			<svg viewBox="0 0 24 24" fill="none">
+				<path d="M12 3v3m0 0a8 8 0 1 0 8 8 8 8 0 0 0-8-8Zm-3-3h6m3 4 2-2m-8 6v4l3 2" />
+			</svg>
+		</span>
+		<h2 id="speed-math-title">{language.messages.speedMath.title}</h2>
+		<p>{language.messages.speedMath.cardDescription}</p>
+		<a href={resolve('/speed-math')}>{language.messages.speedMath.open}</a>
+	</section>
 </div>
 
 <style>
