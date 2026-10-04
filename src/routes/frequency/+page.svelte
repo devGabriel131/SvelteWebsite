@@ -227,12 +227,7 @@
 								<p class="chosen-answer">{messages.yourAnswer}: <span lang="es">{feedback.value}</span></p>
 							{/if}
 						</div>
-						{#if currentWord.note}
-							<div class="usage-note">
-								<h3>{messages.usageNote}</h3>
-								<p>{currentWord.note[language.current]}</p>
-							</div>
-						{/if}
+
 						<button class="primary-button next-button" bind:this={nextButton} onclick={nextCard} aria-describedby="revealed-answer">
 							{round.index === round.words.length - 1 ? messages.finishRound : messages.nextCard}
 							<span aria-hidden="true">→</span>
@@ -361,24 +356,6 @@
 		color: var(--color-accent-secondary);
 	}
 
-	.usage-note {
-		margin-top: 1rem;
-		padding-left: 1rem;
-		border-left: 2px solid var(--color-accent-secondary);
-		font-size: 0.8rem;
-		color: var(--color-muted);
-	}
-
-	.usage-note h3 {
-		margin: 0 0 0.35rem;
-		font-size: 0.8rem;
-		color: var(--color-text);
-	}
-
-	.usage-note p {
-		margin: 0;
-		line-height: 1.65;
-	}
 
 	.card-bottomline { display: flex; justify-content: center; gap: 1rem; color: var(--color-accent-secondary); font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; }
 	.answer-area { min-width: 0; padding-top: 0.25rem; }

@@ -1,4 +1,4 @@
-import type { Language } from '../i18n/translations';
+
 import words from './words.json';
 
 export type FrequencyWord = {
@@ -6,7 +6,7 @@ export type FrequencyWord = {
 	english: string;
 	spanish: string;
 	alternatives?: string[];
-	note?: Record<Language, string>;
+
 };
 
 export const frequencyWords: FrequencyWord[] = words;

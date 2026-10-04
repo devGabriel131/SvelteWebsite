@@ -9,7 +9,7 @@ describe('frequency practice rounds', () => {
 		const round = startRound(words);
 		expect(round).toEqual({ words, index: 0, answers: [], complete: false });
 		expect(round.words).not.toBe(words);
-		expect(round.words[0]).toEqual({ rank: 1, english: 'you', spanish: 'tú' });
+		expect(round.words[0]).toMatchObject({ rank: 1, english: 'you', spanish: 'tú' });
 	});
 
 	test('cannot advance without answering or revealing the card', () => {
@@ -65,8 +65,17 @@ describe('frequency practice rounds', () => {
 
 	test('the next deck starts a clean round, including the one-card final deck', () => {
 		const final = startRound(frequencyWords.slice(-1));
-		expect(final.words).toEqual([{ rank: 1001, english: 'south', spanish: 'sur' }]);
+		expect(final.words).toHaveLength(1);
+				expect(final.words[0]).toMatchObject({ rank: 1001, english: 'south', spanish: 'sur' });
 		expect(advanceRound(answerCard(final, 'sur')).complete).toBe(true);
+	});
+
+	test('a reviewed alternative scores as correct without entering the missed queue', () => {
+		const car = frequencyWords.find(({ english }) => english === 'car')!;
+		const round = answerCard(startRound([car]), 'coche');
+		expect(round.answers[0].outcome).toBe('correct');
+		expect(wordsToReview(round)).toEqual([]);
+		expect(advanceRound(round).complete).toBe(true);
 	});
 
 	test('empty rounds are safely complete', () => {

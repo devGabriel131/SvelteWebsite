@@ -136,7 +136,7 @@ frequency: {
 	prompt: 'How would you say this in Spanish?',
 	spanishTranslation: 'Spanish translation',
 		alsoAccepted: 'Also accepted',
-		usageNote: 'Usage note',
+
 	answerLabel: 'Your Spanish answer',
 	answerPlaceholder: 'Start typing in Spanish…',
 	answerHint: 'Search the full list. Select a suggestion or use ↑ ↓ and Enter. Accents and small typos are okay when searching.',
@@ -165,7 +165,7 @@ frequency: {
 	nextDeck: 'Next deck',
 	lastDeck: 'You reached the last deck. Revisit any range to keep practicing.',
 	listDetails: 'About this word list',
-	listNote: 'These Spanish translations have been reviewed and corrected for study. Common alternatives and usage notes appear after you answer. Meanings still depend on context; the source includes informal speech, possible contraction fragments, and strong language.',
+	listNote: 'These Spanish translations have been reviewed and corrected for study. Common alternatives appear after you answer. Meanings still depend on context; the source includes informal speech, possible contraction fragments, and strong language.',
 	javascriptRequired: 'Turn on JavaScript to use the interactive cards and answer search.'
 },
 			ist: {
@@ -345,7 +345,7 @@ frequency: {
 	prompt: '¿Cómo dirías esto en español?',
 	spanishTranslation: 'Traducción al español',
 		alsoAccepted: 'También se acepta',
-		usageNote: 'Nota de uso',
+
 	answerLabel: 'Tu respuesta en español',
 	answerPlaceholder: 'Empieza a escribir en español…',
 	answerHint: 'Busca en toda la lista. Elige una sugerencia o usa ↑ ↓ y Enter. La búsqueda admite palabras sin acentos y pequeños errores.',
@@ -374,7 +374,7 @@ frequency: {
 	nextDeck: 'Siguiente mazo',
 	lastDeck: 'Llegaste al último mazo. Vuelve a cualquier rango para seguir practicando.',
 	listDetails: 'Acerca de esta lista de palabras',
-	listNote: 'Las traducciones al español se revisaron y corrigieron para estudiar. Las alternativas comunes y notas de uso aparecen después de responder. El significado sigue dependiendo del contexto; la fuente incluye lenguaje informal, posibles fragmentos de contracciones y lenguaje fuerte.',
+	listNote: 'Las traducciones al español se revisaron y corrigieron para estudiar. Las alternativas comunes aparecen después de responder. El significado sigue dependiendo del contexto; la fuente incluye lenguaje informal, posibles fragmentos de contracciones y lenguaje fuerte.',
 	javascriptRequired: 'Activa JavaScript para usar las tarjetas interactivas y la búsqueda de respuestas.'
 },
 			ist: {
