@@ -4,6 +4,7 @@ import type { ResolveOptions } from '@sveltejs/kit/hooks';
 import { handle } from '../src/hooks.server';
 import { load } from '../src/routes/+layout.server';
 import { languageCookie, languages, resolveLanguage, translations } from '../src/lib/i18n/translations';
+import { exerciseKeys } from '../src/lib/ist/types';
 
 function translationKeys(messages: object, prefix = ''): string[] {
 	return Object.entries(messages).flatMap(([key, value]) => {
@@ -54,6 +55,13 @@ describe('translations', () => {
 		for (const { code } of languages) {
 			expect(translations[code]).toBeDefined();
 		}
+	});
+
+	test('keeps exercise names in English in both languages', () => {
+		for (const key of exerciseKeys) {
+			expect(translations.es.ist.categories[key]).toBe(translations.en.ist.categories[key]);
+		}
+		expect(translations.es.ist.categories.bodyFat).toBe('Grasa corporal estimada');
 	});
 
 	test('keeps the product name unchanged in both languages', () => {

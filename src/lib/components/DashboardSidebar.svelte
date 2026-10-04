@@ -22,9 +22,15 @@
 			{language.messages.navigation.dashboard}
 		</a>
 
-		<div class="features-placeholder">
+		<div class="features">
 			<h2>{language.messages.navigation.features}</h2>
-			<p>{language.messages.navigation.featuresDescription}</p>
+			<a class="dashboard-link" href={resolve('/ist')}
+				aria-current={page.url.pathname === resolve('/ist') ? 'page' : undefined}>
+				<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+					<path d="M3 12h4l3-7 4 14 3-7h4" />
+				</svg>
+				{language.messages.navigation.ist}
+			</a>
 		</div>
 	</nav>
 </aside>
@@ -61,13 +67,12 @@
 		stroke-width: 1.6;
 	}
 
-	.features-placeholder {
+	.features {
 		margin-top: 2rem;
-		padding-inline: 1rem;
 	}
 
 	h2 {
-		margin: 0 0 0.75rem;
+		margin: 0 1rem 0.75rem;
 		color: var(--color-accent-secondary);
 		font-size: 0.6875rem;
 		font-weight: 700;
@@ -75,12 +80,6 @@
 		text-transform: uppercase;
 	}
 
-	p {
-		margin: 0;
-		color: var(--color-muted);
-		font-size: 0.8125rem;
-		line-height: 1.7;
-	}
 
 	@media (max-width: 40rem) {
 		.dashboard-sidebar {
@@ -89,7 +88,7 @@
 			border-bottom: 1px solid var(--color-border);
 		}
 
-		.features-placeholder {
+		.features {
 			margin-top: 1rem;
 			padding-bottom: 0.5rem;
 		}

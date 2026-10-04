@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { useLanguage } from '#lib/i18n/language.svelte.ts';
 
 	const language = useLanguage();
@@ -14,15 +15,15 @@
 	<h1>{language.messages.home.title}</h1>
 	<p class="introduction">{language.messages.home.introduction}</p>
 
-	<section class="empty-state" aria-labelledby="empty-state-title">
+	<section class="feature-card" aria-labelledby="feature-title">
 		<span class="placeholder-icon" aria-hidden="true">
 			<svg viewBox="0 0 24 24" fill="none">
-				<rect x="3" y="4" width="18" height="16" rx="2" />
-				<path d="M3 9h18M9 9v11" />
+				<path d="M3 12h4l3-7 4 14 3-7h4" />
 			</svg>
 		</span>
-		<h2 id="empty-state-title">{language.messages.home.emptyTitle}</h2>
+		<h2 id="feature-title">{language.messages.home.emptyTitle}</h2>
 		<p>{language.messages.home.emptyDescription}</p>
+		<a href={resolve('/ist')}>{language.messages.home.openIst}</a>
 	</section>
 </div>
 
@@ -58,7 +59,7 @@
 		font-size: 0.9375rem;
 	}
 
-	.empty-state {
+	.feature-card {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
@@ -66,7 +67,7 @@
 		min-height: 20rem;
 		margin-top: 2rem;
 		padding: 2rem;
-		border: 1px dashed var(--color-border);
+		border: 1px solid var(--color-border);
 		border-radius: 1rem;
 		background: var(--color-surface);
 		text-align: center;
@@ -97,11 +98,23 @@
 		font-weight: 700;
 	}
 
-	.empty-state p {
+	.feature-card p {
 		max-width: 25rem;
 		margin: 0.5rem 0 0;
 		color: var(--color-muted);
 		font-size: 0.875rem;
 		line-height: 1.75;
+	}
+
+	.feature-card a {
+		margin-top: 1.25rem;
+		padding: 0.7rem 1rem;
+		border: 1px solid var(--color-accent);
+		border-radius: 0.5rem;
+		background: var(--color-accent-soft);
+		color: var(--color-accent);
+		font-size: 0.875rem;
+		font-weight: 700;
+		text-decoration: none;
 	}
 </style>

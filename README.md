@@ -27,21 +27,34 @@ src/
   hooks.server.ts       Request-scoped language and HTML document language
   lib/                  Shared code and assets, imported through #lib
     assets/             Assets processed by Vite
-    components/         Shared dashboard header, language selector, and sidebar
+    components/         Shared dashboard shell and IST form/report components
     i18n/               English/Spanish translations and reactive language context
+    ist/                IST types, shared input validation, pure assessment, and presentation
+    server/             Server-only PDFKit report generation
   routes/
     +layout.server.ts   Saved language preference for the shared layout
     +layout.svelte      Dashboard shell shared by all pages
-    +page.svelte        Dashboard home placeholder
+    +page.svelte        Dashboard home with an IST entry point
+    ist/                IST page and server form action
 static/                 Files served without processing
-tests/                  Bun translation and server language preference tests
+tests/                  Bun translation, IST validation, assessment, and report tests
 vite.config.ts          Vite, SvelteKit, and deployment adapter configuration
 tsconfig.json           Strict TypeScript configuration
 ```
 
-The dashboard shell has a full-width header, a left sidebar, and a main content area that renders the active route. Navigation stacks above the content on narrow screens. The header pairs the Masterminds logo with its wordmark in one home link. `static/logo.png` has a transparent outer background and was converted from the preserved original `static/logo.jpg`. Student information remains a placeholder; no feature pages or data integrations are implemented yet.
+The dashboard shell has a full-width header, a left sidebar, and a main content area that renders the active route. Navigation stacks above the content on narrow screens. The header pairs the Masterminds logo with its wordmark in one home link. `static/logo.png` has a transparent outer background and was converted from the preserved original `static/logo.jpg`. Student information in the header remains a placeholder; authentication is not implemented. The IST feature is accessible from the sidebar and dashboard home.
 
 SvelteKit supports server-side TypeScript in route files such as `+page.server.ts` (page data and form actions) and `+server.ts` (HTTP endpoints). Add these as features need them; a separate backend is not required.
+
+## Initial Strength Test (IST)
+
+Open `/ist` to enter the student's name, sex baseline, age, weight in pounds, waist circumference in inches, push-ups, sit-ups, plank, and one-mile run. Timed exercises use separate whole minutes and seconds. Every exercise requires a recorded result or an explicit unable-to-complete status; zero repetitions are valid, but a recorded zero duration is not.
+
+The shared validator runs in the browser and server. It preserves decimal measurements, rejects blank/malformed/out-of-range inputs and inconsistent exercise states, and blocks raw body-fat estimates outside 0–100% before rounding. Pure assessment functions apply the user-approved Army-based **program baseline**, including the female run thresholds of 585 and 630 seconds. All five categories must pass; there is no combined score or compensation between categories. Reference maxima are not input caps, and the arithmetic midpoint is not a population average.
+
+A successful server submission evaluates the inputs once and creates English and Spanish PDFKit reports from that same result. The on-screen report and downloads share the presentation model. Grades use text as well as color. PDFs use built-in Helvetica fonts for Spanish accents, wrap long content, and repeat table headers over multiple pages. The page works with standard server form submissions when JavaScript is unavailable; enhanced submissions add immediate validation and focus handling.
+
+Names are entered manually until authentication is added. Fitness results are not stored in a database, browser storage, or cookies. Assessment responses are marked `Cache-Control: no-store`; PDFs are returned with the assessment and downloaded directly from the page. Results are self-reported, not official military clearance or a medical evaluation.
 
 ## Brand styling
 

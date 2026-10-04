@@ -1,0 +1,17 @@
+{
+	"studentName": "José Rivera (DEMO)",
+	"sex": "male",
+	"age": "19",
+	"weightLb": "170.5",
+	"waistIn": "33.25",
+	"pushUpsStatus": "recorded",
+	"pushUpsValue": "60",
+	"sitUpsStatus": "recorded",
+	"sitUpsValue": "55",
+	"plankStatus": "unable_to_complete",
+	"plankMinutes": "",
+	"plankSeconds": "",
+	"runStatus": "recorded",
+	"runMinutes": "8",
+	"runSeconds": "10"
+}
