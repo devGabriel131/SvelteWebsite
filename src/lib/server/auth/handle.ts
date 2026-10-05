@@ -2,17 +2,19 @@ import type { Handle } from '@sveltejs/kit/hooks';
 import { getSessionCookie } from 'better-auth/cookies';
 import { svelteKitHandler } from 'better-auth/svelte-kit';
 import { AUTH_IP_HEADER, type Auth } from './core';
+import type { AuthAudience } from './credentials';
 
-export function createAuthHandle(getAuth: () => Auth | null, building: boolean): Handle {
+export function createAuthHandle(getAuth: (audience: AuthAudience) => Auth | null, building: boolean): Handle {
 	return async ({ event, resolve }) => {
 		event.locals.user = null;
 		event.locals.session = null;
 
-		const isAuthRequest = event.url.pathname === '/api/auth' || event.url.pathname.startsWith('/api/auth/');
+		const isAdminAuthRequest = event.url.pathname === '/admin/auth' || event.url.pathname.startsWith('/admin/auth/');
+		const isAuthRequest = isAdminAuthRequest || event.url.pathname === '/api/auth' || event.url.pathname.startsWith('/api/auth/');
 		// Public pages and prerendering must not initialize auth or require PostgreSQL.
 		if (building || (!isAuthRequest && !getSessionCookie(event.request))) return resolve(event);
 
-		const auth = getAuth();
+		const auth = getAuth(isAdminAuthRequest ? 'admin' : 'student');
 		if (!auth) {
 			if (!isAuthRequest) return resolve(event);
 			return Response.json({ code: 'AUTH_NOT_CONFIGURED' }, {

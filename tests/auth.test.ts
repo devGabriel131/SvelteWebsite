@@ -4,6 +4,7 @@ import { hashPassword, verifyPassword } from 'better-auth/crypto';
 import { readAuthConfig, type AuthEnvironment } from '../src/lib/server/auth/config';
 import { AUTH_IP_HEADER, createAuth, type Auth } from '../src/lib/server/auth/core';
 import { isValidPin } from '../src/lib/server/auth/pin';
+import { isValidCredential } from '../src/lib/server/auth/credentials';
 import { createDatabase, type DatabaseConnection } from '../src/lib/server/db/connection';
 
 const secret = randomBytes(32).toString('hex');
@@ -127,6 +128,28 @@ describe('four-digit PIN validation', () => {
 	}
 });
 
+describe('audience-specific credential validation', () => {
+	for (const password of ['abcdefgh', '12345678', 'a longer password', 'a'.repeat(128)]) {
+		test(`accepts an admin password of ${password.length} characters without composition rules`, () => {
+			expect(isValidCredential('admin', password)).toBe(true);
+			expect(isValidCredential('student', password)).toBe(false);
+		});
+	}
+
+	for (const password of [undefined, null, 12345678, {}, [], '0042', '1234567', 'a'.repeat(129)]) {
+		test(`rejects an invalid admin credential: ${JSON.stringify(password)}`, () => {
+			expect(isValidCredential('admin', password)).toBe(false);
+		});
+	}
+
+	test('retains the exact PIN policy for students', () => {
+		expect(isValidCredential('student', '0042')).toBe(true);
+		for (const value of [42, '042', '0042\n', '４２４２', 'abcd']) {
+			expect(isValidCredential('student', value)).toBe(false);
+		}
+	});
+});
+
 describe('real Better Auth options and default password crypto (no database I/O)', () => {
 	let connection: DatabaseConnection;
 	let auth: Auth;
@@ -160,6 +183,23 @@ describe('real Better Auth options and default password crypto (no database I/O)
 		});
 		expect(context.options.emailAndPassword).not.toHaveProperty('sendResetPassword');
 		expect(context.password.config).toEqual({ minPasswordLength: 4, maxPasswordLength: 4 });
+	});
+
+	test('admin entry point shares the store/cookie but uses eight-to-128-character passwords', async () => {
+		const admin = createAuth(connection.db, { secret, baseURL, trustedOrigins: [baseURL] }, 'admin');
+		const adminContext = await admin.$context;
+		expect(admin.options.basePath).toBe('/admin/auth');
+		expect(admin.options.emailAndPassword).toMatchObject({ enabled: true, disableSignUp: true });
+		expect(adminContext.password.config).toEqual({ minPasswordLength: 8, maxPasswordLength: 128 });
+		expect(adminContext.password.hash).toBe(hashPassword);
+		expect(adminContext.password.verify).toBe(verifyPassword);
+		expect(adminContext.authCookies).toEqual(context.authCookies);
+	});
+
+	test('role is a server-controlled additional field, defaulting to student', () => {
+		expect(auth.options.user.additionalFields.role).toEqual({
+			type: ['student', 'admin'], required: true, defaultValue: 'student', input: false
+		});
 	});
 
 	test('disables signup, recovery, social authentication, and credential/profile mutations', () => {

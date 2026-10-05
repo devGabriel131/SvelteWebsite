@@ -210,6 +210,47 @@ const spanishAdmin: typeof englishAdmin = {
 
 const english = {
 	admin: englishAdmin,
+	auth: {
+		email: 'Email address',
+		signIn: 'Sign in',
+		signingIn: 'Signing in…',
+		signOut: 'Sign out',
+		signingOut: 'Signing out…',
+		accountLabel: 'Signed-in account',
+		studentWorkspace: 'Masterminds · Student workspace',
+		backToAdmin: 'Back to admin',
+		openDashboard: 'Go to dashboard',
+		signedInTitle: 'You’re already signed in',
+		signedInDescription: 'Continue to your dashboard using your current account.',
+		javascriptRequired: 'Enable JavaScript to sign in securely.',
+		student: {
+			pageTitle: 'Student sign-in | Masterminds ASVAB',
+			description: 'Sign in to your Masterminds student workspace with your email and four-digit PIN.',
+			eyebrow: 'Student workspace',
+			title: 'Student sign-in',
+			introduction: 'Your next step starts here. Use your email and student PIN to sign in.',
+			credential: 'Four-digit PIN',
+			credentialHint: 'Enter exactly four digits (0–9), including any leading zeros.',
+			invalidCredential: 'Enter a PIN with exactly four digits (0–9).',
+			invalidCredentials: 'The email or PIN is incorrect. Try again.'
+		},
+		admin: {
+			pageTitle: 'Admin sign-in | Masterminds ASVAB',
+			description: 'Sign in to the Masterminds administration workspace with your admin account.',
+			eyebrow: 'Administration',
+			title: 'Admin sign-in',
+			introduction: 'Sign in with your admin account to manage your program.',
+			credential: 'Password',
+			credentialHint: 'Use your admin password (8–128 characters).',
+			invalidCredential: 'Enter a password between 8 and 128 characters.',
+			invalidCredentials: 'The email or password is incorrect. Try again.'
+		},
+		errors: {
+			rateLimited: 'Too many attempts. Please wait a moment before trying again.',
+			unavailable: 'Sign-in is temporarily unavailable. Please try again shortly.',
+			signOutFailed: 'We couldn’t sign you out. Please try again.'
+		}
+	},
 	accessibility: {
 		skipToContent: 'Skip to content'
 	},
@@ -426,6 +467,47 @@ export type Messages = typeof english;
 
 const spanish: Messages = {
 	admin: spanishAdmin,
+	auth: {
+		email: 'Correo electrónico',
+		signIn: 'Iniciar sesión',
+		signingIn: 'Iniciando sesión…',
+		signOut: 'Cerrar sesión',
+		signingOut: 'Cerrando sesión…',
+		accountLabel: 'Cuenta con sesión iniciada',
+		studentWorkspace: 'Masterminds · Panel de estudiantes',
+		backToAdmin: 'Volver a administración',
+		openDashboard: 'Ir al panel',
+		signedInTitle: 'Ya tienes una sesión iniciada',
+		signedInDescription: 'Continúa a tu panel con tu cuenta actual.',
+		javascriptRequired: 'Activa JavaScript para iniciar sesión de forma segura.',
+		student: {
+			pageTitle: 'Acceso de estudiantes | Masterminds ASVAB',
+			description: 'Accede a tu panel de estudiantes de Masterminds con tu correo y PIN de cuatro dígitos.',
+			eyebrow: 'Panel de estudiantes',
+			title: 'Acceso de estudiantes',
+			introduction: 'Tu próximo paso empieza aquí. Inicia sesión con tu correo y PIN de estudiante.',
+			credential: 'PIN de cuatro dígitos',
+			credentialHint: 'Introduce exactamente cuatro dígitos (0–9), incluidos los ceros iniciales.',
+			invalidCredential: 'Introduce un PIN de exactamente cuatro dígitos (0–9).',
+			invalidCredentials: 'El correo o el PIN es incorrecto. Inténtalo de nuevo.'
+		},
+		admin: {
+			pageTitle: 'Acceso de administración | Masterminds ASVAB',
+			description: 'Accede al panel de administración de Masterminds con tu cuenta de administrador.',
+			eyebrow: 'Administración',
+			title: 'Acceso de administración',
+			introduction: 'Inicia sesión con tu cuenta de administrador para gestionar tu programa.',
+			credential: 'Contraseña',
+			credentialHint: 'Usa tu contraseña de administrador (8–128 caracteres).',
+			invalidCredential: 'Introduce una contraseña de entre 8 y 128 caracteres.',
+			invalidCredentials: 'El correo o la contraseña es incorrecto. Inténtalo de nuevo.'
+		},
+		errors: {
+			rateLimited: 'Demasiados intentos. Espera un momento antes de volver a intentarlo.',
+			unavailable: 'El inicio de sesión no está disponible temporalmente. Inténtalo de nuevo en unos momentos.',
+			signOutFailed: 'No pudimos cerrar tu sesión. Inténtalo de nuevo.'
+		}
+	},
 	accessibility: {
 		skipToContent: 'Saltar al contenido'
 	},

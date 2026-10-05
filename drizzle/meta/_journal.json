@@ -36,6 +36,13 @@
       "when": 1791219507664,
       "tag": "0004_better_auth",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791226961576,
+      "tag": "0005_auth_account_roles",
+      "breakpoints": true
     }
   ]
 }

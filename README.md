@@ -19,7 +19,7 @@ bun run dev --open
 
 ## Local PostgreSQL
 
-`compose.yaml` runs a PostgreSQL 18 database for local development. Docker Desktop must be running. Drizzle provides student-roster and game-history schemas, derived progress/ranking views, and versioned migrations, but the dashboard is not connected to them yet. Ordinary `bun run dev`, checks, builds, and non-database tests still work without PostgreSQL or `DATABASE_URL`. The [database schema document](docs/database-schema.md) distinguishes this implemented foundation from pending profile linkage and game-persistence work. The initial [Better Auth integration](docs/authentication.md) adds email + four-digit PIN authentication, without changing the public dashboard preview or creating student login accounts.
+`compose.yaml` runs a PostgreSQL 18 database for local development. Docker Desktop must be running. Drizzle provides student-roster and game-history schemas, derived progress/ranking views, and versioned migrations, but the dashboard is not connected to them yet. Ordinary `bun run dev`, checks, builds, and non-database tests still work without PostgreSQL or `DATABASE_URL`. The [database schema document](docs/database-schema.md) distinguishes this implemented foundation from pending profile linkage and game-persistence work. The [Better Auth integration](docs/authentication.md) supports student email + four-digit PIN sign-in and separate admin email + password sign-in. The student dashboard stays a public preview; `/admin` now requires an admin session. No login accounts are seeded.
 
 If you do not already have a `.env` file, copy `.env.example` to `.env`. Generate a unique local password, for example:
 
@@ -113,11 +113,13 @@ This starts a separate Compose project with PostgreSQL 18 at `127.0.0.1:5434`, d
 
 Docker Compose is only the local database runner; it is not required for the hosted application. Keep future application queries and versioned migrations compatible with standard PostgreSQL and read the connection from the server-only `DATABASE_URL`. On Railway, configure that variable from the PostgreSQL service's connection URL appropriate to the application's network, rather than copying the local `.env` or using `127.0.0.1`. Match the supported PostgreSQL major version and use the hosted service's TLS requirements; do not disable certificate verification globally. The [auth setup](docs/authentication.md) also requires a private secret, explicit HTTPS origin, and authoritative client IPs. A deployment-specific SvelteKit adapter is not configured by this step.
 
-## Email + PIN authentication
+## Student and admin authentication
 
-The initial open-source Better Auth service is integrated with the existing database through `drizzle/0004_better_auth.sql`. It accepts email plus exactly four ASCII digits as a string (including leading zeros), uses Better Auth's default salted hashing, disables public signup, and enables database-backed rate limiting. The SvelteKit hook validates sessions into server-only locals; the browser client uses the rate-limited HTTP handler.
+Open-source Better Auth uses `drizzle/0004_better_auth.sql` and the appended `0005_auth_account_roles.sql`. Students sign in at `/login` with email + exactly four ASCII-digit PINs (including leading zeros). Admins sign in at `/admin` with email + passwords of **8–128 characters**, without mandatory case/symbol rules. Better Auth owns salted hashing/verification, public signup remains disabled, and both HTTP entry points share database-backed sign-in rate limits.
 
-See [authentication setup and security boundaries](docs/authentication.md) for private environment variables, migration commands, client usage, SvelteKit 3 compatibility, and the limitations of four-digit PINs. No login UI, invitations, roster linkage, admin authorization, or game-persistence endpoints are implemented yet. Existing demo pages stay public, and the roster seed does not create credentials.
+The stored server-controlled role determines which entry point can authenticate the account. `/admin` shows a login form anonymously, redirects signed-in students to `/`, and permits the console for admins. Its logo opens the student dashboard using the same admin session, where an admin-only **Back to admin** link returns to the console. Both views have sign-out; labels, errors, and metadata are English/Spanish.
+
+See [authentication setup and security boundaries](docs/authentication.md) for private variables, migrations, provisioning prerequisites, and tests. **Apply the new migration explicitly; it defaults existing accounts to student and does not create an admin or password.** Account provisioning, invitations, roster linkage, recovery, game persistence, and authorization of future live admin operations remain separate work. Student demo pages stay public; the admin console still uses fictional in-memory data.
 
 ## Project structure
 
@@ -135,16 +137,17 @@ src/
     i18n/               English/Spanish translations and reactive language context
     ist/                IST types, shared input validation, pure assessment, and presentation
     admin/              Isolated admin design components, scoped styles, and fictional fixtures
-    auth-client.ts      Same-origin Better Auth browser client
+    auth-client.ts      Same-origin student/admin Better Auth clients
     server/             Server-only auth, PDFKit reports, and lazy typed database connection
     speed-math/         Pure question generation, session timing, scoring, and statistics
   routes/
-    +layout.server.ts   Saved language preference for the shared layout
+    +layout.server.ts   Language and minimal verified account identity (no session tokens)
     +layout.svelte      Language context and route-specific student/admin shells
     +page.svelte        Dashboard home with IST and Speed Math entry points
     frequency/          English-first frequency flashcard page
     ist/                IST page and server form action
-    admin/              Admin command-center design preview
+    admin/              Admin sign-in and server-guarded command-center preview
+    login/              Student email + PIN sign-in
     speed-math/         Timed arithmetic practice page
 static/                 Files served without processing
 tests/                  Bun feature tests and opt-in PostgreSQL integration tests
@@ -156,7 +159,7 @@ vite.config.ts          Vite, SvelteKit, and deployment adapter configuration
 tsconfig.json           Strict TypeScript configuration
 ```
 
-The dashboard shell has a full-width header, a left sidebar, and a main content area that renders the active route. Navigation stacks above the content on narrow screens. The header pairs the Masterminds logo with its wordmark in one home link. `static/logo.png` has a transparent outer background and was converted from the preserved original `static/logo.jpg`. Student information in the header remains a design placeholder, not an authenticated identity; the auth service is not connected to the dashboard UI or roster yet. The IST and Speed Math features are accessible from the sidebar and dashboard home.
+The dashboard shell has a full-width header, a left sidebar, and a main content area that renders the active route. Navigation stacks above the content on narrow screens. The header pairs the Masterminds logo with its wordmark in one home link. `static/logo.png` has a transparent outer background and was converted from the preserved original `static/logo.jpg`. The header shows the verified account's name/email and sign-out, or a student sign-in link for anonymous visitors. An admin viewing the student dashboard retains their own identity; no student impersonation or roster linkage is involved. The IST and Speed Math features are accessible from the sidebar and dashboard home.
 
 SvelteKit supports server-side TypeScript in route files such as `+page.server.ts` (page data and form actions) and `+server.ts` (HTTP endpoints). Add these as features need them; a separate backend is not required.
 
@@ -168,7 +171,7 @@ The shared validator runs in the browser and server. It preserves decimal measur
 
 A successful server submission evaluates the inputs once and creates English and Spanish PDFKit reports from that same result. The on-screen report and downloads share the presentation model. Grades use text as well as color. PDFs feature the Masterminds logo from `static/logo.png`, grouped student details, an upfront readiness summary, and five result cards with textual grade badges, outcomes, and applicable thresholds. Typical reports fit on one Letter page; extended content wraps and paginates with repeated branding and result-column headers. Built-in Helvetica fonts support precomposed Spanish accents. Vite embeds the logo in the server bundle, so generation needs no network requests or deployment-specific filesystem paths. The page works with standard server form submissions when JavaScript is unavailable: exercise choices submit a form update that preserves other entries and clears the exercise’s previous values when inability is chosen, without generating an assessment. Result fields stay disabled until a recorded result is selected. Enhanced submissions add immediate validation and focus handling.
 
-Names are entered manually until authentication is added. Fitness results are not stored in a database, browser storage, or cookies. Assessment responses are marked `Cache-Control: no-store`; PDFs are returned with the assessment and downloaded directly from the page. Results are self-reported, not official military clearance or a medical evaluation.
+IST names are still entered manually; profile linkage is not implemented. Fitness results are not stored in a database, browser storage, or cookies. Assessment responses are marked `Cache-Control: no-store`; PDFs are returned with the assessment and downloaded directly from the page. Results are self-reported, not official military clearance or a medical evaluation.
 
 ## English frequency deck
 
@@ -194,7 +197,7 @@ The browser timer reconciles against an absolute deadline, including after switc
 
 ## Admin design preview
 
-Open `/admin` for the cockpit-inspired administration prototype. It has a dedicated responsive command rail, graphite panels, sage readouts, amber attention signals, sample training telemetry, a readiness gauge, and a student roster. The student dashboard and IST keep their existing layout. Every admin view, dialog, accessibility label, and page metadata is available in English and Spanish through the shared language selector.
+Open `/admin` and sign in with an admin account for the cockpit-inspired administration prototype. It has a dedicated responsive command rail, graphite panels, sage readouts, amber attention signals, sample training telemetry, a readiness gauge, and a student roster. The student dashboard and IST keep their existing layout. Every admin view, dialog, accessibility label, and page metadata is available in English and Spanish through the shared language selector.
 
 The six sections demonstrate:
 
@@ -205,11 +208,11 @@ The six sections demonstrate:
 - **Grade reports:** local CSV filename/size staging (up to 5 MB), a downloadable illustrative CSV, and sample report history. File contents are not parsed, transmitted, or applied to students.
 - **Events:** explicitly labeled schedule and assignment placeholders; no real events, notifications, or attendance records.
 
-All demo changes are held only in component memory and reset on reload or leaving the admin route. Preview URLs use the reserved `.invalid` domain and are intentionally not clickable checkout/enrollment links. There are no new dependencies, API calls, database writes, billing integrations, or browser-storage records. The existing language preference cookie is unchanged.
+All demo changes are held only in component memory and reset on reload or leaving the admin route. Preview URLs use the reserved `.invalid` domain and are intentionally not clickable checkout/enrollment links. These demo operations make no API calls, database writes, billing integrations, or browser-storage records. Authentication uses real Better Auth API calls/database sessions; the existing language preference cookie is unchanged.
 
 `src/lib/admin/demo.ts` holds fictional fixtures and pure presentation helpers; these types and the CSV columns are **not contracts for the database schema**. `AdminOverview.svelte`, `AdminStudents.svelte`, and `AdminOperations.svelte` separate the overview, roster controls, and future operational workflows. The `/admin` route owns the shared in-memory roster, while `admin.css` scopes the cockpit visual system to `.admin-console`.
 
-**This is a public design prototype, not an authenticated admin area.** It carries `noindex, nofollow` metadata, but that is not an access-control boundary. Before connecting real student or financial data, add server-enforced admin authentication/authorization, protected reads/actions, validated import workflows, payment-provider integration, and audit logging. Do not replace the fictional fixtures with real data without those protections.
+**The page is now guarded by verified admin identity; its operations remain a design prototype.** `noindex, nofollow` metadata is not the access-control boundary—the server page load is. Before connecting real student or financial data, enforce admin authorization on each read/action/API, and add validated import workflows, payment-provider integration, and audit logging. Do not replace fictional fixtures with real data based only on a page guard.
 
 ## Brand styling
 

@@ -1,9 +1,11 @@
-import { bigint, boolean, index, integer, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import { bigint, boolean, check, index, integer, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
 
 export const user = pgTable('auth_user', {
 	id: text('id').primaryKey(),
 	name: text('name').notNull(),
 	email: text('email').notNull().unique(),
+	role: text('role', { enum: ['student', 'admin'] }).default('student').notNull(),
 	emailVerified: boolean('email_verified').default(false).notNull(),
 	image: text('image'),
 	createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -11,7 +13,7 @@ export const user = pgTable('auth_user', {
 		.defaultNow()
 		.$onUpdate(() => new Date())
 		.notNull()
-});
+}, (table) => [check('auth_user_role_check', sql`${table.role} in ('student', 'admin')`)]);
 
 export const session = pgTable(
 	'auth_session',

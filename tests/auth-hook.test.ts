@@ -55,7 +55,7 @@ async function expectAnonymousPassThrough(handle: Handle, event: HookEvent) {
 }
 
 describe('auth hook without database I/O', () => {
-	for (const path of ['/', '/ist', '/api/authentication', '/api/auth-other']) {
+	for (const path of ['/', '/ist', '/admin', '/login', '/admin/auth-other', '/api/authentication', '/api/auth-other']) {
 		test(`a public request without a session cookie bypasses the auth getter: ${path}`, async () => {
 			await expectAnonymousPassThrough(createAuthHandle(unexpectedAuth, false), createEvent(path));
 		});
@@ -71,7 +71,7 @@ describe('auth hook without database I/O', () => {
 		});
 	}
 
-	for (const path of ['/ist', '/api/auth', '/api/auth/sign-in/email']) {
+	for (const path of ['/ist', '/admin', '/api/auth', '/api/auth/sign-in/email', '/admin/auth/sign-in/email']) {
 		test(`building bypasses the getter even with a session cookie: ${path}`, async () => {
 			await expectAnonymousPassThrough(
 				createAuthHandle(unexpectedAuth, true),
@@ -80,10 +80,14 @@ describe('auth hook without database I/O', () => {
 		});
 	}
 
-	for (const path of ['/api/auth', '/api/auth/', '/api/auth/get-session', '/api/auth/sign-in/email']) {
+	for (const path of ['/api/auth', '/api/auth/', '/api/auth/get-session', '/api/auth/sign-in/email', '/admin/auth', '/admin/auth/sign-in/email']) {
 		test(`unavailable auth returns an uncached 503 with anonymous locals: ${path}`, async () => {
 			let getterCalls = 0;
-			const handle = createAuthHandle(() => { getterCalls++; return null; }, false);
+			const handle = createAuthHandle((audience) => {
+				getterCalls++;
+				expect(audience).toBe(path.startsWith('/admin/auth') ? 'admin' : 'student');
+				return null;
+			}, false);
 			const event = createEvent(path);
 			const response = await handle({ event, resolve: unexpectedResolve });
 			expect(getterCalls).toBe(1);

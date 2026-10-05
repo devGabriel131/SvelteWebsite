@@ -1,6 +1,6 @@
 # Database schema proposal
 
-**Status: roster, game-history, and initial Better Auth migrations implemented; student-auth linkage and feature integration are pending.** Drizzle tooling, versioned PostgreSQL migrations, a guarded fictitious local seed, and isolated database tests cover student profiles, game attempts, typed Speed Math results, versioned vocabulary membership, response history, derived progress/rankings, and separate auth records. No dashboard route persists game data yet. Invitations, profile linkage/onboarding, authorization, and server-controlled game submission/grading remain separate work; the remaining proposals below do not imply approval of those integrations.
+**Status: roster, game-history, and initial Better Auth migrations implemented; student-auth linkage and feature integration are pending.** Drizzle tooling, versioned PostgreSQL migrations, a guarded fictitious local seed, and isolated database tests cover student profiles, game attempts, typed Speed Math results, versioned vocabulary membership, response history, derived progress/rankings, and separate auth records. No dashboard route persists game data yet. Invitations, profile linkage/onboarding, authorization of live data operations, and server-controlled game submission/grading remain separate work; the remaining proposals below do not imply approval of those integrations.
 
 ## Implemented first migration scope
 
@@ -49,7 +49,9 @@ See [README game storage](../README.md#game-history-and-vocabulary-progress) for
 
 `src/lib/server/db/auth-schema.ts` and `drizzle/0004_better_auth.sql` add Better Auth's separate `auth_user`, `auth_session`, `auth_account`, `auth_verification`, and `auth_rate_limit` tables. Auth IDs are text. Credential hashes live only in `auth_account.password`, owned by Better Auth's default hashing/verification. PINs are exactly four ASCII digits represented as strings, preserving leading zeros. Public signup is disabled, and rate limits are stored in PostgreSQL.
 
-The SvelteKit hook mounts the official Better Auth handler and validates real sessions into server-only locals. This adds no `students.auth_user_id`, profile/active-state guard, invitation flow, admin authorization, or authenticated game endpoint. The existing pages remain public previews and the local roster seed still creates no credentials. See [authentication setup](authentication.md) for configuration, current API boundaries, tests, and the security limitations of four-digit PINs.
+`drizzle/0005_auth_account_roles.sql` appends a non-null, constrained `student`/`admin` role to `auth_user`, defaulting all existing accounts to `student`. Better Auth treats this field as server-controlled (`input: false`); login requests cannot choose their account role. Students use four-digit PINs through `/api/auth`, while admins use passwords of 8–128 characters through `/admin/auth`.
+
+The SvelteKit hook mounts the official Better Auth handler and validates real sessions into server-only locals. `/admin` now requires the current admin role to show the console; its anonymous state is the admin sign-in form. The admin logo opens the student dashboard with the same identity/session, and that dashboard exposes an admin-only return link. Student demo routes remain public, admin operations remain fictional/local-only, and the local roster seed still creates no credentials. This adds no `students.auth_user_id`, profile/active-state guard, invitation flow, authorization of live admin operations, or authenticated game endpoint. See [authentication setup](authentication.md) for configuration, migration/provisioning prerequisites, tests, and the security limitations of four-digit PINs.
 
 ## Agreed requirements and direction
 
@@ -170,7 +172,7 @@ The admin UI, email provider, sending implementation, and Better Auth integratio
 - Do not add `pin` or `pin_hash` to `students`, create a parallel PIN credential table, or install `pgcrypto` for PIN hashing.
 - The auth implementation must configure its credential validation deliberately for the chosen PIN format. Do not assume that labeling a password input 'PIN' makes default length/format validation compatible.
 - Entered PINs are strings, preserving leading zeros. Different students may have identical PIN values; do not impose PIN uniqueness. Select the account by its unique email, then verify that account's credential through Better Auth. Never expose PINs or their hashes through profile responses, logs, or development seeds.
-- PIN length, allowed format, and whether students choose it during registration or staff issues it are not settled. Reset/recovery behavior also belongs to the auth integration.
+- PIN format is confirmed: exactly four ASCII digits as a string, including leading zeros. Whether students choose it during registration or staff issues it remains undecided. Reset/recovery behavior also belongs to later auth work. Admin credentials instead allow 8–128 characters, with no mandatory case/symbol rules.
 - Short reusable PINs remain low-entropy secrets after hashing. Rate limiting, abuse protection, and a safe recovery process are required; auth-managed hashing alone does not solve guessing risk.
 
 Better Auth owns its configured user/session/account/verification schema and credential storage. Exact table names, ID types, plugins, hashing configuration, and migrations belong to that integration, not this proposal.
