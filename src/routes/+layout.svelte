@@ -1,6 +1,8 @@
 <script lang="ts">
 	import '../app.css';
 	import favicon from '#lib/assets/favicon.svg';
+	import { page } from '$app/state';
+	import { resolve } from '$app/paths';
 	import DashboardHeader from '#lib/components/DashboardHeader.svelte';
 	import DashboardSidebar from '#lib/components/DashboardSidebar.svelte';
 	import { provideLanguage } from '#lib/i18n/language.svelte.ts';
@@ -20,17 +22,27 @@
 
 <a class="skip-link" href="#main-content">{language.messages.accessibility.skipToContent}</a>
 
-<div class="dashboard-shell">
-	<DashboardHeader />
-	<div class="dashboard-body">
-		<DashboardSidebar />
-		<main id="main-content" tabindex="-1">
-			{@render children()}
-		</main>
+{#if page.url.pathname === resolve('/admin') || page.url.pathname.startsWith(`${resolve('/admin')}/`)}
+	<main id="main-content" class="admin-main" tabindex="-1">
+		{@render children()}
+	</main>
+{:else}
+	<div class="dashboard-shell">
+		<DashboardHeader />
+		<div class="dashboard-body">
+			<DashboardSidebar />
+			<main id="main-content" tabindex="-1">
+				{@render children()}
+			</main>
+		</div>
 	</div>
-</div>
+{/if}
 
 <style>
+	.admin-main {
+		padding: 0;
+	}
+
 	.dashboard-shell {
 		display: flex;
 		flex-direction: column;
@@ -53,7 +65,7 @@
 		position: absolute;
 		top: 1rem;
 		left: 1rem;
-		z-index: 1;
+		z-index: 100;
 		padding: 0.75rem 1rem;
 		border-radius: 0.5rem;
 		background: var(--color-surface);

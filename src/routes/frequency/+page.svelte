@@ -2,20 +2,21 @@
 	import { tick } from 'svelte';
 	import { useLanguage } from '#lib/i18n/language.svelte.ts';
 	import { formatMessage } from '#lib/i18n/translations.ts';
-	import { answerCard, advanceRound, startRound, wordsToReview } from '#lib/frequency/practice.ts';
 	import {
-		deckSize,
-		frequencyDecks,
-		frequencyWords,
-		searchSpanishOptions,
-		type FrequencyWord
-	} from '#lib/frequency/vocabulary.ts';
+		answerCard,
+		advanceRound,
+		getCompleteness,
+		roundSize,
+		startRound,
+		wordsToReview,
+		type PracticeRound
+	} from '#lib/frequency/practice.ts';
+	import { frequencyWords, getOtherSpanishAnswers, searchSpanishOptions } from '#lib/frequency/vocabulary.ts';
 
 	const language = useLanguage();
 	const messages = $derived(language.messages.frequency);
-	let selectedDeck = $state(0);
-	let round = $state(startRound(frequencyDecks[0].words));
-	let reviewing = $state(false);
+	let round = $state<PracticeRound | null>(null);
+	let roundNumber = $state(0);
 	let query = $state('');
 	let activeIndex = $state(0);
 	let suggestionsOpen = $state(false);
@@ -23,18 +24,45 @@
 	let nextButton = $state<HTMLButtonElement>();
 	let summary = $state<HTMLElement>();
 
-	const currentWord = $derived(round.words[round.index]);
-	const feedback = $derived(round.answers[round.index]);
+	const roundLabel = $derived(formatMessage(messages.roundLabel, {
+		round: roundNumber.toLocaleString(language.current)
+	}));
+	const currentCard = $derived(round?.currentCard);
+	const currentWord = $derived(currentCard?.word);
+	const feedback = $derived(round?.answers.find(({ cardId }) => cardId === currentCard?.id));
+	const otherAnswers = $derived(
+		currentWord && feedback?.outcome === 'correct' && feedback.value !== null
+			? getOtherSpanishAnswers(currentWord, feedback.value)
+			: []
+	);
 	const suggestions = $derived(searchSpanishOptions(query));
 	const popupOpen = $derived(suggestionsOpen && suggestions.length > 0 && !feedback);
 	const activeOption = $derived(suggestions[activeIndex]);
-	const correctCount = $derived(round.answers.filter(({ outcome }) => outcome === 'correct').length);
-	const reviewWords = $derived(wordsToReview(round));
-	const progress = $derived((round.answers.length / round.words.length) * 100);
+	const correctCount = $derived(round?.answers.filter(({ outcome }) => outcome === 'correct').length ?? 0);
+	const incorrectCount = $derived(round?.answers.filter(({ outcome }) => outcome === 'incorrect').length ?? 0);
+	const skippedCount = $derived(round?.answers.filter(({ outcome }) => outcome === 'skipped').length ?? 0);
+	const reviewWords = $derived(round ? wordsToReview(round) : []);
+	const answeredCount = $derived(round?.answers.length ?? 0);
+	const progress = $derived((answeredCount / roundSize) * 100);
+	const completeness = $derived(getCompleteness(frequencyWords, round?.progress ?? {}));
+	const passProgress = $derived((completeness.currentPassCompletedItems / completeness.totalItems) * 100);
 
-	async function beginRound(words: readonly FrequencyWord[], isReview = false) {
-		round = startRound(words);
-		reviewing = isReview;
+
+	function poolProgress(count: number): string {
+		return formatMessage(messages.poolProgress, {
+			count: count.toLocaleString(language.current),
+			total: completeness.totalItems.toLocaleString(language.current),
+			percent: ((count / completeness.totalItems) * 100).toLocaleString(language.current, { maximumFractionDigits: 1 })
+		});
+	}
+
+	async function beginRound() {
+		if (round && (!round.complete || round.currentCard)) return;
+		const previousRound = round;
+		round = startRound(frequencyWords, previousRound?.progress, {
+			previousWordId: previousRound?.answers.at(-1)?.word.id
+		});
+		roundNumber++;
 		query = '';
 		activeIndex = 0;
 		suggestionsOpen = false;
@@ -42,27 +70,24 @@
 		answerInput?.focus();
 	}
 
-	function changeDeck(id: number) {
-		if (!frequencyDecks[id]) return;
-		selectedDeck = id;
-		void beginRound(frequencyDecks[id].words);
-	}
-
 	async function submitAnswer(value: string | null) {
-		if (feedback || round.complete) return;
-		round = answerCard(round, value);
+		if (!round || !currentCard || feedback || round.complete) return;
+		const answered = answerCard(round, currentCard.id, value);
+		if (answered === round) return;
+		round = answered;
 		suggestionsOpen = false;
 		await tick();
 		nextButton?.focus();
 	}
 
 	async function nextCard() {
-		round = advanceRound(round);
+		if (!round || !currentCard || !feedback) return;
+		round = advanceRound(round, currentCard.id);
 		query = '';
 		activeIndex = 0;
 		suggestionsOpen = false;
 		await tick();
-		if (round.complete) summary?.focus();
+		if (round.complete && !round.currentCard) summary?.focus();
 		else answerInput?.focus();
 	}
 
@@ -102,206 +127,223 @@
 		<div class="deck-facts">
 			<span class="direction">{messages.direction}</span>
 			<span>{formatMessage(messages.wordCount, { count: frequencyWords.length.toLocaleString(language.current) })}</span>
-			<span>{formatMessage(messages.deckSize, { count: deckSize })}</span>
+			<span>{formatMessage(messages.roundSize, { count: roundSize })}</span>
 		</div>
 	</header>
 
 	<noscript><p class="notice">{messages.javascriptRequired}</p></noscript>
 
-	<div class="deck-picker">
-		<div>
-			<label for="frequency-deck">{messages.chooseDeck}</label>
-			<p id="deck-hint">{messages.deckHint}</p>
+	<section class="vocabulary-progress" aria-labelledby="vocabulary-progress-title">
+		<div class="pass-heading">
+			<h2 id="vocabulary-progress-title">{messages.progressTitle}</h2>
+			<span class="direction">{formatMessage(messages.currentPass, { pass: completeness.currentPass })}</span>
 		</div>
-		<select
-			id="frequency-deck"
-			value={selectedDeck}
-			aria-describedby="deck-hint"
-			onchange={(event) => changeDeck(Number(event.currentTarget.value))}
-		>
-			{#each frequencyDecks as deck (deck.id)}
-				<option value={deck.id}>
-					{formatMessage(messages.deckOption, { deck: deck.id + 1, start: deck.startRank, end: deck.endRank })}
-				</option>
-			{/each}
-		</select>
-	</div>
+		<dl class="coverage-stats">
+			<div><dt>{messages.practiceCoverage}</dt><dd>{poolProgress(completeness.practicedItems)}</dd></div>
+			<div><dt>{messages.firstPassCoverage}</dt><dd>{poolProgress(completeness.successfulItems)}</dd></div>
 
-	<section class="practice-area" aria-label={reviewing ? messages.reviewRound : formatMessage(messages.deckLabel, { deck: selectedDeck + 1 })}>
-		<div class="round-heading">
-			<div>
-				<p class="eyebrow">{reviewing ? messages.reviewRound : formatMessage(messages.deckLabel, { deck: selectedDeck + 1 })}</p>
-				<p class="card-progress">
-					{round.complete
-						? formatMessage(messages.answeredProgress, { answered: round.answers.length, total: round.words.length })
-						: formatMessage(messages.cardProgress, { current: round.index + 1, total: round.words.length })}
-				</p>
-			</div>
-			<dl class="scoreboard">
-				<div><dt>{messages.correctCount}</dt><dd>{correctCount}</dd></div>
-				<div><dt>{messages.reviewCount}</dt><dd>{reviewWords.length}</dd></div>
-			</dl>
+		</dl>
+		<div class="pass-heading pass-progress-heading">
+			<p>{messages.passProgressLabel}</p>
+			<p>{poolProgress(completeness.currentPassCompletedItems)}</p>
 		</div>
 		<div
-			class="progress-track"
+			class="progress-track pass-track"
 			role="progressbar"
-			aria-label={messages.progressLabel}
+			aria-label={messages.passProgressLabel}
 			aria-valuemin={0}
-			aria-valuemax={round.words.length}
-			aria-valuenow={round.answers.length}
-			aria-valuetext={formatMessage(messages.answeredProgress, { answered: round.answers.length, total: round.words.length })}
+			aria-valuemax={completeness.totalItems}
+			aria-valuenow={completeness.currentPassCompletedItems}
+			aria-valuetext={poolProgress(completeness.currentPassCompletedItems)}
 		>
-			<div style:width={`${progress}%`}></div>
+			<div style:width={`${passProgress}%`}></div>
 		</div>
 
-		{#if round.complete}
-			<section class="round-summary" tabindex="-1" bind:this={summary} aria-labelledby="round-complete-title">
-				<div class="completion-icon" aria-hidden="true">✓</div>
-				<h2 id="round-complete-title">{messages.completeTitle}</h2>
-				<p class="summary-score">{formatMessage(messages.completeMessage, { correct: correctCount, total: round.words.length })}</p>
-				<p class="muted">{reviewWords.length ? messages.reviewMessage : messages.perfectMessage}</p>
-				<div class="summary-actions">
-					{#if reviewWords.length}
-						<button class="primary-button" onclick={() => beginRound(reviewWords, true)}>
-							{formatMessage(messages.reviewMissed, { count: reviewWords.length })}
-						</button>
-					{/if}
-					{#if selectedDeck < frequencyDecks.length - 1}
-						<button class:primary-button={!reviewWords.length} class:secondary-button={reviewWords.length > 0} onclick={() => changeDeck(selectedDeck + 1)}>
-							{messages.nextDeck}<span aria-hidden="true">→</span>
-						</button>
-					{/if}
-					<button class="text-button" onclick={() => beginRound(frequencyDecks[selectedDeck].words)}>{messages.restartDeck}</button>
+	</section>
+
+
+	<section class="practice-area" aria-label={round ? roundLabel : messages.readyTitle}>
+
+		{#if round}
+			<div class="round-heading">
+				<div>
+					<p class="eyebrow">{roundLabel}</p>
+					<p class="card-progress">
+						{round.complete
+							? formatMessage(messages.answeredProgress, { answered: answeredCount, total: roundSize })
+							: formatMessage(messages.cardProgress, { current: currentCard?.position ?? 1, total: roundSize })}
+					</p>
 				</div>
-				{#if selectedDeck === frequencyDecks.length - 1}<p class="muted">{messages.lastDeck}</p>{/if}
-				{#if reviewWords.length}
-					<div class="review-list">
-						<h3>{messages.reviewList}</h3>
-						<dl>
-							{#each reviewWords as word (word.rank)}
-								<div><dt lang="en">{word.english}</dt><dd lang="es">{word.spanish}</dd></div>
-							{/each}
-						</dl>
+				<dl class="scoreboard">
+					<div><dt>{messages.correctCount}</dt><dd>{correctCount}</dd></div>
+					<div><dt>{messages.incorrectCount}</dt><dd>{incorrectCount}</dd></div>
+					<div><dt>{messages.skippedCount}</dt><dd>{skippedCount}</dd></div>
+				</dl>
+			</div>
+			<div
+				class="progress-track"
+				role="progressbar"
+				aria-label={messages.progressLabel}
+				aria-valuemin={0}
+				aria-valuemax={roundSize}
+				aria-valuenow={answeredCount}
+				aria-valuetext={formatMessage(messages.answeredProgress, { answered: answeredCount, total: roundSize })}
+			>
+				<div style:width={`${progress}%`}></div>
+			</div>
+
+			{#if round.complete && !currentCard}
+				<section class="round-summary" tabindex="-1" bind:this={summary} aria-labelledby="round-complete-title">
+					<div class="completion-icon" aria-hidden="true">✓</div>
+					<h2 id="round-complete-title">{messages.completeTitle}</h2>
+					<p class="summary-score">{formatMessage(messages.completeMessage, { correct: correctCount, total: roundSize })}</p>
+					<p class="muted">{reviewWords.length ? messages.reviewMessage : messages.perfectMessage}</p>
+					<div class="summary-actions">
+						<button class="primary-button" onclick={beginRound}>
+							{messages.nextRound}<span aria-hidden="true">→</span>
+						</button>
 					</div>
-				{/if}
-			</section>
-		{:else}
-			<div class="study-layout">
-				<div class="card-stack">
-					<div class="flashcard" class:revealed={feedback} class:correct={feedback?.outcome === 'correct'}>
-						<div class="card-topline">
-							<span>{feedback ? messages.spanishTranslation : messages.englishWord}</span>
-							<span>{formatMessage(messages.frequencyRank, { rank: currentWord.rank })}</span>
+					{#if reviewWords.length}
+						<div class="review-list">
+							<h3>{messages.reviewList}</h3>
+							<dl>
+								{#each reviewWords as word (word.id)}
+									<div><dt lang="en">{word.english}</dt><dd lang="es">{word.spanish}</dd></div>
+								{/each}
+							</dl>
 						</div>
-						{#key `${currentWord.rank}-${feedback?.outcome ?? 'question'}`}
-							<div class="card-face">
-								{#if feedback}
-									<p class="original-word" lang="en">{currentWord.english}</p>
-									<span class="translation-arrow" aria-hidden="true">↓</span>
-									<h2 class="translation" lang="es">{currentWord.spanish}</h2>
-									{#if currentWord.alternatives?.length}
-										<p class="alternative-answers">
-											<span>{messages.alsoAccepted}:</span>
-											<span lang="es">{currentWord.alternatives.join(' · ')}</span>
+					{/if}
+				</section>
+			{:else if currentCard && currentWord}
+				<div class="study-layout">
+					<div class="card-stack">
+						<div class="flashcard" class:revealed={feedback} class:correct={feedback?.outcome === 'correct'}>
+							<div class="card-topline">
+								<span>{feedback ? messages.spanishTranslation : messages.englishWord}</span>
+								<span>{formatMessage(messages.frequencyRank, { rank: currentWord.rank })}</span>
+							</div>
+							{#key `${currentCard.id}-${feedback?.outcome ?? 'question'}`}
+								<div class="card-face">
+									{#if feedback}
+										<p class="original-word" lang="en">{currentWord.english}</p>
+										<span class="translation-arrow" aria-hidden="true">↓</span>
+										<h2 class="translation" lang="es">{currentWord.spanish}</h2>
+										{#if currentWord.alternatives?.length}
+											<p class="alternative-answers">
+												<span>{messages.alsoAccepted}:</span>
+												<span lang="es">{currentWord.alternatives.join(' · ')}</span>
+											</p>
+										{/if}
+									{:else}
+										<h2 class="english-word" lang="en">{currentWord.english}</h2>
+										<p class="card-prompt">{messages.prompt}</p>
+									{/if}
+								</div>
+							{/key}
+							<div class="card-bottomline" aria-hidden="true"><span>{messages.englishShort}</span><span>→</span><span>{messages.spanishShort}</span></div>
+						</div>
+					</div>
+
+					<div class="answer-area">
+						{#if feedback}
+							<div class="feedback" class:success={feedback.outcome === 'correct'}>
+								<p class="feedback-label">
+									<span aria-hidden="true">{feedback.outcome === 'correct' ? '✓' : '↺'}</span>
+									{messages[feedback.outcome]}
+								</p>
+								{#if feedback.outcome === 'correct'}
+									{#if otherAnswers.length}
+										<p class="feedback-hint">
+											{messages.otherWaysToSayIt}: <span lang="es">{otherAnswers.join(' · ')}</span>
 										</p>
 									{/if}
 								{:else}
-									<h2 class="english-word" lang="en">{currentWord.english}</h2>
-									<p class="card-prompt">{messages.prompt}</p>
+									<p class="feedback-hint">{feedback.outcome === 'incorrect' ? messages.incorrectHint : messages.skippedHint}</p>
+								{/if}
+								{#if feedback.value !== null}
+									<p class="chosen-answer">{messages.yourAnswer}: <span lang="es">{feedback.value}</span></p>
 								{/if}
 							</div>
-						{/key}
-						<div class="card-bottomline" aria-hidden="true"><span>{messages.englishShort}</span><span>→</span><span>{messages.spanishShort}</span></div>
+
+							<button class="primary-button next-button" bind:this={nextButton} onclick={nextCard} aria-describedby="revealed-answer">
+								{round.complete ? messages.finishRound : messages.nextCard}
+								<span aria-hidden="true">→</span>
+							</button>
+							<p id="revealed-answer" class="visually-hidden">
+								{messages[feedback.outcome]}. <span lang="en">{currentWord.english}</span>: <span lang="es">{currentWord.spanish}</span>.
+								{#if currentWord.alternatives?.length}
+									{messages.alsoAccepted}: <span lang="es">{currentWord.alternatives.join(', ')}</span>.
+								{/if}
+							</p>
+						{:else}
+							<label for="spanish-answer">{messages.answerLabel}</label>
+							<p class="answer-hint" id="answer-hint">{messages.answerHint}</p>
+							<input
+								id="spanish-answer"
+								bind:this={answerInput}
+								bind:value={query}
+								lang="es"
+								role="combobox"
+								aria-autocomplete="list"
+								aria-expanded={popupOpen}
+								aria-controls="spanish-suggestions"
+								aria-activedescendant={popupOpen && activeOption ? `spanish-option-${activeIndex}` : undefined}
+								aria-describedby="answer-hint current-prompt"
+								placeholder={messages.answerPlaceholder}
+								autocomplete="off"
+								spellcheck="false"
+								maxlength={100}
+								oninput={() => { activeIndex = 0; suggestionsOpen = true; }}
+								onfocus={() => { suggestionsOpen = true; }}
+								onblur={() => { suggestionsOpen = false; }}
+								onkeydown={handleSearchKey}
+							/>
+							<span id="current-prompt" class="visually-hidden" lang="en">{currentWord.english}</span>
+							<div class="search-results">
+								<ul id="spanish-suggestions" role="listbox" aria-label={messages.suggestionsLabel} hidden={!popupOpen}>
+									{#each suggestions as option, index (option)}
+										<li role="presentation">
+											<button
+												id={`spanish-option-${index}`}
+												class="suggestion"
+												class:active={activeIndex === index}
+												role="option"
+												aria-selected={activeIndex === index}
+												tabindex="-1"
+												lang="es"
+												onpointerdown={(event) => event.preventDefault()}
+												onclick={() => submitAnswer(option)}
+											>
+												{option}<span aria-hidden="true">↵</span>
+											</button>
+										</li>
+									{/each}
+								</ul>
+								{#if !query.trim()}<p class="search-empty">{messages.searchPrompt}</p>
+								{:else if !suggestions.length}<p class="search-empty">{messages.noMatches}</p>{/if}
+							</div>
+							<p class="visually-hidden" role="status">
+								{query.trim() ? (suggestions.length ? formatMessage(messages.suggestionCount, { count: suggestions.length }) : messages.noMatches) : ''}
+							</p>
+							<div class="answer-actions">
+								<button class="primary-button" disabled={!activeOption} onclick={() => { if (activeOption) void submitAnswer(activeOption); }}>{messages.checkAnswer}</button>
+								<button class="text-button" onclick={() => submitAnswer(null)}>{messages.dontKnow}</button>
+							</div>
+						{/if}
 					</div>
 				</div>
-
-				<div class="answer-area">
-					{#if feedback}
-						<div class="feedback" class:success={feedback.outcome === 'correct'}>
-							<p class="feedback-label">
-								<span aria-hidden="true">{feedback.outcome === 'correct' ? '✓' : '↺'}</span>
-								{messages[feedback.outcome]}
-							</p>
-							<p class="feedback-hint">{messages[`${feedback.outcome}Hint`]}</p>
-							{#if feedback.value !== null}
-								<p class="chosen-answer">{messages.yourAnswer}: <span lang="es">{feedback.value}</span></p>
-							{/if}
-						</div>
-
-						<button class="primary-button next-button" bind:this={nextButton} onclick={nextCard} aria-describedby="revealed-answer">
-							{round.index === round.words.length - 1 ? messages.finishRound : messages.nextCard}
-							<span aria-hidden="true">→</span>
-						</button>
-						<p id="revealed-answer" class="visually-hidden">
-							{messages[feedback.outcome]}. <span lang="en">{currentWord.english}</span>: <span lang="es">{currentWord.spanish}</span>.
-							{#if currentWord.alternatives?.length}
-								{messages.alsoAccepted}: <span lang="es">{currentWord.alternatives.join(', ')}</span>.
-							{/if}
-						</p>
-					{:else}
-						<label for="spanish-answer">{messages.answerLabel}</label>
-						<p class="answer-hint" id="answer-hint">{messages.answerHint}</p>
-						<input
-							id="spanish-answer"
-							bind:this={answerInput}
-							bind:value={query}
-							lang="es"
-							role="combobox"
-							aria-autocomplete="list"
-							aria-expanded={popupOpen}
-							aria-controls="spanish-suggestions"
-							aria-activedescendant={popupOpen && activeOption ? `spanish-option-${activeIndex}` : undefined}
-							aria-describedby="answer-hint current-prompt"
-							placeholder={messages.answerPlaceholder}
-							autocomplete="off"
-							spellcheck="false"
-							maxlength={100}
-							oninput={() => { activeIndex = 0; suggestionsOpen = true; }}
-							onfocus={() => { suggestionsOpen = true; }}
-							onblur={() => { suggestionsOpen = false; }}
-							onkeydown={handleSearchKey}
-						/>
-						<span id="current-prompt" class="visually-hidden" lang="en">{currentWord.english}</span>
-						<div class="search-results">
-							<ul id="spanish-suggestions" role="listbox" aria-label={messages.suggestionsLabel} hidden={!popupOpen}>
-								{#each suggestions as option, index (option)}
-									<li role="presentation">
-										<button
-											id={`spanish-option-${index}`}
-											class="suggestion"
-											class:active={activeIndex === index}
-											role="option"
-											aria-selected={activeIndex === index}
-											tabindex="-1"
-											lang="es"
-											onpointerdown={(event) => event.preventDefault()}
-											onclick={() => submitAnswer(option)}
-										>
-											{option}<span aria-hidden="true">↵</span>
-										</button>
-									</li>
-								{/each}
-							</ul>
-							{#if !query.trim()}<p class="search-empty">{messages.searchPrompt}</p>
-							{:else if !suggestions.length}<p class="search-empty">{messages.noMatches}</p>{/if}
-						</div>
-						<p class="visually-hidden" role="status">
-							{query.trim() ? (suggestions.length ? formatMessage(messages.suggestionCount, { count: suggestions.length }) : messages.noMatches) : ''}
-						</p>
-						<div class="answer-actions">
-							<button class="primary-button" disabled={!activeOption} onclick={() => { if (activeOption) void submitAnswer(activeOption); }}>{messages.checkAnswer}</button>
-							<button class="text-button" onclick={() => submitAnswer(null)}>{messages.dontKnow}</button>
-						</div>
-					{/if}
-				</div>
+			{/if}
+		{:else}
+			<div class="round-start">
+				<h2>{messages.readyTitle}</h2>
+				<p class="muted">{formatMessage(messages.startHint, { count: roundSize })}</p>
+				<button type="button" class="primary-button" onclick={beginRound}>
+					{messages.startRound}<span aria-hidden="true">→</span>
+				</button>
 			</div>
 		{/if}
 	</section>
 
-	<details class="list-details">
-		<summary>{messages.listDetails}</summary>
-		<p>{messages.listNote}</p>
-	</details>
 </div>
 
 <style>
@@ -311,11 +353,18 @@
 	.introduction { max-width: 45rem; margin: 0.9rem 0 0; color: var(--color-muted); }
 	.deck-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1.25rem; margin-top: 1.25rem; color: var(--color-muted); font-size: 0.8rem; }
 	.direction { padding: 0.35rem 0.7rem; border: 1px solid var(--color-border); border-radius: 2rem; color: var(--color-accent); background: var(--color-accent-soft); }
-	.deck-picker { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; margin-top: 2rem; padding: 1.25rem; border: 1px solid var(--color-border); border-radius: 0.75rem; background: var(--color-surface); }
+	.vocabulary-progress { margin-top: 2rem; padding: 1.25rem; border: 1px solid var(--color-border); border-radius: 0.75rem; background: var(--color-surface); }
+	.pass-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; }
+	.pass-heading h2 { margin: 0; font-size: 1rem; }
+	.pass-heading .direction { font-size: 0.8rem; }
+	.coverage-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin: 1.25rem 0; }
+	.coverage-stats dt { color: var(--color-muted); font-size: 0.75rem; }
+	.coverage-stats dd { margin: 0.35rem 0 0; color: var(--color-accent); font-size: 0.875rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+	.pass-progress-heading p { margin: 0; color: var(--color-muted); font-size: 0.75rem; }
+	.progress-track.pass-track { margin: 0.65rem 0; }
+
 	label { display: block; font-weight: 700; font-size: 0.9rem; }
-	.deck-picker p { max-width: 36rem; margin: 0.35rem 0 0; font-size: 0.8rem; color: var(--color-muted); }
-	select, input { border: 1px solid var(--color-border); border-radius: 0.5rem; background: var(--color-background); color: var(--color-text); }
-	select { flex-shrink: 0; max-width: 100%; padding: 0.8rem; font-size: 0.875rem; }
+	input { border: 1px solid var(--color-border); border-radius: 0.5rem; background: var(--color-background); color: var(--color-text); }
 	.practice-area { margin-top: 2rem; }
 	.round-heading { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
 	.round-heading .eyebrow { margin-bottom: 0.15rem; }
@@ -370,12 +419,11 @@
 	.suggestion:hover, .suggestion.active { background: var(--color-accent-soft); color: var(--color-accent); }
 	.search-empty { margin: 0; padding: 0.5rem 0.25rem; color: var(--color-muted); font-size: 0.8rem; }
 	.answer-actions { display: flex; flex-wrap: wrap; gap: 0.75rem 1rem; align-items: center; margin-top: 1rem; }
-	.primary-button, .secondary-button { display: inline-flex; justify-content: center; align-items: center; gap: 0.75rem; min-height: 2.75rem; padding: 0.75rem 1rem; border: 1px solid var(--color-accent); border-radius: 0.5rem; font-size: 0.875rem; font-weight: 700; }
+	.primary-button { display: inline-flex; justify-content: center; align-items: center; gap: 0.75rem; min-height: 2.75rem; padding: 0.75rem 1rem; border: 1px solid var(--color-accent); border-radius: 0.5rem; font-size: 0.875rem; font-weight: 700; }
 	.primary-button { background: var(--color-accent); color: var(--color-background); }
 	.primary-button:hover:not(:disabled) { filter: brightness(1.1); }
 	.primary-button:disabled { opacity: 0.4; cursor: not-allowed; }
-	.secondary-button { background: var(--color-accent-soft); color: var(--color-accent); }
-	.secondary-button:hover { background: var(--color-background); }
+
 	.text-button { min-height: 2.75rem; padding: 0.5rem 0.1rem; border: 0; background: transparent; color: var(--color-muted); font-size: 0.875rem; text-decoration: underline; text-underline-offset: 0.25rem; }
 	.text-button:hover { color: var(--color-text); }
 	.feedback { margin-top: 1.5rem; padding: 1.25rem; border: 1px solid var(--color-border); border-radius: 0.75rem; background: var(--color-surface); }
@@ -386,7 +434,9 @@
 	.chosen-answer { margin: 1rem 0 0; color: var(--color-muted); font-size: 0.8rem; }
 	.chosen-answer span { color: var(--color-text); }
 	.next-button { margin-top: 1.25rem; width: 100%; justify-content: space-between; }
-	.round-summary { padding: clamp(1.25rem, 4vw, 2.5rem); border: 1px solid var(--color-border); border-radius: 1rem; background: var(--color-surface); text-align: center; }
+	.round-start, .round-summary { padding: clamp(1.25rem, 4vw, 2.5rem); border: 1px solid var(--color-border); border-radius: 1rem; background: var(--color-surface); text-align: center; }
+	.round-start h2 { margin: 0; font-size: 1.5rem; }
+	.round-start .primary-button { margin-top: 0.75rem; }
 	.completion-icon { display: grid; place-items: center; width: 3rem; height: 3rem; margin: 0 auto 1rem; border-radius: 50%; background: var(--color-accent-soft); color: var(--color-accent); font-size: 1.5rem; }
 	.round-summary h2 { margin: 0; font-size: 1.75rem; }
 	.summary-score { margin: 0.5rem 0; font-size: 1.1rem; color: var(--color-accent); }
@@ -397,9 +447,7 @@
 	.review-list dl { margin: 0.5rem 0 0; }
 	.review-list dl div { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; padding: 0.65rem 0; border-bottom: 1px solid var(--color-border); overflow-wrap: anywhere; }
 	.review-list dd { margin: 0; color: var(--color-accent); }
-	.list-details { margin-top: 2rem; color: var(--color-muted); font-size: 0.8rem; }
-	.list-details summary { cursor: pointer; width: fit-content; }
-	.list-details p { max-width: 50rem; line-height: 1.75; }
+
 	.notice { padding: 1rem; border: 1px solid var(--color-border); border-radius: 0.5rem; }
 	.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 	@keyframes reveal { from { opacity: 0; transform: translateY(0.5rem); } to { opacity: 1; transform: translateY(0); } }
@@ -407,8 +455,11 @@
 		.study-layout { grid-template-columns: minmax(0, 1fr); gap: 1.5rem; }
 		.flashcard { min-height: 18rem; }
 		.feedback { margin-top: 0; }
-		.deck-picker { flex-direction: column; align-items: stretch; gap: 1rem; }
-		select { width: 100%; }
+	}
+	@media (max-width: 40rem) {
+		.coverage-stats { grid-template-columns: minmax(0, 1fr); }
+		.round-heading { align-items: flex-start; flex-wrap: wrap; }
+		.scoreboard { gap: 0.75rem; }
 	}
 	@media (prefers-reduced-motion: reduce) { .card-face { animation: none; } .progress-track > div { transition: none; } }
 </style>

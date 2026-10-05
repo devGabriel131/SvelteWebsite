@@ -20,7 +20,8 @@ Valid original senses were not automatically discarded when the primary answer c
 
 Each object in `words.json` has:
 
-- `rank` and `english`: unchanged source identity and order.
+- `id`: permanent, randomly assigned UUID for the learning item. Preserve it when changing spelling, translations, rank, or position; progress uses this ID, not mutable content.
+- `rank` and `english`: unchanged source metadata and order.
 - `spanish`: one concise default answer, generally prioritizing a common conversational use.
 - Optional `alternatives`: separate acceptable Spanish answers, not a slash-separated string students must reproduce.
 
@@ -40,7 +41,7 @@ Sentence-based examples or the original corpus would be needed to resolve these 
 
 ## Regression checks
 
-`tests/frequency.test.ts` verifies the original English/rank order, complete deck coverage, valid and unique per-card answers, the absence of per-word notes, important translation corrections, preserved legitimate alternative meanings, global search coverage, and exact alternative grading. `tests/frequency-practice.test.ts` also checks that a correct alternative does not enter the missed-word queue.
+`tests/frequency.test.ts` verifies the original English/rank order, permanent unique item IDs, valid and unique per-card answers, the absence of per-word notes, important translation corrections, preserved legitimate alternative meanings, global search coverage, and exact alternative grading. `tests/frequency-practice.test.ts` checks adaptive lowest-count eligibility, retry weighting, 25-attempt rounds (including repeats and pass transitions), separate correct/incorrect/skipped progress, idempotent card submissions, full-pool completeness, stable identity after reordering, and correct alternative grading.
 
 SHA-256 of the original `rank,english` rows joined with LF separators:
 

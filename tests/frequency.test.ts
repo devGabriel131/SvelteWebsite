@@ -1,9 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import {
-	deckSize,
-	frequencyDecks,
 	frequencyWords,
+	getOtherSpanishAnswers,
 	getSpanishAnswers,
 	isCorrectAnswer,
 	normalizeAnswer,
@@ -22,7 +21,7 @@ function findWord(english: string): FrequencyWord {
 	return word;
 }
 
-describe('reviewed vocabulary and decks', () => {
+describe('reviewed vocabulary and stable item identity', () => {
 	test('preserves all 1,001 source English words, ranks, and positions', () => {
 		expect(frequencyWords).toHaveLength(1001);
 		expect(frequencyWords.map(({ rank }) => rank)).toEqual(
@@ -76,19 +75,35 @@ describe('reviewed vocabulary and decks', () => {
 		expect(findWord('won').spanish).toBe('ganó');
 	});
 
-	test('25-card decks cover every source row once, including the short final deck', () => {
-		expect(deckSize).toBe(25);
-		expect(frequencyDecks).toHaveLength(41);
-		for (const [id, deck] of frequencyDecks.entries()) {
-			expect(deck.id).toBe(id);
-			expect(deck.startRank).toBe(id * deckSize + 1);
-			expect(deck.endRank).toBe(Math.min((id + 1) * deckSize, frequencyWords.length));
-			expect(deck.words).toHaveLength(deck.endRank - deck.startRank + 1);
-			expect(deck.words).toEqual(frequencyWords.slice(id * deckSize, (id + 1) * deckSize));
+	test('every bundled item has a unique, permanent UUID independent of its content', () => {
+		const ids = frequencyWords.map(({ id }) => id);
+		expect(new Set(ids).size).toBe(frequencyWords.length);
+		for (const id of ids) {
+			expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
 		}
-		expect(frequencyDecks.flatMap(({ words }) => words)).toEqual(frequencyWords);
-		expect(frequencyDecks[40].words).toHaveLength(1);
-		expect(frequencyDecks[40].words[0]).toMatchObject({ rank: 1001, english: 'south', spanish: 'sur' });
+		// Changing spelling or rank must not regenerate the persisted item catalog IDs.
+		expect(createHash('sha256').update([...ids].sort().join('\n')).digest('hex')).toBe(
+			'072ae90cafdbed25aad300e43c8fc76e8b385ce979f2729750f7816036294239'
+		);
+	});
+});
+
+describe('other accepted Spanish answers', () => {
+	test('offers the other translations without repeating the chosen answer', () => {
+		const car = findWord('car');
+		expect(getOtherSpanishAnswers(car, 'carro')).toEqual(['auto', 'coche', 'automóvil']);
+		expect(getOtherSpanishAnswers(car, 'auto')).toEqual(['carro', 'coche', 'automóvil']);
+		expect(getOtherSpanishAnswers(car, 'coche')).toEqual(['carro', 'auto', 'automóvil']);
+		expect(getOtherSpanishAnswers(car, 'automovil')).toEqual(['carro', 'auto', 'coche']);
+	});
+
+	test('excludes the chosen answer using the same normalization as grading', () => {
+		expect(getOtherSpanishAnswers(findWord('you'), ' TU ')).toEqual(['usted', 'ustedes', 'vos']);
+		expect(getOtherSpanishAnswers(findWord('please'), ' POR\t FAVOR ')).toEqual(['complacer', 'agradar']);
+	});
+
+	test('has no extra hint when there are no other accepted translations', () => {
+		expect(getOtherSpanishAnswers(findWord('i'), ' YO ')).toEqual([]);
 	});
 });
 
@@ -133,7 +148,7 @@ describe('Spanish option search', () => {
 		for (const query of ['', ' ', '\t\n']) expect(searchSpanishOptions(query)).toEqual([]);
 	});
 
-	test('searches the entire pool, including alternatives and the final deck', () => {
+	test('searches the entire pool, including alternatives and the final item', () => {
 		for (const answer of ['tú', 'él', 'el', 'sí', 'si', 'sur', 'decisión', 'auto', 'coche', 'complacer']) {
 			expect(searchSpanishOptions(answer)[0]).toBe(answer);
 		}

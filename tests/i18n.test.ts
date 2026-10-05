@@ -79,14 +79,38 @@ describe('translated message formatting', () => {
 		expect(formatMessage('{missing}', {})).toBe('{missing}');
 	});
 
-	test('formats the frequency deck interface in both languages', () => {
+	test('formats the adaptive frequency interface in both languages', () => {
 		for (const { code } of languages) {
 			const messages = translations[code].frequency;
-			expect(formatMessage(messages.deckOption, { deck: 41, start: 1001, end: 1001 })).not.toContain('{');
+			expect(formatMessage(messages.roundLabel, { round: 2 })).not.toContain('{');
+			expect(formatMessage(messages.roundSize, { count: 25 })).not.toContain('{');
+			expect(formatMessage(messages.startHint, { count: 25 })).not.toContain('{');
+			expect(formatMessage(messages.currentPass, { pass: 2 })).not.toContain('{');
+			expect(formatMessage(messages.poolProgress, { count: 20, total: 1001, percent: 2 })).not.toContain('{');
+			expect(formatMessage(messages.answeredProgress, { answered: 25, total: 25 })).not.toContain('{');
+			expect(formatMessage(messages.cardProgress, { current: 3, total: 25 })).not.toContain('{');
 			expect(formatMessage(messages.completeMessage, { correct: 20, total: 25 })).not.toContain('{');
 			expect(messages.englishShort).toBe('EN');
 			expect(messages.spanishShort).toBe('ES');
 		}
+	});
+});
+
+describe('frequency start screen', () => {
+	test('provides a start button and ready prompt in both languages', () => {
+		expect(translations.en.frequency.startRound).toBe('Start round');
+		expect(translations.es.frequency.startRound).toBe('Empezar ronda');
+		for (const { code } of languages) {
+			expect(translations[code].frequency.readyTitle.length).toBeGreaterThan(0);
+			expect(formatMessage(translations[code].frequency.startHint, { count: 25 })).toContain('25');
+		}
+	});
+});
+
+describe('frequency round numbering', () => {
+	test.each([1, 2, 15])('labels round %i in both languages', (round) => {
+		expect(formatMessage(translations.en.frequency.roundLabel, { round })).toBe(`Round ${round}`);
+		expect(formatMessage(translations.es.frequency.roundLabel, { round })).toBe(`Ronda ${round}`);
 	});
 });
 

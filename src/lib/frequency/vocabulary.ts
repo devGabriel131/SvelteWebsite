@@ -1,26 +1,14 @@
-
 import words from './words.json';
 
 export type FrequencyWord = {
+	id: string;
 	rank: number;
 	english: string;
 	spanish: string;
 	alternatives?: string[];
-
 };
 
 export const frequencyWords: FrequencyWord[] = words;
-export const deckSize = 25;
-
-export const frequencyDecks: {
-	id: number;
-	startRank: number;
-	endRank: number;
-	words: FrequencyWord[];
-}[] = Array.from({ length: Math.ceil(frequencyWords.length / deckSize) }, (_, id) => {
-	const words = frequencyWords.slice(id * deckSize, (id + 1) * deckSize);
-	return { id, startRank: words[0].rank, endRank: words[words.length - 1].rank, words };
-});
 
 export function normalizeAnswer(value: string): string {
 	return value
@@ -33,6 +21,11 @@ export function normalizeAnswer(value: string): string {
 
 export function getSpanishAnswers(word: FrequencyWord): string[] {
 	return [word.spanish, ...(word.alternatives ?? [])];
+}
+
+export function getOtherSpanishAnswers(word: FrequencyWord, answer: string): string[] {
+	const normalized = normalizeAnswer(answer);
+	return getSpanishAnswers(word).filter((option) => normalizeAnswer(option) !== normalized);
 }
 
 export function isCorrectAnswer(word: FrequencyWord, answer: string): boolean {

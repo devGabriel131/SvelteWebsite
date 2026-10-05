@@ -17,6 +17,44 @@ To open the app in your browser automatically:
 bun run dev --open
 ```
 
+## Local PostgreSQL
+
+`compose.yaml` runs an isolated PostgreSQL 18 database for local development. Docker Desktop must be running. This setup does not use or modify other preview databases, and the website does not use the database yet; schema migrations, mock students, and feature persistence are separate next steps. The [database schema proposal](docs/database-schema.md) records the agreed requirements, proposed boundaries, and decisions still needed before implementation.
+
+If you do not already have a `.env` file, copy `.env.example` to `.env`. Generate a unique local password, for example:
+
+```sh
+bun -e 'import { randomBytes } from "node:crypto"; console.log(randomBytes(32).toString("hex"));'
+```
+
+Set `POSTGRES_PASSWORD` to that value in `.env`. Set `DATABASE_URL` using the same password and this connection format: `postgresql://sveltewebsite:PASSWORD@127.0.0.1:5433/sveltewebsite`. Replace `PASSWORD` with your password; URL-encode it if it contains special characters. Hexadecimal passwords generated above do not require encoding. `.env` is ignored by Git; never commit it or expose either value in browser code.
+
+Start the database and wait for its health check:
+
+```sh
+bun run db:up
+bun run db:status
+```
+
+Local connection details:
+
+| Setting | Value |
+| --- | --- |
+| Host | `127.0.0.1` |
+| Port | `5433` |
+| Database | `sveltewebsite` |
+| User | `sveltewebsite` |
+| Container | `sveltewebsite-local-postgres` |
+| Persistent volume | `sveltewebsite-local_postgres_data` |
+
+`bun run db:shell` opens `psql` inside the container, so a PostgreSQL client does not need to be installed on the host. `bun run db:down` stops and removes this Compose project's container and network, but keeps its database volume. Do not add `-v` unless you deliberately want to delete the database data. PostgreSQL 18 stores its data beneath `/var/lib/postgresql`, which is the named volume's mount point.
+
+The image is pinned to PostgreSQL major version 18, allowing newer 18.x patches when the image is pulled. Changing `POSTGRES_PASSWORD` after the volume is initialized does not update the existing database user's password.
+
+### Moving to Railway
+
+Docker Compose is only the local database runner; it is not required for the hosted application. Keep future application queries and versioned migrations compatible with standard PostgreSQL and read the connection from the server-only `DATABASE_URL`. On Railway, configure that variable from the PostgreSQL service's connection URL appropriate to the application's network, rather than copying the local `.env` or using `127.0.0.1`. Match the supported PostgreSQL major version and use the hosted service's TLS requirements; do not disable certificate verification globally. Authentication and a deployment-specific SvelteKit adapter are not configured by this step.
+
 ## Project structure
 
 ```text
@@ -31,14 +69,16 @@ src/
     frequency/          Bundled word list, fuzzy Spanish search, and practice-round logic
     i18n/               English/Spanish translations and reactive language context
     ist/                IST types, shared input validation, pure assessment, and presentation
+    admin/              Isolated admin design components, scoped styles, and fictional fixtures
     server/             Server-only PDFKit report generation
     speed-math/         Pure question generation, session timing, scoring, and statistics
   routes/
     +layout.server.ts   Saved language preference for the shared layout
-    +layout.svelte      Dashboard shell shared by all pages
+    +layout.svelte      Language context and route-specific student/admin shells
     +page.svelte        Dashboard home with IST and Speed Math entry points
     frequency/          English-first frequency flashcard page
     ist/                IST page and server form action
+    admin/              Admin command-center design preview
     speed-math/         Timed arithmetic practice page
 static/                 Files served without processing
 tests/                  Bun translation, vocabulary/practice, IST, and Speed Math tests
@@ -62,11 +102,17 @@ Names are entered manually until authentication is added. Fitness results are no
 
 ## English frequency deck
 
-Open `/frequency` from the sidebar to practice the supplied 1,001 English–Spanish pairs. The full list is bundled in `src/lib/frequency/words.json`; there is no runtime CSV upload or external vocabulary request. Every source row, spelling, translation, and frequency position is preserved. To revise the list, edit the JSON and update the source-integrity tests in `tests/frequency.test.ts`.
+Open `/frequency` from the sidebar to practice the supplied 1,001 English words with reviewed Spanish translations. The full list is bundled in `src/lib/frequency/words.json`; there is no runtime CSV upload or external vocabulary request. Every original English string, rank, and frequency position is preserved, while the Spanish data has been audited and corrected. Each learning item also has a permanent, randomly assigned UUID stored in the JSON: retain that ID when editing spelling, translations, or rank; never regenerate it from content or list position. Each card has a primary answer and optional individually accepted alternatives, without usage notes. See `src/lib/frequency/AUDIT.md` for the review policy, limitations, and primary-answer change log. To revise the list, edit the JSON and update the relevant regression tests in `tests/frequency.test.ts`.
 
-Cards always show English first, regardless of the website language. The translated interface offers 25-card decks in frequency order (the last deck has one card). Type in Spanish to search the entire answer pool, then tap a suggestion, use arrow keys and Enter, or choose “I don’t know” to reveal the translation. Search tolerates accents, case, and small typos; grading compares the selected option with the stored translation rather than grading a fuzzy query. Duplicate answer suggestions are collapsed without removing English cards.
+Select **Start round** before any cards appear; rounds do not begin automatically on page load. Cards always show English first, regardless of the website language. The bilingual interface offers adaptive rounds of **25 recorded answer attempts**, not preselected decks or necessarily 25 distinct words. Type in Spanish to search the entire answer pool, then tap a suggestion, use arrow keys and Enter, or choose “I don’t know” to reveal the translation. Search tolerates accents, case, and small typos and includes every primary and alternative answer. Grading compares the selected option with that card’s accepted answers rather than grading a fuzzy query. Duplicate suggestions are collapsed without removing English cards. Revealed cards show the Spanish translation and accepted alternatives.
 
-Each round shows progress and correct/review counts. At the end, students can review missed or skipped cards, repeat the deck, or move to the next one. Round state is kept only in memory for the current visit; reloading, navigating away, or changing decks starts fresh. JavaScript is required for this interactive feature. The supplied list includes questionable/context-dependent translations and strong language; it should be reviewed before treating it as authoritative teaching material.
+The scheduler in `src/lib/frequency/practice.ts` selects only words at the **lowest correct-answer count across the full pool**, treating missing progress as zero. Correct answers increase the item's count; incorrect answers and skips leave that count unchanged and increase separately tracked retry counts. The proposed initial selection weight is `1 + incorrectCount + skippedCount`; this numerical policy remains open for product agreement. Immediate repetition is avoided when another eligible item exists. Eligibility is recalculated for each next card, so a difficult word can repeat and a new pass can begin within the same round. Invalid input and repeated submissions of the same card do not consume attempts; repeated words have separate round/card identities.
+
+Rounds are labeled Round 1, Round 2, and so on, counting each new round started during the current page visit; reloading or leaving resets the numbering. Round scores distinguish correct, incorrect, and skipped attempts. Full-list reporting separately shows practice coverage, words answered correctly at least once, and current-pass completion, always using all 1,001 items as the denominator. A new pass resets only its own progress bar, not first-pass coverage. The end-of-round missed-word list is informational; the next round continues the same adaptive rules rather than restricting the pool to those words. These metrics measure practice completion, not permanent mastery.
+
+Accepted responses update item progress immediately, and starting another round retains those counts. **All progress and response data remain in memory on this page**: reloads and navigation clear them. There is no account/database persistence or unfinished-round resume yet. Future persistence must resolve student identity and grading on the server, save responses idempotently by round/card identity, and update progress transactionally according to `docs/database-schema.md`. No migrations or authentication integration are included here.
+
+JavaScript is required for this interactive feature. The translations were reviewed for sense, grammar, spelling, and register, but isolated words still have context-dependent meanings. The developer-facing audit records limitations around auxiliaries, idioms, and probable subtitle/contraction fragments; per-word notes are not included in the cards or vocabulary data. Informal speech and strong language remain in the deck.
 
 ## Speed Math
 
@@ -75,6 +121,25 @@ Open `/speed-math` from the sidebar or dashboard to choose a 5-, 10-, or 15-minu
 Type a whole-number answer and press Enter or select Answer. Each valid submission is graded once and immediately advances to the next question, with feedback showing the previous correct answer. Invalid input does not consume a question or affect the score. The practice screen shows time remaining, correct and incorrect counts, and accuracy. When time expires (or the student ends the session early), results also show total questions answered, correct answers per minute, and elapsed practice time. Try again uses the same settings; Change settings returns to setup.
 
 The browser timer reconciles against an absolute deadline, including after switching tabs, and answers at or after the deadline cannot score. All interface text, feedback, accessibility labels, and metadata support English and Spanish. JavaScript is required for this interactive feature. Questions and scores remain in memory only; leaving or reloading the page clears the session. No new dependencies or backend storage are used. The pure game logic lives in `src/lib/speed-math/game.ts` and is covered by Bun tests.
+
+## Admin design preview
+
+Open `/admin` for the cockpit-inspired administration prototype. It has a dedicated responsive command rail, graphite panels, sage readouts, amber attention signals, sample training telemetry, a readiness gauge, and a student roster. The student dashboard and IST keep their existing layout. Every admin view, dialog, accessibility label, and page metadata is available in English and Spanish through the shared language selector.
+
+The six sections demonstrate:
+
+- **Overview:** demo metrics, a 7/30-day activity chart, a visual score gauge, recent fictional activity, student check-ins, and a sample upcoming session.
+- **Students:** search and status filters, plus local-only add/edit dialogs for fictional students. Roster metrics reflect those edits.
+- **Payments:** payment-link previews and a confirmation dialog that marks a fictional refund request as reviewed, never refunded.
+- **Invitations:** local invitation previews with cohort and expiry selections; no emails or enrollments.
+- **Grade reports:** local CSV filename/size staging (up to 5 MB), a downloadable illustrative CSV, and sample report history. File contents are not parsed, transmitted, or applied to students.
+- **Events:** explicitly labeled schedule and assignment placeholders; no real events, notifications, or attendance records.
+
+All demo changes are held only in component memory and reset on reload or leaving the admin route. Preview URLs use the reserved `.invalid` domain and are intentionally not clickable checkout/enrollment links. There are no new dependencies, API calls, database writes, billing integrations, or browser-storage records. The existing language preference cookie is unchanged.
+
+`src/lib/admin/demo.ts` holds fictional fixtures and pure presentation helpers; these types and the CSV columns are **not contracts for the database schema**. `AdminOverview.svelte`, `AdminStudents.svelte`, and `AdminOperations.svelte` separate the overview, roster controls, and future operational workflows. The `/admin` route owns the shared in-memory roster, while `admin.css` scopes the cockpit visual system to `.admin-console`.
+
+**This is a public design prototype, not an authenticated admin area.** It carries `noindex, nofollow` metadata, but that is not an access-control boundary. Before connecting real student or financial data, add server-enforced admin authentication/authorization, protected reads/actions, validated import workflows, payment-provider integration, and audit logging. Do not replace the fictional fixtures with real data without those protections.
 
 ## Brand styling
 

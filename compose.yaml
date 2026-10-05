@@ -1,0 +1,24 @@
+name: sveltewebsite-local
+
+services:
+  postgres:
+    image: postgres:18
+    container_name: sveltewebsite-local-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sveltewebsite
+      POSTGRES_DB: sveltewebsite
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "sveltewebsite", "-d", "sveltewebsite"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  postgres_data:
