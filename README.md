@@ -19,7 +19,7 @@ bun run dev --open
 
 ## Local PostgreSQL
 
-`compose.yaml` runs an isolated PostgreSQL 18 database for local development. Docker Desktop must be running. This setup does not use or modify other preview databases, and the website does not use the database yet; schema migrations, mock students, and feature persistence are separate next steps. The [database schema proposal](docs/database-schema.md) records the agreed requirements, proposed boundaries, and decisions still needed before implementation.
+`compose.yaml` runs a PostgreSQL 18 database for local development. Docker Desktop must be running. Drizzle provides student-roster and game-history schemas, derived progress/ranking views, and versioned migrations, but the dashboard is not connected to them yet. Ordinary `bun run dev`, checks, builds, and non-database tests still work without PostgreSQL or `DATABASE_URL`. The [database schema document](docs/database-schema.md) distinguishes this implemented foundation from pending profile linkage and game-persistence work. The [Better Auth integration](docs/authentication.md) supports student email + four-digit PIN sign-in and separate admin email + password sign-in. The student dashboard stays a public preview; `/admin` now requires an admin session. No login accounts are seeded.
 
 If you do not already have a `.env` file, copy `.env.example` to `.env`. Generate a unique local password, for example:
 
@@ -51,18 +51,85 @@ Local connection details:
 
 The image is pinned to PostgreSQL major version 18, allowing newer 18.x patches when the image is pulled. Changing `POSTGRES_PASSWORD` after the volume is initialized does not update the existing database user's password.
 
+### Migrations and fictitious local roster
+
+After configuring `.env` and starting the development database, apply the committed migrations explicitly:
+
+```sh
+bun run db:migrate
+```
+
+This reads the server-only `DATABASE_URL` and records applied migrations in `drizzle.__drizzle_migrations`. Rerunning it applies only outstanding migrations. It does not seed fictitious roster data, run during app startup/builds, or require a PostgreSQL extension. Run migrations from one controlled process per database, and review the target before using a hosted connection.
+
+The first migrations create `students` and its database-level `updated_at` trigger. Staff-entered names retain accents and compound names. Emails retain their entered casing, but a unique index compares `lower(btrim(email))` across every student, including inactive profiles. Surrounding/embedded whitespace is rejected by a lightweight email-shape constraint; server-side enrollment must trim and validate inputs. Dots and plus-addresses are not collapsed. Date of birth and gender may be null during roster entry; class type is required. Auth linkage, signup, invitation records, and authenticated game-persistence endpoints are not implemented yet.
+
+Optionally insert three fictitious roster profiles into the local database:
+
+```sh
+bun run db:seed
+```
+
+The seed uses fixed UUIDs and reserved `@example.test` addresses, contains no auth accounts/PINs, and never overwrites existing records. It is not a login bypass. It refuses production/Railway environments, remote hosts, connection-option overrides, and unknown database/user/port combinations; it also verifies the actual connected database and user. Only this development target and the dedicated test target below are allowed. A non-fixture record using a fixture email causes the atomic insert to fail rather than modifying that record. Do not point these local ports at remote databases through tunnels.
+
+For future schema changes, edit the relevant definition in `src/lib/server/db/schema.ts` (students), `auth-schema.ts` (Better Auth), `game-schema.ts` (game/catalog tables), or `views.ts` (derived progress/rankings), then generate and inspect an additional migration:
+
+```sh
+bun run db:generate --name=describe_the_change
+bun run db:check
+```
+
+Commit the SQL, snapshots, and journal together. Review dependent view creation/drop order: Drizzle Kit does not automatically order these views by dependency, so source views must be created before views that use them (and dropped in reverse order). Integration tests validate the actual SQL against PostgreSQL. Custom PostgreSQL functions/triggers use `bun run db:generate --custom --name=describe_the_change` followed by editing that new SQL file. Already applied migrations are append-only: use a new migration for corrections, not `drizzle-kit push` or edits to old files. The lazy application connection lives in `src/lib/server/db/index.ts`; standalone tools use `connection.ts` without SvelteKit virtual imports. `src/env.ts` declares `DATABASE_URL` as private, runtime-read, and optional until database code is called.
+
+### Game history and vocabulary progress
+
+`drizzle/0002_game_history.sql` adds typed game persistence and five derived views; `0003_frequency_catalog.sql` records the bundled vocabulary's 1,001 permanent UUIDs and ranks as the initial `frequency-v1` membership snapshot. This learning-content migration runs on every migrated database; it contains no student data and is separate from the opt-in fictitious roster seed.
+
+- `game_attempts` links a stable attempt UUID to a student, game type, explicit rules version, and start/end timestamps. `ended_at` may be null for partial vocabulary practice; that is not a promise of resumable rounds. Reuse the same attempt ID for submission retries.
+- `speed_math_results` stores operation, selected 5/10/15-minute duration, nonnegative correct/incorrect counts, and optional `verified_at`. Counts and verification have no fabricated defaults. A composite foreign key prevents math results from attaching to vocabulary attempts.
+- `vocabulary_items`, `vocabulary_pools`, and `vocabulary_pool_items` identify items and versioned pool membership independently of word spelling or rank. Content/translations stay in the existing JSON; published membership snapshots must not be edited in place. Add a new pool ID/membership migration when its denominator or ordering changes, and retain old snapshots.
+- `vocabulary_rounds` binds an attempt to one pool. `vocabulary_responses` retains each accepted card outcome and answer time. `(attempt_id, card_position)` is the retry identity, with positions 1–25; repeated items at different positions are valid. Foreign keys require each response's item to belong to that round's pool. No raw answer text or credentials are stored.
+
+The response history is authoritative. `student_word_progress` derives each student's lifetime item counts and latest outcome; absent rows represent zero practice. Equal answer timestamps use attempt ID and card position as a deterministic tie-break. `vocabulary_round_progress` reports accepted response counts and marks a round complete only at 25, independent of correctness or an end timestamp. `student_vocabulary_completeness` reports the explicit pool denominator, practice coverage, successful coverage, full passes, and current-pass counts, including all unpracticed items. Counts follow stable item IDs across pool versions. Empty pools report zero counts and current pass 1. There are no editable progress counters, percentages, or permanent mastery flags. Views always reflect retained history; a cache can be added later if measured history volume warrants it.
+
+`speed_math_verified_bests` selects one verified full-duration result per student/operation/duration/rules version. Effective `ended_at` must equal the computed deadline, and `verified_at` must be at or after it; early, unfinished, late/unclamped, and unverified attempts remain in history but do not enter competition. Equal personal bests select the earliest end time, then lowest attempt UUID. `speed_math_leaderboard_entries` ranks those bests by most correct answers, then fewest incorrect answers; exact ties share a rank (`1, 1, 3`). The backend views contain student IDs, without names or active-state filtering. That is not a public leaderboard or a decision about audience/inactive visibility.
+
+**Integration boundary:** no game route uses this storage yet. Future authenticated server code must resolve the student, check current active state, grade answers and control timing, set verification itself, and write related records transactionally. Unique keys prevent duplicate records, but an API must also compare retry payloads and reject conflicting submissions rather than silently ignoring them. `verified_at` is not proof of grading by itself; clients must never control it. Foreign keys restrict deletion instead of cascading learning history; a deletion/retention policy remains to be agreed.
+
+### Isolated database tests
+
+Database integration tests use `compose.test.yaml`, not the persistent development database:
+
+```sh
+bun run db:test:up
+bun run db:test
+bun run db:test:down
+```
+
+This starts a separate Compose project with PostgreSQL 18 at `127.0.0.1:5434`, database/user `sveltewebsite_test`, and public test-only password `sveltewebsite_test`. Its data is held in a disposable tmpfs mount, not the development volume. Stopping/removing this test container discards its data. No `.env` changes are needed, and `compose.yaml` remains unchanged.
+
+`db:test` explicitly selects that test URL and fails if the database is unavailable. It verifies migrations and reruns, roster/game constraints, catalog membership, retry uniqueness, repeated/partial rounds, completeness/pass boundaries, verified rankings and shared ranks, history retention through deactivation, connection guards, and seed idempotency. Row-level checks run in rolled-back transactions; seed tests remove only fixtures they inserted. The ordinary `bun run test` runs database safety/fixture unit tests but skips PostgreSQL integration tests unless `TEST_DATABASE_URL` is explicitly set. Auth integration tests additionally exercise real hashing, sign-in, cookies, logout/replay, Origin protection, server-session hooks, and persisted/concurrent rate limits. An integration URL must match the dedicated test target; the persistent development database and remote targets are rejected before migrations.
+
 ### Moving to Railway
 
-Docker Compose is only the local database runner; it is not required for the hosted application. Keep future application queries and versioned migrations compatible with standard PostgreSQL and read the connection from the server-only `DATABASE_URL`. On Railway, configure that variable from the PostgreSQL service's connection URL appropriate to the application's network, rather than copying the local `.env` or using `127.0.0.1`. Match the supported PostgreSQL major version and use the hosted service's TLS requirements; do not disable certificate verification globally. Authentication and a deployment-specific SvelteKit adapter are not configured by this step.
+Docker Compose is only the local database runner; it is not required for the hosted application. Keep future application queries and versioned migrations compatible with standard PostgreSQL and read the connection from the server-only `DATABASE_URL`. On Railway, configure that variable from the PostgreSQL service's connection URL appropriate to the application's network, rather than copying the local `.env` or using `127.0.0.1`. Match the supported PostgreSQL major version and use the hosted service's TLS requirements; do not disable certificate verification globally. The [auth setup](docs/authentication.md) also requires a private secret, explicit HTTPS origin, and authoritative client IPs. A deployment-specific SvelteKit adapter is not configured by this step.
+
+## Student and admin authentication
+
+Open-source Better Auth uses `drizzle/0004_better_auth.sql` and the appended `0005_auth_account_roles.sql`. Students sign in at `/login` with email + exactly four ASCII-digit PINs (including leading zeros). Admins sign in at `/admin` with email + passwords of **8–128 characters**, without mandatory case/symbol rules. Better Auth owns salted hashing/verification, public signup remains disabled, and both HTTP entry points share database-backed sign-in rate limits.
+
+The stored server-controlled role determines which entry point can authenticate the account. `/admin` shows a login form anonymously, redirects signed-in students to `/`, and permits the console for admins. Its logo opens the student dashboard using the same admin session, where an admin-only **Back to admin** link returns to the console. Both views have sign-out; labels, errors, and metadata are English/Spanish.
+
+See [authentication setup and security boundaries](docs/authentication.md) for private variables, migrations, provisioning prerequisites, and tests. **Apply the new migration explicitly; it defaults existing accounts to student and does not create an admin or password.** Account provisioning, invitations, roster linkage, recovery, game persistence, and authorization of future live admin operations remain separate work. Student demo pages stay public; the admin console still uses fictional in-memory data.
 
 ## Project structure
 
 ```text
 src/
   app.html              HTML document template
+  env.ts                Private runtime database/auth declarations (optional until used)
   app.d.ts              Application-wide type declarations
   app.css               Global styles and color tokens
-  hooks.server.ts       Request-scoped language and HTML document language
+  hooks.server.ts       Composed language, Better Auth handler, and server session hooks
   lib/                  Shared code and assets, imported through #lib
     assets/             Assets processed by Vite
     components/         Shared dashboard shell, form fields, and IST report components
@@ -71,24 +138,30 @@ src/
     i18n/               English/Spanish translations and reactive language context
     ist/                IST types, shared input validation, pure assessment, and presentation
     admin/              Isolated admin design components, scoped styles, and fictional fixtures
-    server/             Server-only PDFKit report generation
+    auth-client.ts      Same-origin student/admin Better Auth clients
+    server/             Server-only auth, PDFKit reports, and lazy typed database connection
     speed-math/         Pure question generation, session timing, scoring, and statistics
   routes/
-    +layout.server.ts   Saved language preference for the shared layout
+    +layout.server.ts   Language and minimal verified account identity (no session tokens)
     +layout.svelte      Language context and route-specific student/admin shells
     +page.svelte        Dashboard home with IST, attendance, and Speed Math entry points
     frequency/          English-first frequency flashcard page
     ist/                IST page and server form action
     attendance/         Attendance certificate page and server PDF form action
-    admin/              Admin command-center design preview
+    admin/              Admin sign-in and server-guarded command-center preview
+    login/              Student email + PIN sign-in
     speed-math/         Timed arithmetic practice page
 static/                 Files served without processing
-tests/                  Bun translation, vocabulary/practice, IST, and Speed Math tests
+tests/                  Bun feature tests and opt-in PostgreSQL integration tests
+scripts/db/             Explicit migrations, guarded fictitious seed, local target checks
+drizzle/                Versioned SQL migrations and Drizzle snapshots/journal
+compose.test.yaml       Disposable PostgreSQL instance for database integration tests
+drizzle.config.ts       Database schema and migration-generation configuration
 vite.config.ts          Vite, SvelteKit, and deployment adapter configuration
 tsconfig.json           Strict TypeScript configuration
 ```
 
-The dashboard shell has a full-width header, a left sidebar, and a main content area that renders the active route. Navigation stacks above the content on narrow screens. The header pairs the Masterminds logo with its wordmark in one home link. `static/logo.png` has a transparent outer background and was converted from the preserved original `static/logo.jpg`. Student information in the header remains a placeholder; authentication is not implemented. The IST, attendance certificate, and Speed Math features are accessible from the sidebar and dashboard home.
+The dashboard shell has a full-width header, a left sidebar, and a main content area that renders the active route. Navigation stacks above the content on narrow screens. The header pairs the Masterminds logo with its wordmark in one home link. `static/logo.png` has a transparent outer background and was converted from the preserved original `static/logo.jpg`. The header shows the verified account's name/email and sign-out, or a student sign-in link for anonymous visitors. An admin viewing the student dashboard retains their own identity; no student impersonation or roster linkage is involved. The IST, attendance certificate, and Speed Math features are accessible from the sidebar and dashboard home.
 
 SvelteKit supports server-side TypeScript in route files such as `+page.server.ts` (page data and form actions) and `+server.ts` (HTTP endpoints). Add these as features need them; a separate backend is not required.
 
@@ -100,7 +173,7 @@ The shared validator runs in the browser and server. It preserves decimal measur
 
 A successful server submission evaluates the inputs once and creates English and Spanish PDFKit reports from that same result. The on-screen report and downloads share the presentation model. Grades use text as well as color. PDFs feature the Masterminds logo from `static/logo.png`, grouped student details, an upfront readiness summary, and five result cards with textual grade badges, outcomes, and applicable thresholds. Typical reports fit on one Letter page; extended content wraps and paginates with repeated branding and result-column headers. Built-in Helvetica fonts support precomposed Spanish accents. Vite embeds the logo in the server bundle, so generation needs no network requests or deployment-specific filesystem paths. The page works with standard server form submissions when JavaScript is unavailable: exercise choices submit a form update that preserves other entries and clears the exercise’s previous values when inability is chosen, without generating an assessment. Result fields stay disabled until a recorded result is selected. Enhanced submissions add immediate validation and focus handling.
 
-Names are entered manually until authentication is added. Fitness results are not stored in a database, browser storage, or cookies. Assessment responses are marked `Cache-Control: no-store`; PDFs are returned with the assessment and downloaded directly from the page. Results are self-reported, not official military clearance or a medical evaluation.
+IST names are still entered manually; profile linkage is not implemented. Fitness results are not stored in a database, browser storage, or cookies. Assessment responses are marked `Cache-Control: no-store`; PDFs are returned with the assessment and downloaded directly from the page. Results are self-reported, not official military clearance or a medical evaluation.
 
 ## Employer attendance certificate
 
@@ -138,7 +211,7 @@ The browser timer reconciles against an absolute deadline, including after switc
 
 ## Admin design preview
 
-Open `/admin` for the cockpit-inspired administration prototype. It has a dedicated responsive command rail, graphite panels, sage readouts, amber attention signals, sample training telemetry, a readiness gauge, and a student roster. The student dashboard and IST keep their existing layout. Every admin view, dialog, accessibility label, and page metadata is available in English and Spanish through the shared language selector.
+Open `/admin` and sign in with an admin account for the cockpit-inspired administration prototype. It has a dedicated responsive command rail, graphite panels, sage readouts, amber attention signals, sample training telemetry, a readiness gauge, and a student roster. The student dashboard and IST keep their existing layout. Every admin view, dialog, accessibility label, and page metadata is available in English and Spanish through the shared language selector.
 
 The six sections demonstrate:
 
@@ -149,11 +222,11 @@ The six sections demonstrate:
 - **Grade reports:** local CSV filename/size staging (up to 5 MB), a downloadable illustrative CSV, and sample report history. File contents are not parsed, transmitted, or applied to students.
 - **Events:** explicitly labeled schedule and assignment placeholders; no real events, notifications, or attendance records.
 
-All demo changes are held only in component memory and reset on reload or leaving the admin route. Preview URLs use the reserved `.invalid` domain and are intentionally not clickable checkout/enrollment links. There are no new dependencies, API calls, database writes, billing integrations, or browser-storage records. The existing language preference cookie is unchanged.
+All demo changes are held only in component memory and reset on reload or leaving the admin route. Preview URLs use the reserved `.invalid` domain and are intentionally not clickable checkout/enrollment links. These demo operations make no API calls, database writes, billing integrations, or browser-storage records. Authentication uses real Better Auth API calls/database sessions; the existing language preference cookie is unchanged.
 
 `src/lib/admin/demo.ts` holds fictional fixtures and pure presentation helpers; these types and the CSV columns are **not contracts for the database schema**. `AdminOverview.svelte`, `AdminStudents.svelte`, and `AdminOperations.svelte` separate the overview, roster controls, and future operational workflows. The `/admin` route owns the shared in-memory roster, while `admin.css` scopes the cockpit visual system to `.admin-console`.
 
-**This is a public design prototype, not an authenticated admin area.** It carries `noindex, nofollow` metadata, but that is not an access-control boundary. Before connecting real student or financial data, add server-enforced admin authentication/authorization, protected reads/actions, validated import workflows, payment-provider integration, and audit logging. Do not replace the fictional fixtures with real data without those protections.
+**The page is now guarded by verified admin identity; its operations remain a design prototype.** `noindex, nofollow` metadata is not the access-control boundary—the server page load is. Before connecting real student or financial data, enforce admin authorization on each read/action/API, and add validated import workflows, payment-provider integration, and audit logging. Do not replace fictional fixtures with real data based only on a page guard.
 
 ## Brand styling
 
@@ -174,6 +247,7 @@ The root layout provides language context per component tree, not through a shar
 ```sh
 bun run test
 bun run check
+bun run db:check
 bun run build
 ```
 

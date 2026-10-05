@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { RequestEvent } from '@sveltejs/kit';
 import type { ResolveOptions } from '@sveltejs/kit/hooks';
-import { handle } from '../src/hooks.server';
+import { handleLanguage as handle } from '../src/lib/server/language';
 import { load } from '../src/routes/+layout.server';
 import { formatMessage, languageCookie, languages, resolveLanguage, translations } from '../src/lib/i18n/translations';
 import { exerciseKeys } from '../src/lib/ist/types';
@@ -27,7 +27,10 @@ function renderRequest(cookie?: string) {
 				return cookie;
 			}
 		},
-		locals: {}
+		locals: { user: null, session: null },
+		setHeaders(headers: Record<string, string>) {
+			expect(headers).toEqual({ 'cache-control': 'private, no-store' });
+		}
 	} as RequestEvent;
 
 	const response = handle({
@@ -130,7 +133,7 @@ describe('language preference', () => {
 		const { event, response } = renderRequest('es');
 		expect(event.locals.language).toBe('es');
 		expect(await (await response).text()).toContain('<html lang="es">');
-		expect(await load(event as Parameters<typeof load>[0])).toEqual({ language: 'es' });
+		expect(await load(event as Parameters<typeof load>[0])).toEqual({ language: 'es', viewer: null });
 	});
 
 	test('renders English for first visits and invalid cookies', async () => {

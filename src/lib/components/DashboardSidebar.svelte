@@ -60,6 +60,14 @@
 				{language.messages.navigation.frequency}
 			</a>
 		</div>
+		{#if page.data.viewer?.role === 'admin'}
+			<a class="dashboard-link admin-link" href={resolve('/admin')}>
+				<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+					<path d="M9 5 2 12l7 7M2 12h20" />
+				</svg>
+				{language.messages.auth.backToAdmin}
+			</a>
+		{/if}
 	</nav>
 </aside>
 
@@ -97,6 +105,12 @@
 
 	.features {
 		margin-top: 2rem;
+	}
+
+	.admin-link {
+		margin-top: 1.5rem;
+		border: 1px solid var(--color-border);
+		color: var(--color-accent);
 	}
 
 	h2 {

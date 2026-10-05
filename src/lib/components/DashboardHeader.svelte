@@ -1,13 +1,16 @@
 <script lang="ts">
 	import { asset, resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import { useLanguage } from '#lib/i18n/language.svelte.ts';
 	import LanguageSelector from './LanguageSelector.svelte';
+	import SignOutButton from './SignOutButton.svelte';
 
 	const language = useLanguage();
+	const viewer = $derived(page.data.viewer);
 </script>
 
 <header class="dashboard-header" lang={language.current}>
-	<a class="brand" href={resolve('/')}>
+	<a class="brand" href={resolve('/')} aria-label={language.messages.auth.studentWorkspace}>
 		<img class="brand-logo" src={asset('logo.png')} alt="" width="56" height="56" />
 		<span class="brand-text">
 			<span class="brand-name">{language.messages.header.brand}</span>
@@ -17,18 +20,23 @@
 
 	<div class="header-controls">
 		<LanguageSelector />
-		<div class="student" role="group" aria-label={language.messages.header.studentLabel}>
-			<div class="student-details">
-				<span class="student-name">{language.messages.header.studentName}</span>
-				<span class="student-description">{language.messages.header.studentDescription}</span>
+		{#if viewer}
+			<div class="student" role="group" aria-label={language.messages.auth.accountLabel}>
+				<div class="student-details">
+					<span class="student-name">{viewer.name}</span>
+					<span class="student-description">{viewer.email}</span>
+				</div>
+				<span class="avatar-placeholder" aria-hidden="true">
+					<svg viewBox="0 0 24 24" fill="none">
+						<circle cx="12" cy="8" r="3" />
+						<path d="M5 20v-2a7 7 0 0 1 14 0v2" />
+					</svg>
+				</span>
 			</div>
-			<span class="avatar-placeholder" aria-hidden="true">
-				<svg viewBox="0 0 24 24" fill="none">
-					<circle cx="12" cy="8" r="3" />
-					<path d="M5 20v-2a7 7 0 0 1 14 0v2" />
-				</svg>
-			</span>
-		</div>
+			<SignOutButton />
+		{:else}
+			<a class="sign-in-link" href={resolve('/login')}>{language.messages.auth.student.title}</a>
+		{/if}
 	</div>
 </header>
 
@@ -54,6 +62,24 @@
 		min-width: 0;
 		max-width: 100%;
 		margin-left: auto;
+	}
+
+	.sign-in-link {
+		display: inline-flex;
+		align-items: center;
+		min-height: 2.75rem;
+		padding: 0.6rem 0.85rem;
+		border: 1px solid var(--color-border);
+		border-radius: 0.5rem;
+		color: var(--color-accent);
+		font-size: 0.8125rem;
+		font-weight: 700;
+		text-decoration: none;
+	}
+
+	.sign-in-link:hover {
+		border-color: var(--color-accent);
+		background: var(--color-accent-soft);
 	}
 
 	.student {

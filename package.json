@@ -14,7 +14,14 @@
 		"db:up": "docker compose up -d --wait --wait-timeout 90 postgres",
 		"db:down": "docker compose down",
 		"db:status": "docker compose ps",
-		"db:shell": "docker compose exec postgres psql -U sveltewebsite -d sveltewebsite"
+		"db:shell": "docker compose exec postgres psql -U sveltewebsite -d sveltewebsite",
+		"db:generate": "drizzle-kit generate",
+		"db:migrate": "bun scripts/db/migrate.ts",
+		"db:seed": "bun scripts/db/seed.ts",
+		"db:check": "svelte-kit sync && tsc --project tsconfig.database.json",
+		"db:test:up": "docker compose -f compose.test.yaml up -d --wait --wait-timeout 90 postgres",
+		"db:test:down": "docker compose -f compose.test.yaml down",
+		"db:test": "TEST_DATABASE_URL=postgresql://sveltewebsite_test:sveltewebsite_test@127.0.0.1:5434/sveltewebsite_test bun test --timeout 15000 tests/database.test.ts tests/database-safety.test.ts tests/database-games.test.ts tests/database-auth.test.ts tests/database-auth-hook.test.ts"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-auto": "^8.0.0",
@@ -22,6 +29,7 @@
 		"@sveltejs/vite-plugin-svelte": "^7.2.0",
 		"@types/bun": "^1.4.2",
 		"@types/pdfkit": "^0.17.6",
+		"drizzle-kit": "^0.31.11",
 		"svelte": "^5.56.7",
 		"svelte-check": "^4.6.0",
 		"typescript": "^6.0.3",
@@ -32,6 +40,10 @@
 		"#lib/*": "./src/lib/*"
 	},
 	"dependencies": {
-		"pdfkit": "^0.20.2"
+		"@better-auth/drizzle-adapter": "1.7.7",
+		"better-auth": "1.7.7",
+		"drizzle-orm": "^0.45.3",
+		"pdfkit": "^0.20.2",
+		"postgres": "^3.4.9"
 	}
 }
