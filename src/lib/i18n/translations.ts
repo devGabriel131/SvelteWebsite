@@ -208,8 +208,131 @@ const spanishAdmin: typeof englishAdmin = {
 	}
 };
 
+const englishAttendance = {
+	pageTitle: 'Attendance certificate | Masterminds ASVAB',
+	description: 'Generate a bilingual employer letter with your Masterminds ASVAB program start date and weekly class schedule.',
+	eyebrow: 'Employer documents',
+	title: 'Attendance certificate',
+	introduction: 'Create a letter for your employer explaining your participation in the ASVAB preparation program and requesting flexibility for your weekly classes.',
+	cardDescription: 'Prepare an employer letter with your program details and class schedule, then download it in English or Spanish.',
+	open: 'Create your attendance certificate',
+	privacyNote: 'No Social Security number or email is needed. Your entries are used to generate the PDFs and are not saved or emailed.',
+	studentDetails: 'Student details',
+	studentDetailsHint: 'Enter your full name as it should appear in the letter.',
+	programDetails: 'Program and schedule',
+	programDetailsHint: 'The letter uses the weekly schedule for your selected cohort.',
+	employerDetails: 'Employer details',
+	employerDetailsHint: 'Address the letter to the person who manages your work schedule.',
+	fields: {
+		studentName: 'Student name', studentSex: 'Sex', programStartDate: 'Program start date',
+		cohort: 'Cohort', employerName: 'Employer contact name', employerPosition: 'Employer contact position',
+		employerWorkplace: 'Workplace'
+	},
+	sexOptions: { male: 'Male', female: 'Female' },
+	cohortOptions: { basic: 'Basic', regular: 'Regular' },
+	choose: 'Choose an option',
+	hints: {
+		studentSex: 'Determines the grammatical wording in the Spanish letter (aceptado/aceptada).',
+		programStartDate: 'The date you started the preparation program.',
+		employerPosition: 'For example, supervisor, manager, owner, or human resources.'
+	},
+	scheduleLabel: 'Weekly class schedule',
+	schedules: {
+		basic: 'on Mondays and Fridays from 8:00 p.m. to 10:00 p.m., and on Wednesdays from 10:00 a.m. to 12:00 p.m.',
+		regular: 'on Mondays, Tuesdays, Thursdays, and Fridays from 8:00 p.m. to 10:00 p.m.'
+	},
+	submit: 'Generate certificate', submitting: 'Generating PDFs…',
+	errorSummary: 'Please correct the highlighted fields before generating your certificate.',
+	errors: {
+		required: 'This field is required.', text: 'Enter text on a single line with no hidden control characters.',
+		length: 'This entry is too long. Please shorten it.',
+		characters: 'This entry contains characters not supported by the English/Spanish PDF fonts. Please contact the program if your name needs these characters.',
+		sex: 'Choose male or female for the Spanish wording.',
+		date: 'Enter a valid calendar date.', cohort: 'Choose the Basic or Regular cohort.'
+	},
+	serverError: 'We could not generate your certificate. Your entries have been kept; please try again.',
+	resultsTitle: 'Your certificate is ready',
+	ready: 'Download either language and share the PDF with your employer.',
+	previewTitle: 'Letter preview',
+	snapshotNote: 'This letter reflects the submitted details. Generate it again after changing any entries. Changing the website language does not change its issue date.',
+	downloadEnglish: 'Download English PDF', downloadSpanish: 'Download Spanish PDF',
+	document: {
+		title: 'Attendance Certificate', page: 'Page',
+		openingMale: 'We hereby certify that Ms. Claudy Menéndez, on behalf of Masterminds Programa ASVAB, confirms that {studentName} has been accepted into our comprehensive preparation program with the goal of joining the United States Armed Forces.',
+		openingFemale: 'We hereby certify that Ms. Claudy Menéndez, on behalf of Masterminds Programa ASVAB, confirms that {studentName} has been accepted into our comprehensive preparation program with the goal of joining the United States Armed Forces.',
+		participation: 'Since {startDate}, {shortName} has been part of our program. The student will attend classes {schedule} as part of their preparation.',
+		accommodation: 'We kindly ask you to consider the commitment made by {shortName} and, whenever possible, adjust their work availability. This will allow the student to fulfill both their current workplace responsibilities and the personal and professional goals they have set in this important process.',
+		gratitude: 'We thank you in advance for your understanding and support in this shared effort to foster the personal and professional development of {shortName}.',
+		issuance: 'For the relevant purposes, this certificate is issued in {city}, Puerto Rico, today, {issueDate}. For any questions, please contact us at {phone}.',
+		signatory: 'Claudy Menéndez, Representative', role: 'Masterminds Repaso ASVAB',
+		phone: '(939) 408-0440', email: 'mastermindsprogramaasvab@gmail.com', city: 'San Juan'
+	}
+};
+
+const spanishAttendance: typeof englishAttendance = {
+	pageTitle: 'Certificado de asistencia | Masterminds ASVAB',
+	description: 'Genera una carta bilingüe para tu patrono con tu fecha de inicio en Masterminds Programa ASVAB y tu horario de clases semanales.',
+	eyebrow: 'Documentos para tu patrono',
+	title: 'Certificado de asistencia',
+	introduction: 'Prepara una carta para tu patrono que explique tu participación en el programa de preparación ASVAB y solicite flexibilidad para asistir a tus clases semanales.',
+	cardDescription: 'Prepara una carta para tu patrono con tus datos del programa y horario de clases, y descárgala en inglés o español.',
+	open: 'Crear tu certificado de asistencia',
+	privacyNote: 'No necesitas Seguro Social ni correo electrónico. Tus datos se usan para generar los PDF; no se guardan ni se envían por correo.',
+	studentDetails: 'Datos del estudiante',
+	studentDetailsHint: 'Escribe tu nombre completo como debe aparecer en la carta.',
+	programDetails: 'Programa y horario',
+	programDetailsHint: 'La carta incluye el horario semanal de la cohorte que selecciones.',
+	employerDetails: 'Datos del patrono',
+	employerDetailsHint: 'Dirige la carta a la persona que coordina tu horario de trabajo.',
+	fields: {
+		studentName: 'Nombre del estudiante', studentSex: 'Sexo', programStartDate: 'Fecha de inicio en el programa',
+		cohort: 'Cohorte', employerName: 'Nombre del patrono', employerPosition: 'Puesto del patrono',
+		employerWorkplace: 'Lugar de empleo'
+	},
+	sexOptions: { male: 'Masculino', female: 'Femenino' },
+	cohortOptions: { basic: 'Básico', regular: 'Regular' },
+	choose: 'Selecciona una opción',
+	hints: {
+		studentSex: 'Se usa únicamente para la concordancia de aceptado/aceptada en la carta en español.',
+		programStartDate: 'La fecha en que comenzaste el programa de preparación.',
+		employerPosition: 'Por ejemplo, supervisor, gerente, dueño o recursos humanos.'
+	},
+	scheduleLabel: 'Horario de clases semanales',
+	schedules: {
+		basic: 'los lunes y viernes en horario de 8:00 p.m. a 10:00 p.m., y los miércoles en horario de 10:00 a.m. a 12:00 p.m.',
+		regular: 'los lunes, martes, jueves y viernes en horario de 8:00 p.m. a 10:00 p.m.'
+	},
+	submit: 'Generar certificado', submitting: 'Generando los PDF…',
+	errorSummary: 'Corrige los campos resaltados antes de generar tu certificado.',
+	errors: {
+		required: 'Este campo es obligatorio.', text: 'Escribe el texto en una sola línea y sin caracteres de control ocultos.',
+		length: 'Este texto es demasiado largo. Por favor, acórtalo.',
+		characters: 'Este texto contiene caracteres que las fuentes del PDF en inglés y español no admiten. Comunícate con el programa si tu nombre necesita estos caracteres.',
+		sex: 'Selecciona masculino o femenino para la concordancia de la carta.',
+		date: 'Escribe una fecha válida del calendario.', cohort: 'Selecciona la cohorte Básico o Regular.'
+	},
+	serverError: 'No pudimos generar tu certificado. Conservamos tus datos; vuelve a intentarlo.',
+	resultsTitle: 'Tu certificado está listo',
+	ready: 'Descarga cualquiera de los dos idiomas y comparte el PDF con tu patrono.',
+	previewTitle: 'Vista previa de la carta',
+	snapshotNote: 'Esta carta refleja los datos enviados. Genérala de nuevo si cambias algún dato. Cambiar el idioma del sitio no cambia la fecha de emisión.',
+	downloadEnglish: 'Descargar PDF en inglés', downloadSpanish: 'Descargar PDF en español',
+	document: {
+		title: 'Certificado de Asistencia', page: 'Página',
+		openingMale: 'Por medio de la presente, certificamos que la Sra. Claudy Menéndez, en representación de Masterminds Programa ASVAB, confirma que {studentName} ha sido aceptado en nuestro programa integral de preparación con el objetivo de ingresar a las Fuerzas Armadas de los Estados Unidos.',
+		openingFemale: 'Por medio de la presente, certificamos que la Sra. Claudy Menéndez, en representación de Masterminds Programa ASVAB, confirma que {studentName} ha sido aceptada en nuestro programa integral de preparación con el objetivo de ingresar a las Fuerzas Armadas de los Estados Unidos.',
+		participation: 'Desde el {startDate}, {shortName} ha sido parte de nuestro programa. Estará asistiendo a los cursos de {schedule} como parte de su proceso de preparación.',
+		accommodation: 'Le solicitamos amablemente tomar en cuenta el compromiso adquirido por {shortName} para ajustar, en la medida de lo posible, su disponibilidad laboral. Esto permitirá que cumpla tanto con sus responsabilidades actuales en su lugar de trabajo como con las metas personales y profesionales que se ha trazado en este importante proceso.',
+		gratitude: 'Agradecemos de antemano su comprensión y apoyo en este esfuerzo conjunto por fomentar el desarrollo integral y profesional de {shortName}.',
+		issuance: 'Para los fines pertinentes, esta certificación se expide en {city}, Puerto Rico, hoy, {issueDate}. Para cualquier consulta, puede comunicarse al {phone}.',
+		signatory: 'Claudy Menéndez, Representante', role: 'Masterminds Repaso ASVAB',
+		phone: '(939) 408-0440', email: 'mastermindsprogramaasvab@gmail.com', city: 'San Juan'
+	}
+};
+
 const english = {
 	admin: englishAdmin,
+	attendance: englishAttendance,
 	accessibility: {
 		skipToContent: 'Skip to content'
 	},
@@ -288,6 +411,7 @@ const english = {
 		features: 'Features',
 		featuresDescription: 'Your student tools.',
 		ist: 'IST · Physical readiness',
+				attendance: 'Attendance certificate',
 		speedMath: 'Speed Math',
 				frequency: 'English frequency deck'
 	},
@@ -426,6 +550,7 @@ export type Messages = typeof english;
 
 const spanish: Messages = {
 	admin: spanishAdmin,
+	attendance: spanishAttendance,
 	accessibility: {
 		skipToContent: 'Saltar al contenido'
 	},
@@ -504,6 +629,7 @@ const spanish: Messages = {
 		features: 'Funciones',
 		featuresDescription: 'Tus herramientas de estudiante.',
 		ist: 'IST · Preparación física',
+				attendance: 'Certificado de asistencia',
 		speedMath: 'Matemáticas rápidas',
 				frequency: 'Tarjetas de inglés frecuente'
 	},

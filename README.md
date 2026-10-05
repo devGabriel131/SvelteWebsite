@@ -65,7 +65,8 @@ src/
   hooks.server.ts       Request-scoped language and HTML document language
   lib/                  Shared code and assets, imported through #lib
     assets/             Assets processed by Vite
-    components/         Shared dashboard shell and IST form/report components
+    components/         Shared dashboard shell, form fields, and IST report components
+    attendance/         Employer-letter types, shared validation, and bilingual presentation
     frequency/          Bundled word list, fuzzy Spanish search, and practice-round logic
     i18n/               English/Spanish translations and reactive language context
     ist/                IST types, shared input validation, pure assessment, and presentation
@@ -75,9 +76,10 @@ src/
   routes/
     +layout.server.ts   Saved language preference for the shared layout
     +layout.svelte      Language context and route-specific student/admin shells
-    +page.svelte        Dashboard home with IST and Speed Math entry points
+    +page.svelte        Dashboard home with IST, attendance, and Speed Math entry points
     frequency/          English-first frequency flashcard page
     ist/                IST page and server form action
+    attendance/         Attendance certificate page and server PDF form action
     admin/              Admin command-center design preview
     speed-math/         Timed arithmetic practice page
 static/                 Files served without processing
@@ -86,7 +88,7 @@ vite.config.ts          Vite, SvelteKit, and deployment adapter configuration
 tsconfig.json           Strict TypeScript configuration
 ```
 
-The dashboard shell has a full-width header, a left sidebar, and a main content area that renders the active route. Navigation stacks above the content on narrow screens. The header pairs the Masterminds logo with its wordmark in one home link. `static/logo.png` has a transparent outer background and was converted from the preserved original `static/logo.jpg`. Student information in the header remains a placeholder; authentication is not implemented. The IST and Speed Math features are accessible from the sidebar and dashboard home.
+The dashboard shell has a full-width header, a left sidebar, and a main content area that renders the active route. Navigation stacks above the content on narrow screens. The header pairs the Masterminds logo with its wordmark in one home link. `static/logo.png` has a transparent outer background and was converted from the preserved original `static/logo.jpg`. Student information in the header remains a placeholder; authentication is not implemented. The IST, attendance certificate, and Speed Math features are accessible from the sidebar and dashboard home.
 
 SvelteKit supports server-side TypeScript in route files such as `+page.server.ts` (page data and form actions) and `+server.ts` (HTTP endpoints). Add these as features need them; a separate backend is not required.
 
@@ -99,6 +101,18 @@ The shared validator runs in the browser and server. It preserves decimal measur
 A successful server submission evaluates the inputs once and creates English and Spanish PDFKit reports from that same result. The on-screen report and downloads share the presentation model. Grades use text as well as color. PDFs feature the Masterminds logo from `static/logo.png`, grouped student details, an upfront readiness summary, and five result cards with textual grade badges, outcomes, and applicable thresholds. Typical reports fit on one Letter page; extended content wraps and paginates with repeated branding and result-column headers. Built-in Helvetica fonts support precomposed Spanish accents. Vite embeds the logo in the server bundle, so generation needs no network requests or deployment-specific filesystem paths. The page works with standard server form submissions when JavaScript is unavailable: exercise choices submit a form update that preserves other entries and clears the exercise’s previous values when inability is chosen, without generating an assessment. Result fields stay disabled until a recorded result is selected. Enhanced submissions add immediate validation and focus handling.
 
 Names are entered manually until authentication is added. Fitness results are not stored in a database, browser storage, or cookies. Assessment responses are marked `Cache-Control: no-store`; PDFs are returned with the assessment and downloaded directly from the page. Results are self-reported, not official military clearance or a medical evaluation.
+
+## Employer attendance certificate
+
+Open `/attendance` from the Features sidebar or dashboard to generate an employer letter. The form asks for the student's full name, sex (only for Spanish grammatical agreement), program start date, Basic/Regular cohort, and the employer contact's name, position, and workplace. **No Social Security number or student email is collected or printed.** Employer positions are free text, so there is no separate “Other” workflow.
+
+This ports the document rules from the legacy Go `internal/cartaasistencia` implementation: Basic classes are Mondays/Fridays 8–10 p.m. and Wednesdays 10 a.m.–noon; Regular classes are Mondays/Tuesdays/Thursdays/Fridays 8–10 p.m. The Spanish wording, `aceptado`/`aceptada` agreement, title-cased names, first-two-token repeated names, San Juan issuer, UTC issue dates, and Claudy Menéndez's signature and contact details are preserved. Both interface and letter text live in the shared English/Spanish translations. Program dates are calendar dates with no timezone shift.
+
+Shared browser/server validation requires all seven fields, rejects invalid calendar dates, duplicate form entries, uploaded files, hidden control characters, and overlong text, and normalizes accents and whitespace. The built-in PDF fonts support Spanish accents and WinAnsi punctuation, not every writing system; unsupported characters receive a localized validation error rather than generating a corrupted name. It does not introduce a restriction on future program start dates that the legacy validator did not have. Each server submission creates English and Spanish PDFKit letters from one validated snapshot. The page offers both downloads and a localized text preview; changing the language never reissues a letter. Typical letters fit on one Letter page; longer entries wrap or paginate with repeated branding and an intact signature block. The logo and original signature PNG are embedded in the server build; the signature source is under `src/lib/server/assets`, not publicly served from `static`.
+
+This feature uses the IST-style direct-download flow, not the legacy certificate worker, Gmail delivery, Drive archiving, Postgres persistence, or email-based monthly quota. It needs no service secrets or new dependencies. Entries and generated PDFs are not stored in a database, browser storage, or cookies, and action responses are marked `Cache-Control: no-store`. Standard POST submissions work without JavaScript; enhanced submissions add validation, progress state, and focus handling. The legacy Go files are unchanged.
+
+Student details are still manually entered and not verified against enrollment records. Authentication and issuer authorization are not implemented in this website; protect the signed-letter route and verify enrollment before making this generator publicly available as an authoritative issuance service.
 
 ## English frequency deck
 

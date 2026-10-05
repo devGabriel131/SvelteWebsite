@@ -31,6 +31,13 @@
 				</svg>
 				{language.messages.navigation.ist}
 			</a>
+			<a class="dashboard-link" href={resolve('/attendance')}
+				aria-current={page.url.pathname === resolve('/attendance') ? 'page' : undefined}>
+				<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+					<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Zm0 0v6h6M8 13h8m-8 4h5" />
+				</svg>
+				{language.messages.navigation.attendance}
+			</a>
 			<a
 				class="dashboard-link"
 				href={resolve('/speed-math')}
