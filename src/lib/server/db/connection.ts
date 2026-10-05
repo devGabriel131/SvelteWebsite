@@ -2,9 +2,10 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as studentSchema from './schema';
 import * as gameSchema from './game-schema';
+import * as authSchema from './auth-schema';
 import * as views from './views';
 
-const schema = { ...studentSchema, ...gameSchema, ...views };
+const schema = { ...studentSchema, ...gameSchema, ...authSchema, ...views };
 
 export function requireDatabaseUrl(value: string | undefined): string {
 	if (!value?.trim()) throw new Error('Set the server-only DATABASE_URL before using the database.');

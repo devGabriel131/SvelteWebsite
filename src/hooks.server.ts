@@ -1,10 +1,7 @@
-import type { Handle } from '@sveltejs/kit/hooks';
-import { languageCookie, resolveLanguage } from '#lib/i18n/translations.ts';
+import { building } from '$app/env';
+import { sequence } from '@sveltejs/kit/hooks';
+import { handleLanguage } from '#lib/server/language.ts';
+import { getAuth } from '#lib/server/auth/index.ts';
+import { createAuthHandle } from '#lib/server/auth/handle.ts';
 
-export const handle: Handle = async ({ event, resolve }) => {
-	event.locals.language = resolveLanguage(event.cookies.get(languageCookie));
-
-	return resolve(event, {
-		transformPageChunk: ({ html }) => html.replace('%language%', event.locals.language)
-	});
-};
+export const handle = sequence(handleLanguage, createAuthHandle(getAuth, building));

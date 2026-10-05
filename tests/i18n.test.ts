@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { RequestEvent } from '@sveltejs/kit';
 import type { ResolveOptions } from '@sveltejs/kit/hooks';
-import { handle } from '../src/hooks.server';
+import { handleLanguage as handle } from '../src/lib/server/language';
 import { load } from '../src/routes/+layout.server';
 import { formatMessage, languageCookie, languages, resolveLanguage, translations } from '../src/lib/i18n/translations';
 import { exerciseKeys } from '../src/lib/ist/types';

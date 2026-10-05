@@ -1,6 +1,6 @@
 # Database schema proposal
 
-**Status: roster and game-history migrations implemented; authentication and feature integration are pending.** Drizzle tooling, versioned PostgreSQL migrations, a guarded fictitious local seed, and isolated database tests now cover student profiles, game attempts, typed Speed Math results, versioned vocabulary membership, response history, and derived progress/rankings. No dashboard route persists game data yet. Authentication, invitations, and server-controlled game submission/grading remain separate work; the remaining proposals below do not imply approval of those integrations.
+**Status: roster, game-history, and initial Better Auth migrations implemented; student-auth linkage and feature integration are pending.** Drizzle tooling, versioned PostgreSQL migrations, a guarded fictitious local seed, and isolated database tests cover student profiles, game attempts, typed Speed Math results, versioned vocabulary membership, response history, derived progress/rankings, and separate auth records. No dashboard route persists game data yet. Invitations, profile linkage/onboarding, authorization, and server-controlled game submission/grading remain separate work; the remaining proposals below do not imply approval of those integrations.
 
 ## Implemented first migration scope
 
@@ -45,6 +45,12 @@ Derived contracts:
 
 See [README game storage](../README.md#game-history-and-vocabulary-progress) for the command workflow and boundaries.
 
+## Implemented initial authentication scope
+
+`src/lib/server/db/auth-schema.ts` and `drizzle/0004_better_auth.sql` add Better Auth's separate `auth_user`, `auth_session`, `auth_account`, `auth_verification`, and `auth_rate_limit` tables. Auth IDs are text. Credential hashes live only in `auth_account.password`, owned by Better Auth's default hashing/verification. PINs are exactly four ASCII digits represented as strings, preserving leading zeros. Public signup is disabled, and rate limits are stored in PostgreSQL.
+
+The SvelteKit hook mounts the official Better Auth handler and validates real sessions into server-only locals. This adds no `students.auth_user_id`, profile/active-state guard, invitation flow, admin authorization, or authenticated game endpoint. The existing pages remain public previews and the local roster seed still creates no credentials. See [authentication setup](authentication.md) for configuration, current API boundaries, tests, and the security limitations of four-digit PINs.
+
 ## Agreed requirements and direction
 
 - Student information includes first name, last name, email, date of birth, gender, class type, and active/inactive state.
@@ -58,11 +64,11 @@ See [README game storage](../README.md#game-history-and-vocabulary-progress) for
 - Newly created roster students are active by default (`is_active = true`), but still need invitation-based registration before dashboard access.
 - Deactivation blocks all student dashboard access, including access through existing sessions. It preserves the profile and learning history; reactivation restores access to those same records.
 - Normal student sign-in uses email + PIN. Better Auth owns credential hashing and verification; the PIN must never be stored in plaintext.
-- Better Auth will be implemented separately. Our schema links to its user identity, without `pin`/`pin_hash` profile fields, a parallel PIN credential table, or a `pgcrypto` dependency for credentials.
+- Better Auth's initial service and tables are implemented separately from the roster. Future profile linkage will reference its text user identity, without `pin`/`pin_hash` profile fields, a parallel PIN credential table, or a `pgcrypto` dependency for credentials.
 - Retain game attempts so personal bests and improvement can be calculated. Speed Math needs separate leaderboards for each operation and each 5-, 10-, or 15-minute duration. Each student appears once per category with their best full-duration result, ranked by most correct answers, then fewest incorrect answers; equal results share a rank. Vocabulary also needs lasting item-level progress, with completeness tracking a top priority.
 - Vocabulary uses adaptive 25-answer-attempt rounds, including repeats when needed, rather than fixed decks. Correctly answered words wait until the rest of the pool catches up in correct-answer count.
 - Use standard PostgreSQL, versioned migrations, and a server-only `DATABASE_URL` for both local development and eventual Railway hosting.
-- Initial database development and testing use fictitious students, not real roster data. Schema and game-persistence tests do not need to wait for Better Auth; real authentication and invitation flows still require later integration testing.
+- Initial database development and testing use fictitious students, not real roster data. Schema and game-persistence tests do not need to wait for Better Auth; real authentication now has isolated integration tests; invitation flows still require later implementation and testing.
 - Keep the normal localhost development workflow unaffected by database experiments. Use an isolated test setup; do not automatically introduce a database requirement or mock student identity into ordinary development.
 
 Database query/migration tooling is Drizzle ORM with postgres.js and Drizzle Kit. Roster and typed game-history migrations are implemented; auth-linkage and invitation storage are still pending.

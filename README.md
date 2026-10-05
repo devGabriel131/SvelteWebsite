@@ -19,7 +19,7 @@ bun run dev --open
 
 ## Local PostgreSQL
 
-`compose.yaml` runs a PostgreSQL 18 database for local development. Docker Desktop must be running. Drizzle provides student-roster and game-history schemas, derived progress/ranking views, and versioned migrations, but the dashboard is not connected to them yet. Ordinary `bun run dev`, checks, builds, and non-database tests still work without PostgreSQL or `DATABASE_URL`. The [database schema document](docs/database-schema.md) distinguishes this implemented foundation from pending authentication and game-persistence work.
+`compose.yaml` runs a PostgreSQL 18 database for local development. Docker Desktop must be running. Drizzle provides student-roster and game-history schemas, derived progress/ranking views, and versioned migrations, but the dashboard is not connected to them yet. Ordinary `bun run dev`, checks, builds, and non-database tests still work without PostgreSQL or `DATABASE_URL`. The [database schema document](docs/database-schema.md) distinguishes this implemented foundation from pending profile linkage and game-persistence work. The initial [Better Auth integration](docs/authentication.md) adds email + four-digit PIN authentication, without changing the public dashboard preview or creating student login accounts.
 
 If you do not already have a `.env` file, copy `.env.example` to `.env`. Generate a unique local password, for example:
 
@@ -71,7 +71,7 @@ bun run db:seed
 
 The seed uses fixed UUIDs and reserved `@example.test` addresses, contains no auth accounts/PINs, and never overwrites existing records. It is not a login bypass. It refuses production/Railway environments, remote hosts, connection-option overrides, and unknown database/user/port combinations; it also verifies the actual connected database and user. Only this development target and the dedicated test target below are allowed. A non-fixture record using a fixture email causes the atomic insert to fail rather than modifying that record. Do not point these local ports at remote databases through tunnels.
 
-For future schema changes, edit the relevant definition in `src/lib/server/db/schema.ts` (students), `game-schema.ts` (game/catalog tables), or `views.ts` (derived progress/rankings), then generate and inspect an additional migration:
+For future schema changes, edit the relevant definition in `src/lib/server/db/schema.ts` (students), `auth-schema.ts` (Better Auth), `game-schema.ts` (game/catalog tables), or `views.ts` (derived progress/rankings), then generate and inspect an additional migration:
 
 ```sh
 bun run db:generate --name=describe_the_change
@@ -107,21 +107,27 @@ bun run db:test:down
 
 This starts a separate Compose project with PostgreSQL 18 at `127.0.0.1:5434`, database/user `sveltewebsite_test`, and public test-only password `sveltewebsite_test`. Its data is held in a disposable tmpfs mount, not the development volume. Stopping/removing this test container discards its data. No `.env` changes are needed, and `compose.yaml` remains unchanged.
 
-`db:test` explicitly selects that test URL and fails if the database is unavailable. It verifies migrations and reruns, roster/game constraints, catalog membership, retry uniqueness, repeated/partial rounds, completeness/pass boundaries, verified rankings and shared ranks, history retention through deactivation, connection guards, and seed idempotency. Row-level checks run in rolled-back transactions; seed tests remove only fixtures they inserted. The ordinary `bun run test` runs database safety/fixture unit tests but skips PostgreSQL integration tests unless `TEST_DATABASE_URL` is explicitly set. An integration URL must match the dedicated test target; the persistent development database and remote targets are rejected before migrations.
+`db:test` explicitly selects that test URL and fails if the database is unavailable. It verifies migrations and reruns, roster/game constraints, catalog membership, retry uniqueness, repeated/partial rounds, completeness/pass boundaries, verified rankings and shared ranks, history retention through deactivation, connection guards, and seed idempotency. Row-level checks run in rolled-back transactions; seed tests remove only fixtures they inserted. The ordinary `bun run test` runs database safety/fixture unit tests but skips PostgreSQL integration tests unless `TEST_DATABASE_URL` is explicitly set. Auth integration tests additionally exercise real hashing, sign-in, cookies, logout/replay, Origin protection, server-session hooks, and persisted/concurrent rate limits. An integration URL must match the dedicated test target; the persistent development database and remote targets are rejected before migrations.
 
 ### Moving to Railway
 
-Docker Compose is only the local database runner; it is not required for the hosted application. Keep future application queries and versioned migrations compatible with standard PostgreSQL and read the connection from the server-only `DATABASE_URL`. On Railway, configure that variable from the PostgreSQL service's connection URL appropriate to the application's network, rather than copying the local `.env` or using `127.0.0.1`. Match the supported PostgreSQL major version and use the hosted service's TLS requirements; do not disable certificate verification globally. Authentication and a deployment-specific SvelteKit adapter are not configured by this step.
+Docker Compose is only the local database runner; it is not required for the hosted application. Keep future application queries and versioned migrations compatible with standard PostgreSQL and read the connection from the server-only `DATABASE_URL`. On Railway, configure that variable from the PostgreSQL service's connection URL appropriate to the application's network, rather than copying the local `.env` or using `127.0.0.1`. Match the supported PostgreSQL major version and use the hosted service's TLS requirements; do not disable certificate verification globally. The [auth setup](docs/authentication.md) also requires a private secret, explicit HTTPS origin, and authoritative client IPs. A deployment-specific SvelteKit adapter is not configured by this step.
+
+## Email + PIN authentication
+
+The initial open-source Better Auth service is integrated with the existing database through `drizzle/0004_better_auth.sql`. It accepts email plus exactly four ASCII digits as a string (including leading zeros), uses Better Auth's default salted hashing, disables public signup, and enables database-backed rate limiting. The SvelteKit hook validates sessions into server-only locals; the browser client uses the rate-limited HTTP handler.
+
+See [authentication setup and security boundaries](docs/authentication.md) for private environment variables, migration commands, client usage, SvelteKit 3 compatibility, and the limitations of four-digit PINs. No login UI, invitations, roster linkage, admin authorization, or game-persistence endpoints are implemented yet. Existing demo pages stay public, and the roster seed does not create credentials.
 
 ## Project structure
 
 ```text
 src/
   app.html              HTML document template
-  env.ts                Private runtime DATABASE_URL declaration (optional until used)
+  env.ts                Private runtime database/auth declarations (optional until used)
   app.d.ts              Application-wide type declarations
   app.css               Global styles and color tokens
-  hooks.server.ts       Request-scoped language and HTML document language
+  hooks.server.ts       Composed language, Better Auth handler, and server session hooks
   lib/                  Shared code and assets, imported through #lib
     assets/             Assets processed by Vite
     components/         Shared dashboard shell and IST form/report components
@@ -129,7 +135,8 @@ src/
     i18n/               English/Spanish translations and reactive language context
     ist/                IST types, shared input validation, pure assessment, and presentation
     admin/              Isolated admin design components, scoped styles, and fictional fixtures
-    server/             Server-only PDFKit reports and lazy typed database connection
+    auth-client.ts      Same-origin Better Auth browser client
+    server/             Server-only auth, PDFKit reports, and lazy typed database connection
     speed-math/         Pure question generation, session timing, scoring, and statistics
   routes/
     +layout.server.ts   Saved language preference for the shared layout
@@ -149,7 +156,7 @@ vite.config.ts          Vite, SvelteKit, and deployment adapter configuration
 tsconfig.json           Strict TypeScript configuration
 ```
 
-The dashboard shell has a full-width header, a left sidebar, and a main content area that renders the active route. Navigation stacks above the content on narrow screens. The header pairs the Masterminds logo with its wordmark in one home link. `static/logo.png` has a transparent outer background and was converted from the preserved original `static/logo.jpg`. Student information in the header remains a placeholder; authentication is not implemented. The IST and Speed Math features are accessible from the sidebar and dashboard home.
+The dashboard shell has a full-width header, a left sidebar, and a main content area that renders the active route. Navigation stacks above the content on narrow screens. The header pairs the Masterminds logo with its wordmark in one home link. `static/logo.png` has a transparent outer background and was converted from the preserved original `static/logo.jpg`. Student information in the header remains a design placeholder, not an authenticated identity; the auth service is not connected to the dashboard UI or roster yet. The IST and Speed Math features are accessible from the sidebar and dashboard home.
 
 SvelteKit supports server-side TypeScript in route files such as `+page.server.ts` (page data and form actions) and `+server.ts` (HTTP endpoints). Add these as features need them; a separate backend is not required.
 
