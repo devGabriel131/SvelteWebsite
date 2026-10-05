@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { titleAttendanceName } from '../src/lib/attendance/names';
 import {
+	attendanceClassTimes,
 	attendanceFields,
 	attendanceTextLimits,
 	type AttendanceErrors,
@@ -17,7 +18,7 @@ import {
 
 const textFields = ['studentName', 'employerName', 'employerPosition', 'employerWorkplace'] as const;
 const invalidCodes: Record<AttendanceField, AttendanceValidationCode> = {
-	studentName: 'text', studentSex: 'sex', programStartDate: 'date', cohort: 'cohort',
+	studentName: 'text', studentSex: 'sex', programStartDate: 'date', cohort: 'cohort', classTime: 'classTime',
 	employerName: 'text', employerPosition: 'text', employerWorkplace: 'text'
 };
 
@@ -27,6 +28,7 @@ function makeRaw(overrides: Partial<Record<AttendanceField, unknown>> = {}): Rec
 		studentSex: 'female',
 		programStartDate: '2026-04-15',
 		cohort: 'regular',
+		classTime: 'pm',
 		employerName: 'ROBERTO QUIÑONES',
 		employerPosition: 'Supervisor',
 		employerWorkplace: 'Walgreens, Plaza del Sol',
@@ -55,11 +57,15 @@ function toFormData(raw = makeRaw()): FormData {
 }
 
 describe('attendance validation contract', () => {
-	test('defines only the seven ordered fields and the shared UI text limits', () => {
+	test('defines only the eight ordered fields, class times, and shared UI text limits', () => {
 		expect(attendanceFields).toEqual([
-			'studentName', 'studentSex', 'programStartDate', 'cohort',
+			'studentName', 'studentSex', 'programStartDate', 'cohort', 'classTime',
 			'employerName', 'employerPosition', 'employerWorkplace'
 		]);
+		expect(attendanceClassTimes).toEqual({
+			am: { startTime: '10:00', endTime: '12:00' },
+			pm: { startTime: '20:00', endTime: '22:00' }
+		});
 		expect(attendanceTextLimits).toEqual({
 			studentName: 120, employerName: 120, employerPosition: 120, employerWorkplace: 160
 		});
@@ -68,7 +74,7 @@ describe('attendance validation contract', () => {
 	test('returns a fresh typed input with canonical case and only the contracted fields', () => {
 		const raw: AttendanceFormValues = {
 			studentName: 'MARÍA SOFÍA PAGÁN CRUZ', studentSex: 'female',
-			programStartDate: '2026-04-15', cohort: 'regular', employerName: 'ROBERTO QUIÑONES',
+			programStartDate: '2026-04-15', cohort: 'regular', classTime: 'pm', employerName: 'ROBERTO QUIÑONES',
 			employerPosition: 'Supervisor', employerWorkplace: 'Walgreens, Plaza del Sol'
 		};
 		const input = validated(raw);
@@ -80,9 +86,12 @@ describe('attendance validation contract', () => {
 
 	for (const studentSex of ['male', 'female'] as const) {
 		for (const cohort of ['basic', 'regular'] as const) {
-			test(`accepts the ${studentSex}/${cohort} wire choices`, () => {
-				expect(validated(makeRaw({ studentSex, cohort }))).toMatchObject({ studentSex, cohort });
-			});
+			for (const classTime of ['am', 'pm'] as const) {
+				test(`accepts the ${studentSex}/${cohort}/${classTime} wire choices`, () => {
+					expect(validated(makeRaw({ studentSex, cohort, classTime })))
+						.toMatchObject({ studentSex, cohort, classTime });
+				});
+			}
 		}
 	}
 
@@ -106,7 +115,7 @@ describe('attendance validation contract', () => {
 	test('reports all invalid fields at once using codes without returning personal values', () => {
 		const raw = makeRaw({
 			studentName: 'private\nname', studentSex: 'private-sex', programStartDate: 'private-date',
-			cohort: 'private-cohort', employerName: false,
+			cohort: 'private-cohort', classTime: 'private-time', employerName: false,
 			employerPosition: 'x'.repeat(121), employerWorkplace: '\u0000private-workplace'
 		});
 		const result = validateAttendanceInput(raw);
@@ -229,6 +238,24 @@ describe('attendance text normalization and bounds', () => {
 	test('rejects unknown, legacy, differently cased, or padded cohort values', () => {
 		for (const cohort of ['other', 'Basic', 'REGULAR', 'basico', 'básico', ' basic', 'regular ', 'basic\n']) {
 			expectErrors(makeRaw({ cohort }), { cohort: 'cohort' });
+		}
+	});
+
+	test('rejects malformed, legacy, uppercase, or padded class-time values', () => {
+		for (const classTime of [
+			'other', 'AM', 'PM', 'Am', 'Pm', 'morning', 'evening', 'mixed', 'a.m.', 'p.m.',
+			'10:00', '20:00', '10:00–12:00', '20:00–22:00', '8:00 p.m.',
+			' am', 'pm ', 'am\n', '\tpm', 'am\u0000', 'ａｍ'
+		]) {
+			expectErrors(makeRaw({ classTime }), { classTime: 'classTime' });
+		}
+	});
+
+	test('never infers a missing class time from the cohort or an untrusted schedule', () => {
+		for (const cohort of ['basic', 'regular'] as const) {
+			const raw = { ...makeRaw({ cohort }), schedule: '20:00–22:00', startTime: '20:00', endTime: '22:00' };
+			delete raw.classTime;
+			expectErrors(raw, { classTime: 'required' });
 		}
 	});
 });

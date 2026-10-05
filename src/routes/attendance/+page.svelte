@@ -3,15 +3,16 @@
 	import { tick, untrack } from 'svelte';
 	import { attendanceSchedule, presentAttendanceCertificate } from '#lib/attendance/presentation.ts';
 	import {
-		attendanceFields, attendanceTextLimits,
+		attendanceClassTimes, attendanceFields, attendanceTextLimits,
 		type AttendanceErrors, type AttendanceFormValues
 	} from '#lib/attendance/types.ts';
 	import {
 		readAttendanceFormData, revalidateAttendanceErrors, validateAttendanceInput
 	} from '#lib/attendance/validation.ts';
+	import ChoiceGroup from '#lib/components/ChoiceGroup.svelte';
 	import FormField from '#lib/components/FormField.svelte';
 	import { useLanguage } from '#lib/i18n/language.svelte.ts';
-		import { languages } from '#lib/i18n/translations.ts';
+	import { formatMessage, languages } from '#lib/i18n/translations.ts';
 	import type { PageProps } from './$types';
 
 	let { form }: PageProps = $props();
@@ -25,8 +26,9 @@
 	let formElement = $state<HTMLFormElement>();
 	let resultsElement = $state<HTMLElement>();
 	const hasErrors = $derived(Object.keys(errors).length > 0);
-	const schedule = $derived(values.cohort === 'basic' || values.cohort === 'regular'
-		? attendanceSchedule(values.cohort, language.current) : null);
+	const schedule = $derived((values.cohort === 'basic' || values.cohort === 'regular') &&
+		(values.classTime === 'am' || values.classTime === 'pm')
+		? attendanceSchedule(values.cohort, values.classTime, language.current) : null);
 	const certificate = $derived(form?.certificate && !hasErrors && !requestError && !form.serverError
 		? presentAttendanceCertificate(form.certificate, language.current) : null);
 
@@ -46,7 +48,9 @@
 
 	async function focusFirstError() {
 		await tick();
-		formElement?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+		const invalid = formElement?.querySelector<HTMLElement>('[aria-invalid="true"]');
+		const target = invalid?.matches('input, button') ? invalid : invalid?.querySelector<HTMLElement>('input, button');
+		target?.focus();
 	}
 </script>
 
@@ -104,13 +108,15 @@
 					<FormField name="studentName" label={messages.fields.studentName} bind:value={values.studentName}
 						autocomplete="name" maxLength={attendanceTextLimits.studentName}
 						error={errors.studentName ? messages.errors[errors.studentName] : undefined} />
-					<FormField name="studentSex" label={messages.fields.studentSex} bind:value={values.studentSex}
-						chooseLabel={messages.choose} hint={messages.hints.studentSex}
-						options={[
-							{ value: 'male', label: messages.sexOptions.male },
-							{ value: 'female', label: messages.sexOptions.female }
-						]}
-						error={errors.studentSex ? messages.errors[errors.studentSex] : undefined} />
+					<div>
+						<ChoiceGroup name="studentSex" label={messages.fields.studentSex} bind:value={values.studentSex}
+							hint={messages.hints.studentSex}
+							choices={[
+								{ value: 'male', label: messages.sexOptions.male },
+								{ value: 'female', label: messages.sexOptions.female }
+							]}
+							error={errors.studentSex ? messages.errors[errors.studentSex] : undefined} />
+					</div>
 				</div>
 			</section>
 
@@ -124,13 +130,22 @@
 						bind:value={values.programStartDate} hint={messages.hints.programStartDate}
 						min="0001-01-01" max="9999-12-31"
 						error={errors.programStartDate ? messages.errors[errors.programStartDate] : undefined} />
-					<FormField name="cohort" label={messages.fields.cohort} bind:value={values.cohort}
-						chooseLabel={messages.choose}
-						options={[
-							{ value: 'basic', label: messages.cohortOptions.basic },
-							{ value: 'regular', label: messages.cohortOptions.regular }
-						]}
-						error={errors.cohort ? messages.errors[errors.cohort] : undefined} />
+					<div>
+						<ChoiceGroup name="cohort" label={messages.fields.cohort} bind:value={values.cohort}
+							choices={[
+								{ value: 'basic', label: messages.cohortOptions.basic },
+								{ value: 'regular', label: messages.cohortOptions.regular }
+							]}
+							error={errors.cohort ? messages.errors[errors.cohort] : undefined} />
+					</div>
+					<div class="full-width">
+						<ChoiceGroup name="classTime" label={messages.fields.classTime} bind:value={values.classTime}
+							choices={[
+								{ value: 'am', label: formatMessage(messages.classTimeOptions.am, attendanceClassTimes.am) },
+								{ value: 'pm', label: formatMessage(messages.classTimeOptions.pm, attendanceClassTimes.pm) }
+							]}
+							error={errors.classTime ? messages.errors[errors.classTime] : undefined} />
+					</div>
 				</div>
 				{#if schedule}
 					<div class="schedule" aria-live="polite">
@@ -161,7 +176,7 @@
 			</section>
 		</fieldset>
 		<div class="form-footer">
-			<p class="privacy-note">{messages.privacyNote}</p>
+
 			{#if hasErrors}<p class="error-summary" role="alert">{messages.errorSummary}</p>{/if}
 			{#if requestError || form?.serverError}<p class="error-summary" role="alert">{messages.serverError}</p>{/if}
 			<button class="primary-button" type="submit" disabled={submitting} aria-busy={submitting}>
@@ -224,7 +239,7 @@
 	.schedule h3 { margin: 0; color: var(--color-accent); font-size: 0.8125rem; }
 	.schedule p { margin: 0.4rem 0 0; font-size: 0.875rem; }
 	.form-footer { padding: 1.25rem clamp(1.1rem, 3vw, 1.75rem); border-top: 1px solid var(--color-border); }
-	.privacy-note, .snapshot-note { margin: 0 0 1rem; color: var(--color-muted); font-size: 0.8125rem; }
+	.snapshot-note { margin: 0 0 1rem; color: var(--color-muted); font-size: 0.8125rem; }
 	.error-summary { margin: 0 0 1rem; color: #f0a6a6; font-size: 0.875rem; }
 	.primary-button, .download-button { display: inline-flex; align-items: center; justify-content: center; gap: 0.6rem; min-height: 2.8rem; padding: 0.7rem 1.05rem; border: 1px solid var(--color-accent); border-radius: 0.5rem; font-weight: 700; font-size: 0.875rem; text-decoration: none; cursor: pointer; }
 	.primary-button { background: var(--color-accent); color: var(--color-background); }

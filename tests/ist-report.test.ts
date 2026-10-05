@@ -263,20 +263,18 @@ function expectReadable(pages: PdfPage[], report: IstReport): void {
 	try {
 		for (const [index, page] of pages.entries()) {
 			const footer = page.texts.filter(({ text }) => text === `${report.pageLabel} ${index + 1}`);
-			expect(footer).toHaveLength(1);
+			expect(footer).toHaveLength(0);
 			const boxes = page.texts.map((line) => {
 				metrics.font(line.font).fontSize(line.size);
 				return { line, left: line.x, right: line.x + metrics.widthOfString(line.text),
 					top: line.baseline - line.size * 0.718, bottom: line.baseline + line.size * 0.207 };
 			});
-			expect(boxes.find(({ line }) => line === footer[0])!.top).toBeCloseTo(756, 2);
+
 			for (const box of boxes) {
 				expect(box.left).toBeGreaterThanOrEqual(41.99);
 				expect(box.right).toBeLessThanOrEqual(570.01);
-				if (box.line !== footer[0]) {
-					expect(box.top).toBeGreaterThanOrEqual(41.99);
-					expect(box.bottom).toBeLessThanOrEqual(736.01);
-				}
+				expect(box.top).toBeGreaterThanOrEqual(41.99);
+				expect(box.bottom).toBeLessThanOrEqual(736.01);
 			}
 			for (let first = 0; first < boxes.length; first++) {
 				for (let second = first + 1; second < boxes.length; second++) {
@@ -354,7 +352,7 @@ describe('IST report presentation', () => {
 			expect(report.disclaimer).toBe(messages.report.disclaimer);
 		});
 
-		test(`${language} keeps decimals, the full accented name, all details, and the assessment date in UTC`, () => {
+		test(`${language} keeps decimals, the full accented name, all details, and a date-only assessment date`, () => {
 			const report = makeReport(language);
 			const messages = translations[language].ist;
 			expect(report.studentName).toBe('José María Muñoz');
@@ -362,15 +360,14 @@ describe('IST report presentation', () => {
 			expect(report.details).toEqual([
 				{ label: messages.fields.studentName, value: 'José María Muñoz' },
 				{ label: messages.report.date, value: new Intl.DateTimeFormat(language === 'es' ? 'es-PR' : 'en-US',
-					{ dateStyle: 'long', timeStyle: 'short', timeZone: 'UTC' }).format(new Date(assessedAt)) + ' UTC' },
+					{ dateStyle: 'long', timeZone: 'UTC' }).format(new Date(assessedAt)) },
 				{ label: messages.fields.age, value: '22' },
 				{ label: messages.report.ageBand, value: `22–26 ${messages.units.years}` },
 				{ label: messages.fields.sex, value: messages.sexOptions.female },
 				{ label: messages.fields.weightLb, value: `130.5 ${messages.units.pounds}` },
 				{ label: messages.fields.waistIn, value: `30.25 ${messages.units.inches}` }
 			]);
-			expect(report.details[1].value).toContain(language === 'es' ? '3 de octubre de 2026' : 'October 3, 2026');
-			expect(report.details[1].value).toContain('12:34');
+			expect(report.details[1].value).toBe(language === 'es' ? '3 de octubre de 2026' : 'October 3, 2026');
 			expect(makeReport(language, { sex: 'male', weightLb: 170.5, waistIn: 33.25 }).rows[4].result).toBe('18.74%');
 		});
 

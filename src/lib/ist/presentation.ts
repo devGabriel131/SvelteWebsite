@@ -43,8 +43,8 @@ export function presentIstAssessment(assessment: IstAssessment, language: Langua
 		minimumFractionDigits: 2, maximumFractionDigits: 2
 	}).format(value)}%`;
 	const date = new Intl.DateTimeFormat(locale, {
-		dateStyle: 'long', timeStyle: 'short', timeZone: 'UTC'
-	}).format(new Date(assessment.assessedAt)) + ' UTC';
+		dateStyle: 'long', timeZone: 'UTC'
+	}).format(new Date(assessment.assessedAt));
 	const { input } = assessment;
 	const rows: IstReportRow[] = assessment.exercises.map((exercise) => {
 		const isTimed = exercise.key === 'run' || exercise.key === 'plank';

@@ -35,7 +35,7 @@ const cardBody: TextStyle = { ...body, size: 9 };
 
 function renderReport(doc: PDFKit.PDFDocument, report: IstReport): void {
 	let y = margin;
-	let pageNumber = 0;
+
 	const horizontalInset = 12;
 	const cardLineHeight = 12.5;
 
@@ -68,7 +68,7 @@ function renderReport(doc: PDFKit.PDFDocument, report: IstReport): void {
 	}
 
 	function drawLine(line: TextLine, x: number, top: number): void {
-		// Explicit single lines keep PDFKit's automatic flow out of positioned cards and footers.
+		// Explicit single lines keep PDFKit's automatic flow out of positioned content.
 		doc.font(line.font).fontSize(line.size).fillColor(line.color)
 			.text(line.text, x, top, { lineBreak: false });
 	}
@@ -95,7 +95,6 @@ function renderReport(doc: PDFKit.PDFDocument, report: IstReport): void {
 
 	function newPage(cards = false): void {
 		doc.addPage();
-		pageNumber++;
 		// Vite embeds this static asset as a data URI; Bun resolves the same import to a file.
 		doc.image(logo, pageWidth - margin - 64, margin, { width: 64, height: 64 });
 		let top = margin;
@@ -107,13 +106,7 @@ function renderReport(doc: PDFKit.PDFDocument, report: IstReport): void {
 		}
 		doc.strokeColor(brandColor).lineWidth(1)
 			.moveTo(margin, contentTop - 12).lineTo(pageWidth - margin, contentTop - 12).stroke();
-		doc.strokeColor(border).lineWidth(0.5)
-			.moveTo(margin, 748).lineTo(pageWidth - margin, 748).stroke();
 
-		const footer = `${report.pageLabel} ${pageNumber}`;
-		doc.font('Helvetica').fontSize(8.5);
-		drawLine({ ...body, size: 8.5, color: muted, text: footer },
-			pageWidth - margin - doc.widthOfString(footer), 756);
 		y = contentTop;
 		if (cards) drawCardHeader();
 	}

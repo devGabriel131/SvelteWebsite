@@ -12,21 +12,30 @@ import {
 	shortAttendanceName as sharedShortAttendanceName,
 	titleAttendanceName as sharedTitleAttendanceName
 } from '../src/lib/attendance/names';
-import { attendanceFields, type AttendanceCertificate, type AttendanceInput } from '../src/lib/attendance/types';
+import {
+	attendanceClassTimes, attendanceFields,
+	type AttendanceCertificate, type AttendanceInput
+} from '../src/lib/attendance/types';
 import { validateAttendanceInput } from '../src/lib/attendance/validation';
 import { formatMessage, translations, type Language } from '../src/lib/i18n/translations';
 
 const issuedAt = '2026-10-03T12:34:00.000Z';
-const spanishSchedules = {
-	basic: 'los lunes y viernes en horario de 8:00 p.m. a 10:00 p.m., y los miércoles en horario de 10:00 a.m. a 12:00 p.m.',
-	regular: 'los lunes, martes, jueves y viernes en horario de 8:00 p.m. a 10:00 p.m.'
+const scheduleTemplates = {
+	en: {
+		basic: 'on Mondays, Wednesdays, and Fridays from {startTime} to {endTime}',
+		regular: 'on Mondays, Tuesdays, Thursdays, and Fridays from {startTime} to {endTime}'
+	},
+	es: {
+		basic: 'los lunes, miércoles y viernes en horario de {startTime} a {endTime}',
+		regular: 'los lunes, martes, jueves y viernes en horario de {startTime} a {endTime}'
+	}
 } as const;
 
 function makeCertificate(overrides: Partial<AttendanceInput> = {}, clock = issuedAt): AttendanceCertificate {
 	return {
 		input: {
 			studentName: 'MARÍA SOFÍA PAGÁN CRUZ', studentSex: 'female',
-			programStartDate: '2026-04-15', cohort: 'regular', employerName: 'ROBERTO QUIÑONES',
+			programStartDate: '2026-04-15', cohort: 'regular', classTime: 'pm', employerName: 'ROBERTO QUIÑONES',
 			employerPosition: 'SUPERVISOR de turno', employerWorkplace: 'Walgreens, Plaza del Sol',
 			...overrides
 		},
@@ -99,39 +108,42 @@ describe('attendance filename slugs', () => {
 });
 
 describe('bilingual attendance schedules', () => {
-	for (const cohort of ['basic', 'regular'] as const) {
-		test(`preserves the exact legacy Spanish ${cohort} schedule`, () => {
-			expect(attendanceSchedule(cohort, 'es')).toBe(spanishSchedules[cohort]);
+	for (const language of ['en', 'es'] as const) {
+		test(`${language} defines the exact corrected weekday templates`, () => {
+			expect(translations[language].attendance.schedules).toEqual(scheduleTemplates[language]);
 		});
 
-		for (const language of ['en', 'es'] as const) {
-			test(`${language}/${cohort} uses the shared translated schedule verbatim`, () => {
-				const schedule = attendanceSchedule(cohort, language);
-				expect(schedule).toBe(translations[language].attendance.schedules[cohort]);
-				expect(makeDocument(language, { cohort }).paragraphs[1]).toContain(schedule);
-			});
+		for (const cohort of ['basic', 'regular'] as const) {
+			for (const classTime of ['am', 'pm'] as const) {
+				test(`${language}/${cohort}/${classTime} uses one chosen time for every scheduled day from the snapshot`, () => {
+					const times = attendanceClassTimes[classTime];
+					const schedule = attendanceSchedule(cohort, classTime, language);
+					expect(schedule).toBe(formatMessage(scheduleTemplates[language][cohort], times));
+					expect(schedule).toBe(formatMessage(translations[language].attendance.schedules[cohort], times));
+					expect(schedule).not.toMatch(/\{\w+\}/);
+					expect(makeDocument(language, { cohort, classTime }).paragraphs[1]).toContain(schedule);
+					const oppositeTimes = attendanceClassTimes[classTime === 'am' ? 'pm' : 'am'];
+					expect(schedule).not.toContain(oppositeTimes.startTime);
+					expect(schedule).not.toContain(oppositeTimes.endTime);
+					if (language === 'en') {
+						for (const day of cohort === 'basic'
+							? ['Mondays', 'Wednesdays', 'Fridays']
+							: ['Mondays', 'Tuesdays', 'Thursdays', 'Fridays']) expect(schedule).toContain(day);
+						expect(schedule).not.toMatch(cohort === 'basic'
+							? /Tuesdays|Thursdays|Saturdays|Sundays/
+							: /Wednesdays|Saturdays|Sundays/);
+					} else {
+						for (const day of cohort === 'basic'
+							? ['lunes', 'miércoles', 'viernes']
+							: ['lunes', 'martes', 'jueves', 'viernes']) expect(schedule).toContain(day);
+						expect(schedule).not.toMatch(cohort === 'basic'
+							? /martes|jueves|sábados|domingos/
+							: /miércoles|sábados|domingos/);
+					}
+				});
+			}
 		}
 	}
-
-	test('English basic retains Monday/Friday evenings and Wednesday late morning only', () => {
-		const schedule = attendanceSchedule('basic', 'en');
-		expect(schedule).toMatch(/Mondays/i);
-		expect(schedule).toMatch(/Fridays/i);
-		expect(schedule).toMatch(/Wednesdays/i);
-		expect(schedule).not.toMatch(/Tuesdays|Thursdays|Saturdays|Sundays/i);
-		for (const time of ['8:00 p.m.', '10:00 p.m.', '10:00 a.m.', '12:00 p.m.']) {
-			expect(schedule).toContain(time);
-		}
-	});
-
-	test('English regular retains Monday/Tuesday/Thursday/Friday evenings only', () => {
-		const schedule = attendanceSchedule('regular', 'en');
-		for (const day of ['Mondays', 'Tuesdays', 'Thursdays', 'Fridays']) expect(schedule).toContain(day);
-		expect(schedule).not.toMatch(/Wednesdays|Saturdays|Sundays/i);
-		expect(schedule).toContain('8:00 p.m.');
-		expect(schedule).toContain('10:00 p.m.');
-		expect(schedule).not.toContain('a.m.');
-	});
 });
 
 describe('attendance document presentation', () => {
@@ -150,17 +162,20 @@ describe('attendance document presentation', () => {
 				paragraphs: [
 					formatMessage(messages.openingFemale, { studentName: 'María Sofía Pagán Cruz' }),
 					formatMessage(messages.participation, {
-						startDate, shortName: 'María Sofía', schedule: translations[language].attendance.schedules.regular
+						startDate, shortName: 'María Sofía',
+						schedule: formatMessage(translations[language].attendance.schedules.regular, attendanceClassTimes.pm)
 					}),
 					formatMessage(messages.accommodation, { shortName: 'María Sofía' }),
 					formatMessage(messages.gratitude, { shortName: 'María Sofía' }),
 					formatMessage(messages.issuance, { city: messages.city, issueDate, phone: messages.phone })
 				],
 				signature: { name: messages.signatory, role: messages.role, phone: messages.phone, email: messages.email },
-				pageLabel: messages.page,
+
 				filename: `2026-10-03_regular_maria-sofia-pagan-cruz_${language}.pdf`
 			});
 			expect(JSON.stringify(document)).not.toMatch(/\{\w+\}/);
+			expect(document).not.toHaveProperty('pageLabel');
+			expect(messages).not.toHaveProperty('page');
 		});
 
 		test(`${language} uses the full title-cased name once and the first two tokens for repeated references`, () => {
@@ -180,11 +195,16 @@ describe('attendance document presentation', () => {
 		});
 
 		for (const studentSex of ['male', 'female'] as const) {
-			test(`${language}/${studentSex} selects the matching translated opening`, () => {
+			test(`${language}/${studentSex} selects the matching opening and names Claudine Menéndez as issuer`, () => {
 				const messages = translations[language].attendance.document;
 				const template = studentSex === 'male' ? messages.openingMale : messages.openingFemale;
-				expect(makeDocument(language, { studentSex }).paragraphs[0])
+				const document = makeDocument(language, { studentSex });
+				expect(document.paragraphs[0])
 					.toBe(formatMessage(template, { studentName: 'María Sofía Pagán Cruz' }));
+				expect(document.paragraphs[0]).toContain('Claudine Menéndez');
+				expect(document.signature.name)
+					.toBe(`Claudine Menéndez, ${language === 'es' ? 'Representante' : 'Representative'}`);
+				expect(JSON.stringify(document)).not.toContain('Claudy');
 			});
 		}
 
@@ -211,6 +231,7 @@ describe('attendance document presentation', () => {
 			expect(snapshot).toEqual(original);
 			expect(snapshot.input.studentName).toBe('MARÍA SOFÍA PAGÁN CRUZ');
 			expect(snapshot.input.employerName).toBe('ROBERTO QUIÑONES');
+			expect(snapshot.input.classTime).toBe('pm');
 		});
 
 		test(`${language} returns detached arrays and signature data on every call`, () => {
@@ -249,7 +270,7 @@ describe('attendance document presentation', () => {
 			const document = presentAttendanceCertificate({ input, issuedAt }, language);
 			expect(Object.keys(makeCertificate().input)).toEqual([...attendanceFields]);
 			expect(Object.keys(document)).toEqual([
-				'language', 'title', 'issuedDate', 'recipient', 'paragraphs', 'signature', 'pageLabel', 'filename'
+				'language', 'title', 'issuedDate', 'recipient', 'paragraphs', 'signature', 'filename'
 			]);
 			expect(Object.keys(document.signature)).toEqual(['name', 'role', 'phone', 'email']);
 			expect(JSON.stringify(document)).not.toContain('private-');
@@ -328,10 +349,12 @@ describe('attendance UTC and calendar-date presentation', () => {
 describe('bilingual attendance download filenames', () => {
 	for (const language of ['en', 'es'] as const) {
 		for (const cohort of ['basic', 'regular'] as const) {
-			test(`${language}/${cohort} gets a language-specific date/cohort/name filename`, () => {
-				expect(makeDocument(language, { cohort }).filename)
-					.toBe(`2026-10-03_${cohort}_maria-sofia-pagan-cruz_${language}.pdf`);
-			});
+			for (const classTime of ['am', 'pm'] as const) {
+				test(`${language}/${cohort}/${classTime} keeps the language-specific date/cohort/name filename without class time`, () => {
+					expect(makeDocument(language, { cohort, classTime }).filename)
+						.toBe(`2026-10-03_${cohort}_maria-sofia-pagan-cruz_${language}.pdf`);
+				});
+			}
 		}
 
 		test(`${language} uses student for an entirely non-ASCII name while preserving it in the document`, () => {

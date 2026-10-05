@@ -2,7 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { inflateSync } from 'node:zlib';
 import PDFDocument from 'pdfkit';
-import type { AttendanceDocument } from '../src/lib/attendance/presentation';
+import { presentAttendanceCertificate, type AttendanceDocument } from '../src/lib/attendance/presentation';
+import type { AttendanceCertificate } from '../src/lib/attendance/types';
 import { generateAttendancePdf } from '../src/lib/server/attendance-pdf';
 
 // Explicit presentation fixtures: these tests must not get their expected copy from the renderer's callers.
@@ -12,44 +13,44 @@ function makeDocument(language: AttendanceDocument['language']): AttendanceDocum
 			language, title: 'Certificación de asistencia — Programa ASVAB', issuedDate: '4 de octubre de 2026',
 			recipient: ['José Ramón Muñoz', 'Gerente de Recursos Humanos', 'Compañía Médica del Caribe, San Juan'],
 			paragraphs: [
-				'Por medio de la presente, Claudy Menéndez, en representación de Masterminds Programa ASVAB, certifica que María Isabel Rodríguez Peña ha sido aceptada en nuestro programa integral de preparación para ingresar a las Fuerzas Armadas de los Estados Unidos.',
+				'Por medio de la presente, Claudine Menéndez, en representación de Masterminds Programa ASVAB, certifica que María Isabel Rodríguez Peña ha sido aceptada en nuestro programa integral de preparación para ingresar a las Fuerzas Armadas de los Estados Unidos.',
 				'Desde el 15 de septiembre de 2026, María Isabel forma parte de nuestro programa. Asistirá a los cursos de lunes a jueves, de 5:00 p. m. a 8:00 p. m., como parte de su proceso de preparación.',
 				'Le solicitamos amablemente tomar en cuenta el compromiso adquirido por María Isabel y ajustar, en la medida de lo posible, su disponibilidad laboral. Esto le permitirá cumplir con sus responsabilidades de trabajo y sus metas personales y profesionales.',
 				'Agradecemos de antemano su comprensión y apoyo en este esfuerzo conjunto por fomentar el desarrollo integral y profesional de María Isabel.',
 				'Para los fines pertinentes, esta certificación se expide en Bayamón, Puerto Rico, hoy, 4 de octubre de 2026. Para cualquier consulta, puede comunicarse al (939) 408-0440.'
 			],
 			signature: {
-				name: 'Claudy Menéndez, Representante', role: 'Masterminds Repaso ASVAB',
+				name: 'Claudine Menéndez, Representante', role: 'Masterminds Repaso ASVAB',
 				phone: '(939) 408-0440', email: 'mastermindsprogramaasvab@gmail.com'
 			},
-			pageLabel: 'Página', filename: '2026-10-04_asvab_maria-isabel-rodriguez-pena_es.pdf'
+			filename: '2026-10-04_asvab_maria-isabel-rodriguez-pena_es.pdf'
 		};
 	}
 	return {
 		language, title: 'Attendance certification — ASVAB Program', issuedDate: 'October 4, 2026',
 		recipient: ['José Ramón Muñoz', 'Human Resources Manager', 'Caribbean Medical Company, San Juan'],
 		paragraphs: [
-			'This letter certifies that Claudy Menéndez, representing the Masterminds ASVAB Program, confirms that María Isabel Rodríguez Peña has been accepted into our comprehensive preparation program to enter the United States Armed Forces.',
+			'This letter certifies that Claudine Menéndez, representing the Masterminds ASVAB Program, confirms that María Isabel Rodríguez Peña has been accepted into our comprehensive preparation program to enter the United States Armed Forces.',
 			'Since September 15, 2026, María Isabel has participated in our program. She will attend classes Monday through Thursday, from 5:00 p.m. to 8:00 p.m., as part of her preparation.',
 			'We kindly ask you to consider María Isabel’s commitment and accommodate her work availability whenever possible. This will allow her to fulfill her current workplace responsibilities while pursuing her personal and professional goals.',
 			'Thank you for your understanding and support in this shared effort to foster María Isabel’s personal and professional development.',
 			'This certification is issued in Bayamón, Puerto Rico, on October 4, 2026. For questions, please contact us at (939) 408-0440.'
 		],
 		signature: {
-			name: 'Claudy Menéndez, Representative', role: 'Masterminds ASVAB Review',
+			name: 'Claudine Menéndez, Representative', role: 'Masterminds ASVAB Review',
 			phone: '(939) 408-0440', email: 'mastermindsprogramaasvab@gmail.com'
 		},
-		pageLabel: 'Page', filename: '2026-10-04_asvab_maria-isabel-rodriguez-pena_en.pdf'
+		filename: '2026-10-04_asvab_maria-isabel-rodriguez-pena_en.pdf'
 	};
 }
 
 const compact = (text: string) => text.replace(/\s/g, '');
+const contentBottom = 792 - 54;
 type Bounds = { left: number; right: number; top: number; bottom: number };
 type PdfText = { text: string; x: number; baseline: number; size: number; font: string };
 type PdfImage = { name: string; width: number; height: number; data: Buffer };
 type PdfPage = {
 	headerBottom: number;
-	footerTop: number;
 	texts: PdfText[];
 	images: PdfImage[];
 	imageDraws: (Bounds & { name: string })[];
@@ -139,14 +140,21 @@ function readPdf(pdf: Buffer): PdfPage[] {
 					right: Math.max(...corners.map(([x]) => x)), top: Math.min(...corners.map(([, y]) => y)),
 					bottom: Math.max(...corners.map(([, y]) => y)) });
 			}
-			if (operator === 'm' || operator === 'l') points.push(numbers);
+			if (operator === 'm' || operator === 'l') {
+				const [x, y] = numbers;
+				points.push([
+					matrix[0] * x + matrix[2] * y + matrix[4],
+					792 - (matrix[1] * x + matrix[3] * y + matrix[5])
+				]);
+			}
 			if (operator === 'S') {
+				for (const [, y] of points) expect(y).toBeLessThanOrEqual(contentBottom);
 				if (points.length === 2 && points[0][1] === points[1][1]) rules.push(points[0][1]);
 				points = [];
 			}
 		}
-		expect(rules).toHaveLength(2);
-		pages.push({ headerBottom: rules[0], footerTop: rules[1], texts, images, imageDraws });
+		expect(rules).toEqual([130]);
+		pages.push({ headerBottom: rules[0], texts, images, imageDraws });
 	}
 	const pageTree = [...objects.values()].find((object) => /\/Type \/Pages\b/.test(object))!;
 	expect(Number(pageTree.match(/\/Count (\d+)/)?.[1])).toBe(pages.length);
@@ -154,8 +162,8 @@ function readPdf(pdf: Buffer): PdfPage[] {
 	return pages;
 }
 
-function textRegion(page: PdfPage, text: PdfText): 'header' | 'body' | 'footer' {
-	return text.baseline < page.headerBottom ? 'header' : text.baseline > page.footerTop ? 'footer' : 'body';
+function textRegion(page: PdfPage, text: PdfText): 'header' | 'body' {
+	return text.baseline < page.headerBottom ? 'header' : 'body';
 }
 
 function renderedBlock(pages: PdfPage[], value: string): LocatedText[] {
@@ -199,12 +207,11 @@ function expectLetterText(pages: PdfPage[], document: AttendanceDocument): void 
 	// Exact body comparison also catches unexpected copy and changed/reordered snapshot values.
 	expect(compact(content.map(({ text }) => text).join('')))
 		.toBe(compact([...(dateInHeader ? [] : [document.issuedDate]), ...bodyStrings].join('')));
-	for (const [index, page] of pages.entries()) {
+	for (const page of pages) {
 		const header = page.texts.filter((text) => textRegion(page, text) === 'header');
 		expect(compact(header.map(({ text }) => text).join('')))
 			.toBe(dateInHeader ? compact(document.issuedDate) : '');
-		const footer = page.texts.filter((text) => textRegion(page, text) === 'footer');
-		expect(compact(footer.map(({ text }) => text).join(''))).toBe(compact(`${document.pageLabel} ${index + 1}`));
+		expect(compact(page.texts.map(({ text }) => text).join(''))).not.toMatch(/(?:Page|Página)\d+/i);
 	}
 }
 
@@ -230,6 +237,7 @@ function expectAssets(pages: PdfPage[]): void {
 		expect(draws[0].right - draws[0].left).toBeGreaterThan(0);
 		expect(draws[0].bottom - draws[0].top).toBeGreaterThan(0);
 		expect(draws[0].bottom).toBeLessThan(page.headerBottom);
+		expect(draws[0]).toMatchObject({ left: 494, right: 558, top: 54, bottom: 118 });
 	}
 	const signatures = pages.flatMap((page, index) => page.images
 		.filter((image) => image.width === signature.width && image.height === signature.height)
@@ -261,17 +269,17 @@ function expectReadable(pages: PdfPage[]): void {
 				expect(box.left).toBeGreaterThanOrEqual(53.99);
 				expect(box.right).toBeLessThanOrEqual(558.01);
 				expect(box.top).toBeGreaterThanOrEqual(53.99);
-				expect(box.bottom).toBeLessThanOrEqual(760.01);
+				expect(box.bottom).toBeLessThanOrEqual(contentBottom + 0.01);
 				if (textRegion(page, box.line) === 'body') {
 					expect(box.top).toBeGreaterThanOrEqual(page.headerBottom + 10);
-					expect(box.bottom).toBeLessThanOrEqual(page.footerTop - 8);
+					expect(box.top).toBeGreaterThanOrEqual(147.99);
 				}
 			}
 			for (const image of page.imageDraws) {
 				expect(image.left).toBeGreaterThanOrEqual(53.99);
 				expect(image.right).toBeLessThanOrEqual(558.01);
 				expect(image.top).toBeGreaterThanOrEqual(53.99);
-				expect(image.bottom).toBeLessThanOrEqual(page.footerTop - 8);
+				expect(image.bottom).toBeLessThanOrEqual(contentBottom + 0.01);
 			}
 			const elements = [...boxes, ...page.imageDraws.map((image) => ({ ...image, description: image.name }))];
 			for (let first = 0; first < elements.length; first++) {
@@ -300,6 +308,18 @@ function expectIntactSignature(pages: PdfPage[], document: AttendanceDocument): 
 	const draw = page.imageDraws.find(({ name }) => name === image.name)!;
 	expect(draw.bottom).toBeLessThan(lines[0].baseline - lines[0].size * 0.683);
 	for (const line of lines) expect(line.baseline).toBeGreaterThan(draw.bottom);
+	const lastLine = lines.at(-1)!;
+	const bottom = lastLine.baseline + lastLine.size * (lastLine.font.startsWith('Times') ? 0.217 : 0.207);
+	expect(bottom).toBeGreaterThan(contentBottom - 6);
+	expect(bottom).toBeLessThanOrEqual(contentBottom + 0.01);
+	// A normal, unwrapped issuer block must sit below the former mid-page placement.
+	if (lines.length === fields.length) expect(draw.top).toBeGreaterThan(600);
+	const lastBodyLine = page.texts.filter((text) => textRegion(page, text) === 'body' && text.baseline < draw.top).at(-1);
+	if (lastBodyLine) {
+		const bodyBottom = lastBodyLine.baseline
+			+ lastBodyLine.size * (lastBodyLine.font.startsWith('Times') ? 0.217 : 0.207);
+		expect(draw.top - bodyBottom).toBeGreaterThanOrEqual(18);
+	}
 }
 
 function freezeDocument(document: AttendanceDocument): AttendanceDocument {
@@ -315,6 +335,58 @@ function expectComplete(pages: PdfPage[], document: AttendanceDocument): void {
 	expectReadable(pages);
 	expectIntactSignature(pages, document);
 }
+
+describe('attendance schedule PDF regression', () => {
+	for (const cohort of ['basic', 'regular'] as const) {
+		for (const classTime of ['am', 'pm'] as const) {
+			for (const language of ['en', 'es'] as const) {
+				test(`${cohort}/${classTime}/${language} renders the corrected weekdays and only the selected time in a one-page signed PDF`, async () => {
+					const certificate: AttendanceCertificate = {
+						input: {
+							studentName: 'MARÍA SOFÍA PAGÁN CRUZ', studentSex: 'female',
+							programStartDate: '2026-04-15', cohort, classTime,
+							employerName: 'ROBERTO QUIÑONES', employerPosition: 'Supervisor',
+							employerWorkplace: 'Walgreens, Plaza del Sol'
+						},
+						issuedAt: '2026-10-03T12:34:00.000Z'
+					};
+					const document = presentAttendanceCertificate(certificate, language);
+					const pages = readPdf(await generateAttendancePdf(document));
+					expect(pages).toHaveLength(1);
+					expectComplete(pages, document);
+					const pdfText = compact(pages.flatMap(({ texts }) => texts.map(({ text }) => text)).join(''));
+					for (const value of [document.paragraphs[0], document.signature.name]) {
+						const printedText = compact(renderedBlock(pages, value).map(({ text }) => text).join(''));
+						expect(printedText).toContain(compact('Claudine Menéndez'));
+					}
+					expect(pdfText).not.toContain('Claudy');
+					const startTime = classTime === 'am' ? '10:00' : '20:00';
+					const endTime = classTime === 'am' ? '12:00' : '22:00';
+					const days = language === 'es'
+						? cohort === 'basic' ? 'los lunes, miércoles y viernes' : 'los lunes, martes, jueves y viernes'
+						: cohort === 'basic' ? 'on Mondays, Wednesdays, and Fridays' : 'on Mondays, Tuesdays, Thursdays, and Fridays';
+					const timeSpan = language === 'es'
+						? `en horario de ${startTime} a ${endTime}`
+						: `from ${startTime} to ${endTime}`;
+					expect(pdfText).toContain(compact(`${days} ${timeSpan}`));
+					expect(pdfText.match(/\d{1,2}:\d{2}/g)).toEqual([startTime, endTime]);
+					for (const time of classTime === 'am' ? ['20:00', '22:00'] : ['10:00', '12:00']) {
+						expect(pdfText).not.toContain(time);
+					}
+					if (language === 'es') {
+						expect(pdfText).not.toMatch(cohort === 'basic'
+							? /martes|jueves|sábados|domingos/
+							: /miércoles|sábados|domingos/);
+					} else {
+						expect(pdfText).not.toMatch(cohort === 'basic'
+							? /Tuesdays|Thursdays|Saturdays|Sundays/
+							: /Wednesdays|Saturdays|Sundays/);
+					}
+				});
+			}
+		}
+	}
+});
 
 describe('attendance PDF generation', () => {
 	for (const language of ['en', 'es'] as const) {
@@ -336,7 +408,7 @@ describe('attendance PDF generation', () => {
 			expect(recipient[2].baseline).toBeLessThan(renderedBlock(pages, document.paragraphs[0])[0].baseline);
 		});
 
-		test(`${language} preserves long accented recipient names and unbroken surnames across branded numbered pages`, async () => {
+		test(`${language} preserves long accented recipient names and unbroken surnames across branded footer-free pages`, async () => {
 			const document = makeDocument(language);
 			document.recipient[0] = 'Úrsula José María Muñoz '.repeat(300) + 'ÁlvarezÑandú'.repeat(250) + ' ÚltimoApellidoÓ';
 			const original = structuredClone(document);
@@ -373,7 +445,7 @@ describe('attendance PDF generation', () => {
 			'Quinta cláusula recibida: contenido final íntegro.'
 		];
 		document.signature = { name: 'Érika Peña, Emisora', role: 'Entidad recibida', phone: '+1 (787) 555-0199', email: 'issuer@example.org' };
-		document.pageLabel = 'Hoja recibida';
+
 		document.filename = 'snapshot-preserved.pdf';
 		const original = structuredClone(document);
 		const pages = readPdf(await generateAttendancePdf(freezeDocument(document)));
@@ -384,7 +456,7 @@ describe('attendance PDF generation', () => {
 	test('moves the image and entire multi-line issuer block to a fresh page when the body leaves too little space', async () => {
 		const document = makeDocument('es');
 		document.paragraphs = Array.from({ length: 5 }, (_, index) => `Párrafo ${index}: ` + 'Participación confirmada. '.repeat(12));
-		document.signature.name = 'ClaudyMenéndezÑ'.repeat(14);
+		document.signature.name = 'ClaudineMenéndezÑ'.repeat(14);
 		document.signature.role = 'Representación institucional y coordinación académica '.repeat(3);
 		const pages = readPdf(await generateAttendancePdf(document));
 		expect(pages).toHaveLength(2);
@@ -408,11 +480,11 @@ describe('attendance PDF generation', () => {
 		expectComplete(pages, document);
 	});
 
-	test('flows an oversized date and heading as content while preserving long translated footer labels', async () => {
+	test('flows an oversized date and heading as content across footer-free branded pages', async () => {
 		const document = makeDocument('es');
-		document.issuedDate = 'Fecha de emisión Ñ: ' + 'áéíóúüñ'.repeat(500);
+		document.issuedDate = 'Fecha de emisión Ñ: ' + 'áéíóúüñ'.repeat(750);
 		document.title = 'Título de certificación: ' + 'AsistenciaAcadémicaÉ'.repeat(250);
-		document.pageLabel = 'Página del documento de certificación de asistencia académica '.repeat(3);
+
 		const pages = readPdf(await generateAttendancePdf(document));
 		expect(pages.length).toBeGreaterThan(3);
 		expect(new Set(renderedBlock(pages, document.issuedDate).map(({ page }) => page)).size).toBeGreaterThan(1);
@@ -451,10 +523,16 @@ describe('attendance PDF generation', () => {
 			.rejects.toThrow('signature block is too tall to fit intact');
 	});
 
-	test('rejects a footer label that leaves no usable content area instead of looping or clipping', async () => {
-		const document = makeDocument('es');
-		document.pageLabel = 'PáginaÑ'.repeat(1600);
-		await expect(generateAttendancePdf(freezeDocument(document)))
-			.rejects.toThrow('page label leaves no space');
-	});
+	for (const language of ['en', 'es'] as const) {
+		test(`${language} keeps every page free of page numbers and footer rules while paginating long content`, async () => {
+			const document = makeDocument(language);
+			document.paragraphs = Array.from({ length: 30 }, (_, index) =>
+				`Section ${String(index).padStart(2, '0')}: ` + 'Confirmed attendance and professional preparation. '.repeat(8));
+			const original = structuredClone(document);
+			const pages = readPdf(await generateAttendancePdf(freezeDocument(document)));
+			expect(pages.length).toBeGreaterThan(2);
+			expectComplete(pages, document);
+			expect(document).toEqual(original);
+		});
+	}
 });

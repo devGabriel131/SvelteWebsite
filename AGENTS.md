@@ -42,3 +42,8 @@
 - Preserve user work. Do not overwrite unrelated changes or commit work unless asked.
 - Complete the agreed step, then validate with the most targeted available checks.
 - Report what changed and what was actually verified. If validation is blocked or fails, say why.
+
+
+## Design
+
+- Use buttons instead of a dropdown menu when options are minimal.

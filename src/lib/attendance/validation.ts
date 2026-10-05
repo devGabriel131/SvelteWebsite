@@ -105,20 +105,21 @@ export function validateAttendanceInput(raw: unknown): AttendanceValidationResul
 
 	const programStartDate = readDate();
 	const cohort = readChoice('cohort', ['basic', 'regular'], 'cohort');
+	const classTime = readChoice('classTime', ['am', 'pm'], 'classTime');
 	const employerName = readText('employerName');
 	const employerPosition = readText('employerPosition');
 	const employerWorkplace = readText('employerWorkplace');
 
 	if (
 		Object.keys(errors).length > 0 || studentName === undefined || studentSex === undefined ||
-		programStartDate === undefined || cohort === undefined ||
+		programStartDate === undefined || cohort === undefined || classTime === undefined ||
 		employerName === undefined || employerPosition === undefined || employerWorkplace === undefined
 	) {
 		return { valid: false, errors };
 	}
 	return {
 		valid: true,
-		input: { studentName, studentSex, programStartDate, cohort, employerName, employerPosition, employerWorkplace }
+		input: { studentName, studentSex, programStartDate, cohort, classTime, employerName, employerPosition, employerWorkplace }
 	};
 }
 

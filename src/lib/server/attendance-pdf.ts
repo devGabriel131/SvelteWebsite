@@ -9,6 +9,7 @@ const pageHeight = 792;
 const margin = 54;
 const contentWidth = pageWidth - margin * 2;
 const contentTop = 148;
+const contentBottom = pageHeight - margin;
 const ink = '#252C30';
 const muted = '#60716F';
 const brandColor = '#70959D';
@@ -21,12 +22,11 @@ type TextStyle = {
 type TextLine = TextStyle & { text: string };
 const body: TextStyle = { font: 'Times-Roman', size: 11.5, color: ink };
 const small: TextStyle = { font: 'Helvetica', size: 10, color: muted };
-const footerStyle: TextStyle = { ...small, size: 8.5 };
+
 
 function renderDocument(doc: PDFKit.PDFDocument, document: AttendanceDocument): void {
 	let y = contentTop;
-	let contentBottom = 729;
-	let pageNumber = 0;
+
 
 	function wrap(text: string, width: number, style: TextStyle): TextLine[] {
 		doc.font(style.font).fontSize(style.size);
@@ -68,7 +68,7 @@ function renderDocument(doc: PDFKit.PDFDocument, document: AttendanceDocument): 
 
 	function newPage(): void {
 		doc.addPage();
-		pageNumber++;
+
 		// Vite bundles both assets as data URIs; Bun's test runner resolves them to files.
 		doc.image(logo, pageWidth - margin - 64, margin, { width: 64, height: 64 });
 		if (dateInHeader) {
@@ -78,15 +78,6 @@ function renderDocument(doc: PDFKit.PDFDocument, document: AttendanceDocument): 
 		doc.strokeColor(brandColor).lineWidth(1)
 			.moveTo(margin, 130).lineTo(pageWidth - margin, 130).stroke();
 
-		const footer = wrap(`${document.pageLabel} ${pageNumber}`, contentWidth, footerStyle);
-		const footerTop = pageHeight - 32 - footer.length * 11;
-		contentBottom = footerTop - 20;
-		if (contentBottom - contentTop < 30) {
-			throw new RangeError('Attendance page label leaves no space for document content.');
-		}
-		doc.strokeColor('#DDE5E2').lineWidth(0.5)
-			.moveTo(margin, footerTop - 8).lineTo(pageWidth - margin, footerTop - 8).stroke();
-		footer.forEach((line, index) => drawLine(line, footerTop + index * 11, true));
 		y = contentTop;
 	}
 
@@ -160,6 +151,8 @@ function renderDocument(doc: PDFKit.PDFDocument, document: AttendanceDocument): 
 	if (height > contentBottom - contentTop) {
 		throw new RangeError('Attendance signature block is too tall to fit intact on a Letter page.');
 	}
+	// Keep the complete signature block low on the final page, within the bottom margin.
+	y = contentBottom - height;
 	doc.image(signature, pageWidth - margin - imageWidth, y, { width: imageWidth, height: imageHeight });
 	y += imageHeight + imageGap;
 	for (const line of lines) {

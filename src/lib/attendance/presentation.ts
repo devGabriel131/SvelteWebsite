@@ -1,6 +1,6 @@
 import { formatMessage, translations, type Language } from '../i18n/translations';
 import { attendanceNameSlug, shortAttendanceName, titleAttendanceName } from './names';
-import type { AttendanceCertificate, Cohort } from './types';
+import { attendanceClassTimes, type AttendanceCertificate, type ClassTime, type Cohort } from './types';
 
 export { attendanceNameSlug, shortAttendanceName, titleAttendanceName } from './names';
 
@@ -11,13 +11,12 @@ export interface AttendanceDocument {
 	recipient: string[];
 	paragraphs: string[];
 	signature: { name: string; role: string; phone: string; email: string };
-	pageLabel: string;
+
 	filename: string;
 }
 
-
-export function attendanceSchedule(cohort: Cohort, language: Language): string {
-	return translations[language].attendance.schedules[cohort];
+export function attendanceSchedule(cohort: Cohort, classTime: ClassTime, language: Language): string {
+	return formatMessage(translations[language].attendance.schedules[cohort], attendanceClassTimes[classTime]);
 }
 
 // Presentation only: use the validated snapshot and its supplied issuance clock, never the current time.
@@ -42,13 +41,13 @@ export function presentAttendanceCertificate(certificate: AttendanceCertificate,
 			formatMessage(input.studentSex === 'female' ? messages.openingFemale : messages.openingMale, {
 				studentName
 			}),
-			formatMessage(messages.participation, { startDate, shortName, schedule: attendanceSchedule(input.cohort, language) }),
+			formatMessage(messages.participation, { startDate, shortName, schedule: attendanceSchedule(input.cohort, input.classTime, language) }),
 			formatMessage(messages.accommodation, { shortName }),
 			formatMessage(messages.gratitude, { shortName }),
 			formatMessage(messages.issuance, { city: messages.city, issueDate: issuedDate, phone: messages.phone })
 		],
 		signature: { name: messages.signatory, role: messages.role, phone: messages.phone, email: messages.email },
-		pageLabel: messages.page,
+
 		filename: `${issueInstant.toISOString().slice(0, 10)}_${input.cohort}_${attendanceNameSlug(studentName)}_${language}.pdf`
 	};
 }
