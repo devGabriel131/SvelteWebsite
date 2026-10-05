@@ -1,8 +1,8 @@
 <script lang="ts">
 	import '../app.css';
-	import favicon from '#lib/assets/favicon.svg';
+
 	import { page } from '$app/state';
-	import { resolve } from '$app/paths';
+	import { asset, resolve } from '$app/paths';
 	import DashboardHeader from '#lib/components/DashboardHeader.svelte';
 	import DashboardSidebar from '#lib/components/DashboardSidebar.svelte';
 	import { provideLanguage } from '#lib/i18n/language.svelte.ts';
@@ -17,7 +17,7 @@
 </script>
 
 <svelte:head>
-	<link rel="icon" href={favicon} />
+	<link rel="icon" type="image/png" href={asset('logo.png')} />
 </svelte:head>
 
 <a class="skip-link" href="#main-content">{language.messages.accessibility.skipToContent}</a>
