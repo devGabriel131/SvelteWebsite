@@ -19,7 +19,7 @@ bun run dev --open
 
 ## Local PostgreSQL
 
-`compose.yaml` runs an isolated PostgreSQL 18 database for local development. Docker Desktop must be running. This setup does not use or modify other preview databases, and the website does not use the database yet; schema migrations, mock students, and feature persistence are separate next steps. The [database schema proposal](docs/database-schema.md) records the agreed requirements, proposed boundaries, and decisions still needed before implementation.
+`compose.yaml` runs a PostgreSQL 18 database for local development. Docker Desktop must be running. Drizzle provides student-roster and game-history schemas, derived progress/ranking views, and versioned migrations, but the dashboard is not connected to them yet. Ordinary `bun run dev`, checks, builds, and non-database tests still work without PostgreSQL or `DATABASE_URL`. The [database schema document](docs/database-schema.md) distinguishes this implemented foundation from pending authentication and game-persistence work.
 
 If you do not already have a `.env` file, copy `.env.example` to `.env`. Generate a unique local password, for example:
 
@@ -51,6 +51,64 @@ Local connection details:
 
 The image is pinned to PostgreSQL major version 18, allowing newer 18.x patches when the image is pulled. Changing `POSTGRES_PASSWORD` after the volume is initialized does not update the existing database user's password.
 
+### Migrations and fictitious local roster
+
+After configuring `.env` and starting the development database, apply the committed migrations explicitly:
+
+```sh
+bun run db:migrate
+```
+
+This reads the server-only `DATABASE_URL` and records applied migrations in `drizzle.__drizzle_migrations`. Rerunning it applies only outstanding migrations. It does not seed fictitious roster data, run during app startup/builds, or require a PostgreSQL extension. Run migrations from one controlled process per database, and review the target before using a hosted connection.
+
+The first migrations create `students` and its database-level `updated_at` trigger. Staff-entered names retain accents and compound names. Emails retain their entered casing, but a unique index compares `lower(btrim(email))` across every student, including inactive profiles. Surrounding/embedded whitespace is rejected by a lightweight email-shape constraint; server-side enrollment must trim and validate inputs. Dots and plus-addresses are not collapsed. Date of birth and gender may be null during roster entry; class type is required. Auth linkage, signup, invitation records, and authenticated game-persistence endpoints are not implemented yet.
+
+Optionally insert three fictitious roster profiles into the local database:
+
+```sh
+bun run db:seed
+```
+
+The seed uses fixed UUIDs and reserved `@example.test` addresses, contains no auth accounts/PINs, and never overwrites existing records. It is not a login bypass. It refuses production/Railway environments, remote hosts, connection-option overrides, and unknown database/user/port combinations; it also verifies the actual connected database and user. Only this development target and the dedicated test target below are allowed. A non-fixture record using a fixture email causes the atomic insert to fail rather than modifying that record. Do not point these local ports at remote databases through tunnels.
+
+For future schema changes, edit the relevant definition in `src/lib/server/db/schema.ts` (students), `game-schema.ts` (game/catalog tables), or `views.ts` (derived progress/rankings), then generate and inspect an additional migration:
+
+```sh
+bun run db:generate --name=describe_the_change
+bun run db:check
+```
+
+Commit the SQL, snapshots, and journal together. Review dependent view creation/drop order: Drizzle Kit does not automatically order these views by dependency, so source views must be created before views that use them (and dropped in reverse order). Integration tests validate the actual SQL against PostgreSQL. Custom PostgreSQL functions/triggers use `bun run db:generate --custom --name=describe_the_change` followed by editing that new SQL file. Already applied migrations are append-only: use a new migration for corrections, not `drizzle-kit push` or edits to old files. The lazy application connection lives in `src/lib/server/db/index.ts`; standalone tools use `connection.ts` without SvelteKit virtual imports. `src/env.ts` declares `DATABASE_URL` as private, runtime-read, and optional until database code is called.
+
+### Game history and vocabulary progress
+
+`drizzle/0002_game_history.sql` adds typed game persistence and five derived views; `0003_frequency_catalog.sql` records the bundled vocabulary's 1,001 permanent UUIDs and ranks as the initial `frequency-v1` membership snapshot. This learning-content migration runs on every migrated database; it contains no student data and is separate from the opt-in fictitious roster seed.
+
+- `game_attempts` links a stable attempt UUID to a student, game type, explicit rules version, and start/end timestamps. `ended_at` may be null for partial vocabulary practice; that is not a promise of resumable rounds. Reuse the same attempt ID for submission retries.
+- `speed_math_results` stores operation, selected 5/10/15-minute duration, nonnegative correct/incorrect counts, and optional `verified_at`. Counts and verification have no fabricated defaults. A composite foreign key prevents math results from attaching to vocabulary attempts.
+- `vocabulary_items`, `vocabulary_pools`, and `vocabulary_pool_items` identify items and versioned pool membership independently of word spelling or rank. Content/translations stay in the existing JSON; published membership snapshots must not be edited in place. Add a new pool ID/membership migration when its denominator or ordering changes, and retain old snapshots.
+- `vocabulary_rounds` binds an attempt to one pool. `vocabulary_responses` retains each accepted card outcome and answer time. `(attempt_id, card_position)` is the retry identity, with positions 1–25; repeated items at different positions are valid. Foreign keys require each response's item to belong to that round's pool. No raw answer text or credentials are stored.
+
+The response history is authoritative. `student_word_progress` derives each student's lifetime item counts and latest outcome; absent rows represent zero practice. Equal answer timestamps use attempt ID and card position as a deterministic tie-break. `vocabulary_round_progress` reports accepted response counts and marks a round complete only at 25, independent of correctness or an end timestamp. `student_vocabulary_completeness` reports the explicit pool denominator, practice coverage, successful coverage, full passes, and current-pass counts, including all unpracticed items. Counts follow stable item IDs across pool versions. Empty pools report zero counts and current pass 1. There are no editable progress counters, percentages, or permanent mastery flags. Views always reflect retained history; a cache can be added later if measured history volume warrants it.
+
+`speed_math_verified_bests` selects one verified full-duration result per student/operation/duration/rules version. Effective `ended_at` must equal the computed deadline, and `verified_at` must be at or after it; early, unfinished, late/unclamped, and unverified attempts remain in history but do not enter competition. Equal personal bests select the earliest end time, then lowest attempt UUID. `speed_math_leaderboard_entries` ranks those bests by most correct answers, then fewest incorrect answers; exact ties share a rank (`1, 1, 3`). The backend views contain student IDs, without names or active-state filtering. That is not a public leaderboard or a decision about audience/inactive visibility.
+
+**Integration boundary:** no game route uses this storage yet. Future authenticated server code must resolve the student, check current active state, grade answers and control timing, set verification itself, and write related records transactionally. Unique keys prevent duplicate records, but an API must also compare retry payloads and reject conflicting submissions rather than silently ignoring them. `verified_at` is not proof of grading by itself; clients must never control it. Foreign keys restrict deletion instead of cascading learning history; a deletion/retention policy remains to be agreed.
+
+### Isolated database tests
+
+Database integration tests use `compose.test.yaml`, not the persistent development database:
+
+```sh
+bun run db:test:up
+bun run db:test
+bun run db:test:down
+```
+
+This starts a separate Compose project with PostgreSQL 18 at `127.0.0.1:5434`, database/user `sveltewebsite_test`, and public test-only password `sveltewebsite_test`. Its data is held in a disposable tmpfs mount, not the development volume. Stopping/removing this test container discards its data. No `.env` changes are needed, and `compose.yaml` remains unchanged.
+
+`db:test` explicitly selects that test URL and fails if the database is unavailable. It verifies migrations and reruns, roster/game constraints, catalog membership, retry uniqueness, repeated/partial rounds, completeness/pass boundaries, verified rankings and shared ranks, history retention through deactivation, connection guards, and seed idempotency. Row-level checks run in rolled-back transactions; seed tests remove only fixtures they inserted. The ordinary `bun run test` runs database safety/fixture unit tests but skips PostgreSQL integration tests unless `TEST_DATABASE_URL` is explicitly set. An integration URL must match the dedicated test target; the persistent development database and remote targets are rejected before migrations.
+
 ### Moving to Railway
 
 Docker Compose is only the local database runner; it is not required for the hosted application. Keep future application queries and versioned migrations compatible with standard PostgreSQL and read the connection from the server-only `DATABASE_URL`. On Railway, configure that variable from the PostgreSQL service's connection URL appropriate to the application's network, rather than copying the local `.env` or using `127.0.0.1`. Match the supported PostgreSQL major version and use the hosted service's TLS requirements; do not disable certificate verification globally. Authentication and a deployment-specific SvelteKit adapter are not configured by this step.
@@ -60,6 +118,7 @@ Docker Compose is only the local database runner; it is not required for the hos
 ```text
 src/
   app.html              HTML document template
+  env.ts                Private runtime DATABASE_URL declaration (optional until used)
   app.d.ts              Application-wide type declarations
   app.css               Global styles and color tokens
   hooks.server.ts       Request-scoped language and HTML document language
@@ -70,7 +129,7 @@ src/
     i18n/               English/Spanish translations and reactive language context
     ist/                IST types, shared input validation, pure assessment, and presentation
     admin/              Isolated admin design components, scoped styles, and fictional fixtures
-    server/             Server-only PDFKit report generation
+    server/             Server-only PDFKit reports and lazy typed database connection
     speed-math/         Pure question generation, session timing, scoring, and statistics
   routes/
     +layout.server.ts   Saved language preference for the shared layout
@@ -81,7 +140,11 @@ src/
     admin/              Admin command-center design preview
     speed-math/         Timed arithmetic practice page
 static/                 Files served without processing
-tests/                  Bun translation, vocabulary/practice, IST, and Speed Math tests
+tests/                  Bun feature tests and opt-in PostgreSQL integration tests
+scripts/db/             Explicit migrations, guarded fictitious seed, local target checks
+drizzle/                Versioned SQL migrations and Drizzle snapshots/journal
+compose.test.yaml       Disposable PostgreSQL instance for database integration tests
+drizzle.config.ts       Database schema and migration-generation configuration
 vite.config.ts          Vite, SvelteKit, and deployment adapter configuration
 tsconfig.json           Strict TypeScript configuration
 ```
@@ -160,6 +223,7 @@ The root layout provides language context per component tree, not through a shar
 ```sh
 bun run test
 bun run check
+bun run db:check
 bun run build
 ```
 

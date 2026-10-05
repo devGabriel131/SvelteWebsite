@@ -1,0 +1,137 @@
+{
+  "id": "d8c29cda-1bb0-4c46-8d99-7428a485058a",
+  "prevId": "3632e5ea-1de3-4564-8b94-f149b79303bf",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.students": {
+      "name": "students",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "first_name": {
+          "name": "first_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_name": {
+          "name": "last_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "date_of_birth": {
+          "name": "date_of_birth",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "gender": {
+          "name": "gender",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "class_type": {
+          "name": "class_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "is_active": {
+          "name": "is_active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "students_email_normalized_unique": {
+          "name": "students_email_normalized_unique",
+          "columns": [
+            {
+              "expression": "lower(btrim(\"email\"))",
+              "isExpression": true,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "students_first_name_nonblank": {
+          "name": "students_first_name_nonblank",
+          "value": "\"students\".\"first_name\" ~ '[^[:space:]]'"
+        },
+        "students_last_name_nonblank": {
+          "name": "students_last_name_nonblank",
+          "value": "\"students\".\"last_name\" ~ '[^[:space:]]'"
+        },
+        "students_email_format": {
+          "name": "students_email_format",
+          "value": "\"students\".\"email\" ~ '^[^[:space:]@]+@[^[:space:]@]+$'"
+        },
+        "students_date_of_birth_valid": {
+          "name": "students_date_of_birth_valid",
+          "value": "\"students\".\"date_of_birth\" IS NULL OR (isfinite(\"students\".\"date_of_birth\") AND \"students\".\"date_of_birth\" <= CURRENT_DATE)"
+        },
+        "students_gender_valid": {
+          "name": "students_gender_valid",
+          "value": "\"students\".\"gender\" IN ('male', 'female')"
+        },
+        "students_class_type_valid": {
+          "name": "students_class_type_valid",
+          "value": "\"students\".\"class_type\" IN ('basic', 'regular')"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "views": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

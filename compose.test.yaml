@@ -1,0 +1,20 @@
+name: sveltewebsite-db-test
+
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: sveltewebsite_test
+      POSTGRES_DB: sveltewebsite_test
+      # Public credentials for this disposable, loopback-only test database.
+      POSTGRES_PASSWORD: sveltewebsite_test
+    ports:
+      - "127.0.0.1:5434:5432"
+    tmpfs:
+      - /var/lib/postgresql
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "sveltewebsite_test", "-d", "sveltewebsite_test"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 10s

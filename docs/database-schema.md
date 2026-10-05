@@ -1,6 +1,49 @@
 # Database schema proposal
 
-**Status: draft for discussion, not an approved migration.** This document records requirements, recommended boundaries, and unresolved product decisions. No application tables, seed data, authentication, or feature persistence have been implemented.
+**Status: roster and game-history migrations implemented; authentication and feature integration are pending.** Drizzle tooling, versioned PostgreSQL migrations, a guarded fictitious local seed, and isolated database tests now cover student profiles, game attempts, typed Speed Math results, versioned vocabulary membership, response history, and derived progress/rankings. No dashboard route persists game data yet. Authentication, invitations, and server-controlled game submission/grading remain separate work; the remaining proposals below do not imply approval of those integrations.
+
+## Implemented first migration scope
+
+- `src/lib/server/db/schema.ts` defines the roster table: stable UUID ID, separate nonblank first/last names, required email, nullable date of birth/gender, required `basic`/`regular` class type, active-by-default state, and required creation/update timestamps.
+- `drizzle/0000_students.sql` creates the table, constraints, and a unique `lower(btrim(email))` index across all profiles. Email spelling/casing is preserved; input whitespace is rejected, and the enrollment server must trim inputs before storage. No provider-specific dot/plus normalization is applied. The auth handoff must use this same comparison policy rather than enable independently editable addresses.
+- PostgreSQL rejects impossible, infinite, or future dates of birth; supported age limits remain undecided. `gender` is either null, `male`, or `female`.
+- `drizzle/0001_students_updated_at.sql` installs a `BEFORE UPDATE` trigger using `clock_timestamp()`. Both ORM and raw SQL writes update the timestamp, including multiple writes in the same transaction.
+- `auth_user_id` is deliberately **not present yet**. Add its unique relationship and the linked-profile completeness invariant only after agreeing on Better Auth's real identifier type/table and transaction ownership. Do not interpret a populated roster profile or `is_active` as authenticated access.
+- Drizzle ORM with postgres.js provides typed server queries; Drizzle Kit generates committed SQL/snapshots/journal, and the standard migrator applies them explicitly through `bun run db:migrate`. No extension or PIN storage is introduced.
+- `bun run db:seed` explicitly inserts three fictitious profiles with stable IDs and reserved addresses into known local targets only, without overwriting existing records or creating auth accounts. The seed refuses production/hosted execution and checks both the URL and actual database identity.
+- `compose.test.yaml` supplies a separate disposable PostgreSQL 18 test database on port 5434. `bun run db:test` opts into integration tests; normal tests skip them without `TEST_DATABASE_URL`. The persistent local database on port 5433 is not modified by tests.
+- No route or browser feature imports the database. `DATABASE_URL` is private, runtime-read, and optional until a database operation is requested, so normal development does not gain a database or mock-identity requirement. Active-state enforcement on protected requests belongs to the later auth integration; this migration does not protect today's preview pages.
+
+See [README database commands](../README.md#local-postgresql) for setup, generation, migrations, seeds, and test teardown.
+
+## Implemented game-history migration scope
+
+`src/lib/server/db/game-schema.ts` defines the additional tables in `drizzle/0002_game_history.sql`. `src/lib/server/db/views.ts` defines derived PostgreSQL views; they are not independently editable counters or caches.
+
+| Table | Implemented contract |
+| --- | --- |
+| `game_attempts` | Stable UUID, student FK, `speed_math`/`frequency` discriminator, required nonblank rules version, finite start time, nullable finite end time not before the start, creation time. |
+| `speed_math_results` | One result per attempt; operation and 5/10/15-minute duration constraints; explicit nonnegative correct/incorrect counts; nullable finite `verified_at`. Composite FK requires a Speed Math attempt. |
+| `vocabulary_items` | Identity catalog using the permanent UUIDs already bundled in `words.json`; no default/generated IDs or duplicate translation store. |
+| `vocabulary_pools` / `vocabulary_pool_items` | Versioned pool IDs and membership/rank snapshots. Item identity is not rank; membership and rank are unique within a pool. |
+| `vocabulary_rounds` | One frequency-game attempt bound to one pool; wrong-game attempts are rejected by a composite FK. |
+| `vocabulary_responses` | Attempt/card position (1–25) primary key, pool/member FKs, `correct`/`incorrect`/`skipped`, finite answer time, and creation time. Student identity is resolved through the attempt, not copied into responses. No raw answers are retained. |
+
+`drizzle/0003_frequency_catalog.sql` is the initial `frequency-v1` content-identity/membership snapshot for all 1,001 bundled items. It is applied with normal migrations and contains no student data. Published membership is treated as immutable: changing the pool/order uses a new pool ID and migration, preserving older denominators. Content translations stay in JSON; future grading must associate meaningful content/scoring changes with its rules version rather than reinterpret old recorded outcomes.
+
+Derived contracts:
+
+- `student_word_progress` aggregates lifetime frequency responses by student/stable item into correct, incorrect, and skipped counts, latest practice time, and latest outcome. Missing rows mean zero counts. Equal answer times use descending attempt ID/card position for a deterministic last outcome. Progress follows stable items across pool versions; it is not shared with an unrelated future vocabulary game.
+- `vocabulary_round_progress` reports response and outcome counts for every persisted round, including zero-response and ended partial rounds. Exactly 25 accepted responses completes a round; ending it does not fabricate completion.
+- `student_vocabulary_completeness` uses each explicit pool's complete membership, including missing progress as zero. It reports counts for total/practiced/successful items, full passes (minimum correct count), current pass, and current-pass completion. Empty pools have zero counts and current pass 1; pool changes preserve item history while showing an explicit changed denominator.
+- `speed_math_verified_bests` chooses one verified full-duration result per student/operation/duration/rules version, ordered by correct descending and incorrect ascending. Effective end time must equal start plus selected duration; verification must be populated and not earlier than the end. Equivalent best attempts choose earliest end then ascending UUID, without adding a competitive score criterion.
+- `speed_math_leaderboard_entries` applies shared `RANK()` by correct/incorrect counts within each operation/duration/rules category (`1, 1, 3` for a top tie). These are all-time backend ID records, not a public leaderboard. Names, audience, and inactive visibility are still undecided; raw views do not filter active state.
+
+**Implementation trade-off:** derive progress directly from authoritative response history instead of storing a second mutable summary. That removes summary synchronization/rebuild races; large histories may later justify a transactionally maintained cache. No percentages, mastery booleans, or editable pass counters are stored.
+
+**Server handoff:** persist accepted responses individually and reuse stable attempt/card identities. Database keys enforce uniqueness, but the future API must distinguish identical retries from conflicting payloads, resolve the authenticated student, validate the expected card/answer/time, and enforce current active state. Write attempt/typed result or attempt/round/response consistently in transactions. Never accept client-selected student identity, grading outcome, counters, rules, or `verified_at` as trusted inputs. A verification timestamp is a server-owned record marker, not an implemented grading engine. Storage of partial rounds does not implement resume behavior. All history relationships use restricted deletion, not cascading student data; retention/deletion policies remain pending.
+
+See [README game storage](../README.md#game-history-and-vocabulary-progress) for the command workflow and boundaries.
 
 ## Agreed requirements and direction
 
@@ -22,7 +65,7 @@
 - Initial database development and testing use fictitious students, not real roster data. Schema and game-persistence tests do not need to wait for Better Auth; real authentication and invitation flows still require later integration testing.
 - Keep the normal localhost development workflow unaffected by database experiments. Use an isolated test setup; do not automatically introduce a database requirement or mock student identity into ordinary development.
 
-Database query/migration tooling has not been selected. Drizzle was proposed, but is not installed or configured.
+Database query/migration tooling is Drizzle ORM with postgres.js and Drizzle Kit. Roster and typed game-history migrations are implemented; auth-linkage and invitation storage are still pending.
 
 ## Student identity and profile
 
@@ -110,7 +153,7 @@ Recommended resend behavior: issue a new token and revoke the previous outstandi
 - Never accept student-controlled class type, active state, or admin privileges during signup.
 - Enforce current `students.is_active` on protected student dashboard reads and writes, including requests using an existing session. Deactivation must not delete profile or progress records; registration must not change active state.
 - Implement email + PIN through the auth-owned credential flow. Better Auth owns hashing and verification; no student-profile endpoint reads, returns, or persists a PIN or its hash.
-- The admin and auth threads must agree on record ownership, ID types, registration transaction handling, and the selected invitation implementation before migrations are approved.
+- The admin and auth threads must agree on record ownership, ID types, registration transaction handling, and the selected invitation implementation before auth-linkage and invitation migrations are approved. The roster-only migration does not choose those contracts.
 
 The admin UI, email provider, sending implementation, and Better Auth integration remain outside this schema-planning task. No code in those scopes is changed by this document.
 
@@ -162,7 +205,7 @@ The initial leaderboard time window is all-time. Leaderboard audience, displayed
 
 At the initial schema review, `src/lib/frequency/vocabulary.ts` identified English/Spanish learning items by frequency rank and included optional alternative answers. That implementation used fixed frequency decks, and practice records distinguished `correct`, `incorrect`, and `skipped` outcomes. The adaptive design below is the agreed replacement; this schema-planning task does not implement or change the practice UI.
 
-Before persistence, assign each learning item a stable ID independent of its rank, deck position, English spelling, or Spanish spelling. An ID identifies the learning item, not merely a unique English string. Reordering the list must not move student progress to another item. Rank can remain content metadata without being the progress identifier.
+Learning items now have permanent UUIDs in the bundled vocabulary and database identity catalog, independent of rank, deck position, English spelling, or Spanish spelling. An ID identifies the learning item, not merely a unique English string. Reordering the list must not move student progress to another item; rank is versioned membership metadata, not the progress identifier.
 
 ### Adaptive 25-attempt practice (agreed)
 
@@ -203,9 +246,9 @@ Recommended persistence behavior: save each accepted response and its word progr
 
 | Concept | Purpose |
 | --- | --- |
-| Vocabulary items | Stable identity for content currently bundled in JSON. Decide whether to mirror an item catalog in PostgreSQL for foreign keys; no content-editor feature is required. |
+| Vocabulary items | Implemented identity catalog and versioned membership in PostgreSQL for foreign keys; content stays bundled in JSON. No content-editor feature is added. |
 | Vocabulary responses | Student/attempt, card position, item, outcome, and answer time. A word may appear more than once in a round, so deduplicate a retried card submission by attempt/card identity, not by word ID alone. |
-| Student word progress | Frequency-game progress keyed by student and stable item, not a fixed deck number. Proposed summary fields: `correct_count`, `incorrect_count`, `skipped_count`, `last_practiced_at`, and `last_outcome`. Counts are nonnegative and start at zero; last-practice fields can be null before practice. |
+| Student word progress | Implemented derived frequency-game view keyed by student/stable item, not a deck number: `correct_count`, `incorrect_count`, `skipped_count`, `last_practiced_at`, and `last_outcome`. Missing rows mean zero counts and null last-practice fields before practice. |
 
 Response history should be authoritative if a stored progress summary is introduced. Save responses idempotently; update any summary consistently with them, and keep the summary rebuildable. Persisted identity and grading must be server-controlled once database integration is added. Whether other vocabulary games share these counters is a separate future decision; fixed deck IDs must not define lasting progress.
 
@@ -215,7 +258,7 @@ The practice-flow implementation can be developed separately against these item/
 
 Saving IST assessments is a separate, unapproved feature. The current feature does not retain fitness data. If approved later, use assessment records linked to the student, with inputs, assessment date, age at assessment, explicit sex baseline, and a rules version. Preserve historical assessment meaning even if the profile or thresholds change. Decide data access and retention before storing these sensitive records.
 
-## Decisions to resolve before migrations
+## Decisions to resolve before remaining migrations and integration
 
 Staff-led enrollment, pre-account profiles, date of birth/gender left blank until required student signup, `male`/`female` as the only gender selections, invitation-only registration, unique student emails, repeatable PIN values with auth-owned hashing/verification, active-by-default roster profiles, admin-managed access, and reversible full dashboard blocking for inactive students are confirmed. Remaining identity/access decisions:
 
@@ -225,4 +268,4 @@ Staff-led enrollment, pre-account profiles, date of birth/gender left blank unti
 
 Adaptive 25-attempt rounds, repeats near pass boundaries, equal retry priority for skipped and incorrect answers with distinct recorded outcomes, and completeness tracking as a priority are confirmed. Speed Math leaderboards are also confirmed: all-time rankings, separate operation/duration categories, full-duration eligibility, one best result per student per category, most correct answers followed by fewest incorrect answers, and shared ranks for equal results. Next, resolve supported enrollment ages, exact vocabulary retry weighting, leaderboard visibility, round-resume behavior, and data deletion/retention policy. Student-owned information and server-controlled fields such as active state must have explicit editing permissions.
 
-After those decisions, approve the concrete fields, constraints, relationships, and initial migration scope. Then implement migrations and a development-only fictitious student seed, validate them against the local database, and connect the website one feature at a time. Do not create login-capable mock credentials or seed production automatically.
+The roster and game-history migrations, derived progress/ranking views, and development-only fictitious seed are implemented as the limited database steps described above. After the remaining decisions, approve the next concrete fields, constraints, relationships, and migration scope; add and validate those migrations against the isolated test database, then connect the website one feature at a time. Auth linkage must add the unique auth-user relationship and require date of birth/gender for linked profiles in coordination with invitation acceptance. Do not create login-capable mock credentials or seed production automatically.
