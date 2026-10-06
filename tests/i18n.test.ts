@@ -68,6 +68,28 @@ describe('translations', () => {
 		expect(translations.es.ist.categories.bodyFat).toBe('Grasa corporal estimada');
 	});
 
+	test('labels the four grade rings in test order in both languages', () => {
+		for (const { code } of languages) {
+			const messages = translations[code].designPreview.focus;
+			expect(Object.keys(messages.subjects)).toEqual(['wk', 'pc', 'mk', 'ar']);
+			expect(Object.values(messages.subjects).map(({ code }) => code)).toEqual(['WK', 'PC', 'MK', 'AR']);
+			expect(formatMessage(messages.score, { score: 78 })).toContain('78');
+			expect(formatMessage(messages.scoreText, { score: 78 })).not.toContain('{');
+			expect(messages.sampleData.length).toBeGreaterThan(0);
+			expect(messages.sampleNote).toContain('ASVAB');
+		}
+	});
+
+	test('provides Speed Math setup, session, and results copy in both languages', () => {
+		for (const { code } of languages) {
+			const messages = translations[code].speedMath;
+			for (const key of ['briefingTitle', 'sessionTitle', 'ready', 'live', 'timerHint', 'minuteUnit', 'accuracyFirst', 'keyboardHint', 'resultsHint'] as const) {
+				expect(messages[key].trim().length).toBeGreaterThan(0);
+			}
+			expect(formatMessage(messages.challengeLabel, { operation: messages.operations.division, minutes: 15 })).not.toContain('{');
+		}
+	});
+
 	test('keeps the product name unchanged in both languages', () => {
 		for (const { code } of languages) {
 			expect(translations[code].header.brand).toBe('Masterminds');

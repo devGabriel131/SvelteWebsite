@@ -332,7 +332,150 @@ const spanishAttendance: typeof englishAttendance = {
 	}
 };
 
+const englishDesignPreview = {
+	pageTitle: 'Home design study | Masterminds ASVAB',
+	description: 'Compare three home page design directions using the Masterminds company colors.',
+	title: 'One home. Three directions.',
+	label: 'Design study',
+	chooseDirection: 'Choose a design direction',
+	back: 'Back to current home',
+	note: 'Design comparison. Focus is now the main home page. Tool links open the existing pages.',
+	recommendation: 'Recommended',
+	directions: {
+		focus: {
+			name: 'Focus',
+			summary: 'A calm, dark workspace. A sidebar keeps navigation familiar, with grades and practice up front and documents out of the way.',
+			tradeoff: 'Low effort · Reuses the current shell structure. Best for everyday use; the sidebar takes some desktop space.'
+		},
+		'field-notes': {
+			name: 'Field Notes',
+			summary: 'A warm, cream-colored study space. Big typography, a featured practice card, and an uncluttered resource list.',
+			tradeoff: 'Low–medium effort · Same components, light theme tokens. More distinctive, but the light palette would need checking on the other pages.'
+		},
+		launchpad: {
+			name: 'Launchpad',
+			summary: 'A compact, action-first home. No sidebar, no distractions: choose a tool and get started.',
+			tradeoff: 'Lowest effort · A header and a responsive card grid. Great on phones; less room for navigation as the site grows.'
+		}
+	},
+	workspace: 'Student workspace',
+	student: 'Student',
+	studentProfile: 'Student profile preview',
+	home: 'Home',
+	practice: 'Practice',
+	resources: 'Student resources',
+	allTools: 'Your toolkit',
+	openTool: 'Open tool',
+	footer: 'Small steps. Strong foundations.',
+	focus: {
+		eyebrow: 'ASVAB practice',
+		title: 'Your grades',
+		intro: 'Four core areas. One clear view.',
+		sectionHint: 'Choose a skill to work on.',
+		sampleData: 'Sample grades',
+		sampleNote: 'Preview only: sample practice percentages, not student records or official ASVAB scores.',
+		score: '{score}%',
+		scoreText: 'Sample practice grade: {score} percent',
+		subjects: {
+			wk: { code: 'WK', title: 'Word Knowledge' },
+			pc: { code: 'PC', title: 'Paragraph Comprehension' },
+			mk: { code: 'MK', title: 'Math Knowledge' },
+			ar: { code: 'AR', title: 'Arithmetic Reasoning' }
+		}
+	},
+	fieldNotes: {
+		eyebrow: 'A little practice goes a long way',
+		title: 'Prepare for your next chapter.',
+		intro: 'A quieter space for a bigger goal. Your ASVAB practice and student essentials, thoughtfully brought together.',
+		featured: 'A place to begin',
+		sectionHint: 'Everything you need, without the noise.'
+	},
+	launchpad: {
+		eyebrow: 'Less searching. More doing.',
+		title: 'What will you work on today?',
+		intro: 'Pick a tool. Take the next step.'
+	},
+	tools: {
+		math: { title: 'Speed Math', description: 'Build speed and accuracy with timed arithmetic practice.', action: 'Practice math', category: 'Arithmetic' },
+		vocabulary: { title: 'English vocabulary', description: 'Practice frequent English words with Spanish translations.', action: 'Practice vocabulary', category: 'English' },
+		ist: { title: 'Physical readiness', description: 'Enter your IST results, check readiness, and download a report.', action: 'Open IST assessment', category: 'Readiness' },
+		attendance: { title: 'Attendance certificate', description: 'Create a letter for your employer with your class schedule.', action: 'Create certificate', category: 'Documents' }
+	}
+};
+
+const spanishDesignPreview: typeof englishDesignPreview = {
+	pageTitle: 'Propuestas de inicio | Masterminds ASVAB',
+	description: 'Compara tres propuestas para la página de inicio con los colores de Masterminds.',
+	title: 'Un inicio. Tres propuestas.',
+	label: 'Exploración de diseño',
+	chooseDirection: 'Elige una propuesta de diseño',
+	back: 'Volver al inicio actual',
+	note: 'Comparación de diseños. Enfoque es ahora la página de inicio. Los enlaces abren las herramientas existentes.',
+	recommendation: 'Recomendado',
+	directions: {
+		focus: {
+			name: 'Enfoque',
+			summary: 'Un espacio oscuro y tranquilo. La barra lateral mantiene la navegación familiar, con las notas y la práctica al frente y los documentos en segundo plano.',
+			tradeoff: 'Esfuerzo bajo · Reutiliza la estructura actual. Ideal para el uso diario; la barra lateral ocupa parte del espacio en computadoras.'
+		},
+		'field-notes': {
+			name: 'Cuaderno',
+			summary: 'Un espacio de estudio cálido en tonos crema. Tipografía grande, una tarjeta de práctica destacada y una lista sencilla de recursos.',
+			tradeoff: 'Esfuerzo bajo–medio · Los mismos componentes con un tema claro. Más distintivo, pero habría que revisar los colores en las demás páginas.'
+		},
+		launchpad: {
+			name: 'Punto de partida',
+			summary: 'Un inicio compacto que invita a actuar. Sin barra lateral ni distracciones: elige una herramienta y empieza.',
+			tradeoff: 'El menor esfuerzo · Un encabezado y tarjetas adaptables. Ideal para celulares; menos espacio de navegación a medida que crezca el sitio.'
+		}
+	},
+	workspace: 'Espacio del estudiante',
+	student: 'Estudiante',
+	studentProfile: 'Vista previa del perfil del estudiante',
+	home: 'Inicio',
+	practice: 'Práctica',
+	resources: 'Recursos del estudiante',
+	allTools: 'Tus herramientas',
+	openTool: 'Abrir herramienta',
+	footer: 'Pasos pequeños. Bases sólidas.',
+	focus: {
+		eyebrow: 'Práctica del ASVAB',
+		title: 'Tus notas',
+		intro: 'Cuatro áreas clave. Una vista clara.',
+		sectionHint: 'Elige una destreza para practicar.',
+		sampleData: 'Notas de ejemplo',
+		sampleNote: 'Solo una vista previa: porcentajes de práctica ficticios, no notas de estudiantes ni puntuaciones oficiales del ASVAB.',
+		score: '{score} %',
+		scoreText: 'Nota de práctica de ejemplo: {score} por ciento',
+		subjects: {
+			wk: { code: 'WK', title: 'Conocimiento de palabras' },
+			pc: { code: 'PC', title: 'Comprensión de párrafos' },
+			mk: { code: 'MK', title: 'Conocimiento matemático' },
+			ar: { code: 'AR', title: 'Razonamiento aritmético' }
+		}
+	},
+	fieldNotes: {
+		eyebrow: 'Un poco de práctica hace la diferencia',
+		title: 'Prepárate para tu próximo capítulo.',
+		intro: 'Un espacio tranquilo para una gran meta. Tu práctica del ASVAB y tus recursos de estudiante, juntos en un solo lugar.',
+		featured: 'Un punto de partida',
+		sectionHint: 'Todo lo que necesitas, sin distracciones.'
+	},
+	launchpad: {
+		eyebrow: 'Menos búsquedas. Más acción.',
+		title: '¿Qué vas a practicar hoy?',
+		intro: 'Elige una herramienta. Da el próximo paso.'
+	},
+	tools: {
+		math: { title: 'Matemáticas rápidas', description: 'Desarrolla rapidez y precisión con práctica de aritmética cronometrada.', action: 'Practicar matemáticas', category: 'Aritmética' },
+		vocabulary: { title: 'Vocabulario en inglés', description: 'Practica palabras frecuentes en inglés con traducciones al español.', action: 'Practicar vocabulario', category: 'Inglés' },
+		ist: { title: 'Preparación física', description: 'Ingresa tus resultados del IST, verifica tu preparación y descarga un informe.', action: 'Abrir evaluación IST', category: 'Preparación física' },
+		attendance: { title: 'Certificado de asistencia', description: 'Prepara una carta para tu patrono con tu horario de clases.', action: 'Crear certificado', category: 'Documentos' }
+	}
+};
+
 const english = {
+	designPreview: englishDesignPreview,
 	admin: englishAdmin,
 	attendance: englishAttendance,
 	auth: {
@@ -384,6 +527,15 @@ const english = {
 	},
 	speedMath: {
 		pageTitle: 'Speed Math | Masterminds ASVAB',
+		briefingTitle: 'Small sessions. Steady progress.',
+		sessionTitle: 'Your session',
+		ready: 'Ready when you are',
+		live: 'Session in progress',
+		timerHint: 'The clock starts when you do.',
+		minuteUnit: 'min',
+		accuracyFirst: 'Accuracy first. Speed follows.',
+		keyboardHint: 'Keyboard ready',
+		resultsHint: 'One session closer. Keep building your rhythm.',
 		description: 'Build mental math speed with timed addition, subtraction, multiplication, and division practice.',
 		eyebrow: 'Mental math practice',
 		title: 'Speed Math',
@@ -592,6 +744,7 @@ frequency: {
 export type Messages = typeof english;
 
 const spanish: Messages = {
+	designPreview: spanishDesignPreview,
 	admin: spanishAdmin,
 	attendance: spanishAttendance,
 	auth: {
@@ -643,6 +796,15 @@ const spanish: Messages = {
 	},
 	speedMath: {
 		pageTitle: 'Matemáticas rápidas | Masterminds ASVAB',
+		briefingTitle: 'Sesiones cortas. Progreso constante.',
+		sessionTitle: 'Tu sesión',
+		ready: 'Todo listo para comenzar',
+		live: 'Sesión en curso',
+		timerHint: 'El tiempo comienza cuando tú decidas.',
+		minuteUnit: 'min',
+		accuracyFirst: 'Primero la precisión. Luego la velocidad.',
+		keyboardHint: 'Listo para el teclado',
+		resultsHint: 'Una sesión más de progreso. Sigue encontrando tu ritmo.',
 		description: 'Mejora tu velocidad de cálculo mental con práctica cronometrada de suma, resta, multiplicación y división.',
 		eyebrow: 'Práctica de cálculo mental',
 		title: 'Matemáticas rápidas',

@@ -26,6 +26,10 @@
 	<main id="main-content" class="admin-main" tabindex="-1">
 		{@render children()}
 	</main>
+{:else if page.route.id === '/' || page.route.id === '/design-preview' || page.route.id === '/speed-math'}
+	<main id="main-content" class="home-main" tabindex="-1">
+		{@render children()}
+	</main>
 {:else}
 	<div class="dashboard-shell">
 		<DashboardHeader />
@@ -39,7 +43,8 @@
 {/if}
 
 <style>
-	.admin-main {
+	.admin-main,
+	.home-main {
 		padding: 0;
 	}
 
