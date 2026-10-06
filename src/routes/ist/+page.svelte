@@ -6,6 +6,9 @@
 		import IstChoiceGroup from '#lib/components/IstChoiceGroup.svelte';
 	import IstExerciseInput from '#lib/components/IstExerciseInput.svelte';
 	import IstField from '#lib/components/IstField.svelte';
+	import * as Alert from '#lib/components/ui/alert/index.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import * as Card from '#lib/components/ui/card/index.js';
 	import { useLanguage } from '#lib/i18n/language.svelte.ts';
 	import { presentIstAssessment } from '#lib/ist/presentation.ts';
 	import { exerciseKeys, istFields, type IstErrors, type IstFormValues } from '#lib/ist/types.ts';
@@ -96,6 +99,7 @@
 			};
 		}}
 	>
+		<Card.Root class="gap-0 rounded-2xl border border-border p-0 ring-0">
 		<!-- Keep Enter mapped to assessment rather than a native exercise-choice button. -->
 		<noscript><button type="submit" hidden>{messages.submit}</button></noscript>
 		<fieldset class="form-body" disabled={submitting}>
@@ -148,60 +152,66 @@
 			</section>
 		</fieldset>
 		<div class="form-footer">
-			{#if hasErrors}<p class="error-summary" role="alert">{messages.errorSummary}</p>{/if}
-			{#if requestError || form?.serverError}<p class="error-summary" role="alert">{messages.serverError}</p>{/if}
-			<button class="primary-button" type="submit" disabled={submitting} aria-busy={submitting}>
+			{#if hasErrors}
+				<Alert.Root variant="destructive" class="mb-4">
+					<Alert.Description>{messages.errorSummary}</Alert.Description>
+				</Alert.Root>
+			{/if}
+			{#if requestError || form?.serverError}
+				<Alert.Root variant="destructive" class="mb-4">
+					<Alert.Description>{messages.serverError}</Alert.Description>
+				</Alert.Root>
+			{/if}
+			<Button class="min-h-[2.8rem]" type="submit" disabled={submitting} aria-busy={submitting}>
 				{submitting ? messages.submitting : messages.submit}
-				<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6" /></svg>
-			</button>
+				<svg class="submit-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6" /></svg>
+			</Button>
 		</div>
+		</Card.Root>
 	</form>
 
 	{#if report && form?.reports}
 		<section class="assessment" aria-labelledby="assessment-title" tabindex="-1" bind:this={resultsElement}>
+			<Card.Root class="gap-0 rounded-2xl border border-border p-[clamp(1.1rem,3vw,1.75rem)] ring-0">
 			<div class="assessment-heading">
 				<h2 id="assessment-title">{messages.resultsTitle}</h2>
-				<a class="download-button" href={`data:application/pdf;base64,${form.reports[language.current]}`}
+				<Button variant="outline" class="min-h-[2.8rem]" href={`data:application/pdf;base64,${form.reports[language.current]}`}
 					download={`${messages.reportFilename}-${report.assessedAt.slice(0, 10)}.pdf`}>
-					<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4" /></svg>
+					<svg class="download-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4" /></svg>
 					{messages.download}
-				</a>
+				</Button>
 			</div>
 			<IstAssessmentReport {report} />
+			</Card.Root>
 		</section>
 	{/if}
 </div>
 
 <style>
 	.ist-page { max-width: 64rem; margin-inline: auto; }
-	.eyebrow { margin: 0 0 0.6rem; color: var(--color-accent); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+	.eyebrow { margin: 0 0 0.6rem; color: var(--primary); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
 	h1 { margin: 0; font-family: var(--font-display); font-size: clamp(1.4rem, 3vw, 2.1rem); line-height: 1.3; text-transform: uppercase; overflow-wrap: anywhere; }
-	.introduction { max-width: 44rem; margin: 0.9rem 0 0; color: var(--color-muted); font-size: 0.9375rem; }
+	.introduction { max-width: 44rem; margin: 0.9rem 0 0; color: var(--muted-foreground); font-size: 0.9375rem; }
 	.page-heading { margin-bottom: 1.75rem; }
-	form, .assessment { border: 1px solid var(--color-border); border-radius: 1rem; background: var(--color-surface); }
 
 	.form-body { min-width: 0; margin: 0; padding: 0; border: 0; }
 	.form-section { padding: clamp(1.1rem, 3vw, 1.75rem); }
-	.form-section + .form-section { border-top: 1px solid var(--color-border); }
+	.form-section + .form-section { border-top: 1px solid var(--border); }
 	h2 { margin: 0; font-size: 1.125rem; }
 	.section-heading { margin-bottom: 1.25rem; }
-	.section-heading p { margin: 0.35rem 0 0; color: var(--color-muted); font-size: 0.8125rem; }
+	.section-heading p { margin: 0.35rem 0 0; color: var(--muted-foreground); font-size: 0.8125rem; }
 	.student-fields { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 0.7fr); gap: 1rem; }
 	.measurements-grid, .exercises-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.1rem; }
 	.sex-field { min-width: 0; }
-	.form-footer { padding: 1.25rem clamp(1.1rem, 3vw, 1.75rem); border-top: 1px solid var(--color-border); }
-	.error-summary { margin: 0 0 1rem; color: #f0a6a6; font-size: 0.875rem; }
-	.primary-button, .download-button { display: inline-flex; align-items: center; justify-content: center; gap: 0.6rem; min-height: 2.8rem; padding: 0.7rem 1.05rem; border: 1px solid var(--color-accent); border-radius: 0.5rem; font-weight: 700; font-size: 0.875rem; text-decoration: none; cursor: pointer; }
-	.primary-button { background: var(--color-accent); color: var(--color-background); }
-	.primary-button:hover { filter: brightness(1.08); }
-	.primary-button:disabled { cursor: wait; opacity: 0.6; }
-	.download-button { color: var(--color-accent); background: var(--color-accent-soft); }
-	.download-button:hover { background: color-mix(in srgb, var(--color-accent) 22%, var(--color-surface)); }
+	.form-footer { padding: 1.25rem clamp(1.1rem, 3vw, 1.75rem); border-top: 1px solid var(--border); }
 	svg { flex-shrink: 0; width: 1.1rem; height: 1.1rem; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-	.assessment { margin-top: 2rem; padding: clamp(1.1rem, 3vw, 1.75rem); }
+	.assessment { margin-top: 2rem; }
 	.assessment-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.25rem; }
 	.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 	@media (max-width: 55rem) { .student-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } .student-name { grid-column: 1 / -1; } }
 	@media (max-width: 45rem) { .exercises-grid { grid-template-columns: minmax(0, 1fr); } }
-	@media (max-width: 30rem) { .measurements-grid { grid-template-columns: minmax(0, 1fr); } .primary-button, .download-button { width: 100%; } }
+	@media (max-width: 30rem) {
+		.measurements-grid { grid-template-columns: minmax(0, 1fr); }
+		.form-footer :global([data-slot="button"]), .assessment-heading :global([data-slot="button"]) { width: 100%; }
+	}
 </style>

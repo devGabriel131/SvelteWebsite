@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import * as Card from '#lib/components/ui/card/index.js';
 	import { useLanguage } from '#lib/i18n/language.svelte.ts';
 
 	const language = useLanguage();
@@ -16,36 +18,48 @@
 	<p class="introduction">{language.messages.home.introduction}</p>
 
 	<section class="feature-card" aria-labelledby="feature-title">
-		<span class="placeholder-icon" aria-hidden="true">
-			<svg viewBox="0 0 24 24" fill="none">
-				<path d="M3 12h4l3-7 4 14 3-7h4" />
-			</svg>
-		</span>
-		<h2 id="feature-title">{language.messages.home.emptyTitle}</h2>
-		<p>{language.messages.home.emptyDescription}</p>
-		<a href={resolve('/ist')}>{language.messages.home.openIst}</a>
+		<Card.Root class="min-h-80 items-center justify-center gap-0 rounded-2xl p-8 text-center">
+			<span class="placeholder-icon" aria-hidden="true">
+				<svg viewBox="0 0 24 24" fill="none">
+					<path d="M3 12h4l3-7 4 14 3-7h4" />
+				</svg>
+			</span>
+			<h2 id="feature-title">{language.messages.home.emptyTitle}</h2>
+			<p>{language.messages.home.emptyDescription}</p>
+			<Button href={resolve('/ist')} class="mt-5 px-4 py-[0.7rem] font-bold">
+				{language.messages.home.openIst}
+			</Button>
+		</Card.Root>
 	</section>
 
 	<section class="feature-card" aria-labelledby="attendance-title">
-		<span class="placeholder-icon" aria-hidden="true">
-			<svg viewBox="0 0 24 24" fill="none">
-				<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Zm0 0v6h6M8 13h8m-8 4h5" />
-			</svg>
-		</span>
-		<h2 id="attendance-title">{language.messages.attendance.title}</h2>
-		<p>{language.messages.attendance.cardDescription}</p>
-		<a href={resolve('/attendance')}>{language.messages.attendance.open}</a>
+		<Card.Root class="min-h-80 items-center justify-center gap-0 rounded-2xl p-8 text-center">
+			<span class="placeholder-icon" aria-hidden="true">
+				<svg viewBox="0 0 24 24" fill="none">
+					<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Zm0 0v6h6M8 13h8m-8 4h5" />
+				</svg>
+			</span>
+			<h2 id="attendance-title">{language.messages.attendance.title}</h2>
+			<p>{language.messages.attendance.cardDescription}</p>
+			<Button href={resolve('/attendance')} class="mt-5 px-4 py-[0.7rem] font-bold">
+				{language.messages.attendance.open}
+			</Button>
+		</Card.Root>
 	</section>
 
 	<section class="feature-card" aria-labelledby="speed-math-title">
-		<span class="placeholder-icon" aria-hidden="true">
-			<svg viewBox="0 0 24 24" fill="none">
-				<path d="M12 3v3m0 0a8 8 0 1 0 8 8 8 8 0 0 0-8-8Zm-3-3h6m3 4 2-2m-8 6v4l3 2" />
-			</svg>
-		</span>
-		<h2 id="speed-math-title">{language.messages.speedMath.title}</h2>
-		<p>{language.messages.speedMath.cardDescription}</p>
-		<a href={resolve('/speed-math')}>{language.messages.speedMath.open}</a>
+		<Card.Root class="min-h-80 items-center justify-center gap-0 rounded-2xl p-8 text-center">
+			<span class="placeholder-icon" aria-hidden="true">
+				<svg viewBox="0 0 24 24" fill="none">
+					<path d="M12 3v3m0 0a8 8 0 1 0 8 8 8 8 0 0 0-8-8Zm-3-3h6m3 4 2-2m-8 6v4l3 2" />
+				</svg>
+			</span>
+			<h2 id="speed-math-title">{language.messages.speedMath.title}</h2>
+			<p>{language.messages.speedMath.cardDescription}</p>
+			<Button href={resolve('/speed-math')} class="mt-5 px-4 py-[0.7rem] font-bold">
+				{language.messages.speedMath.open}
+			</Button>
+		</Card.Root>
 	</section>
 </div>
 
@@ -57,7 +71,7 @@
 
 	.eyebrow {
 		margin: 0 0 0.5rem;
-		color: var(--color-accent);
+		color: var(--primary);
 		font-size: 0.75rem;
 		font-weight: 700;
 		letter-spacing: 0.1em;
@@ -77,22 +91,12 @@
 
 	.introduction {
 		margin: 0.75rem 0 0;
-		color: var(--color-muted);
+		color: var(--muted-foreground);
 		font-size: 0.9375rem;
 	}
 
 	.feature-card {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		min-height: 20rem;
 		margin-top: 2rem;
-		padding: 2rem;
-		border: 1px solid var(--color-border);
-		border-radius: 1rem;
-		background: var(--color-surface);
-		text-align: center;
 	}
 
 	.placeholder-icon {
@@ -102,14 +106,13 @@
 		height: 3rem;
 		margin-bottom: 1.25rem;
 		border-radius: 0.875rem;
-		background: var(--color-background);
-		color: var(--color-accent);
+		background: var(--background);
 	}
 
 	svg {
 		width: 1.5rem;
 		height: 1.5rem;
-		stroke: currentColor;
+		stroke: var(--primary);
 		stroke-width: 1.5;
 		stroke-linecap: round;
 	}
@@ -123,20 +126,9 @@
 	.feature-card p {
 		max-width: 25rem;
 		margin: 0.5rem 0 0;
-		color: var(--color-muted);
+		color: var(--muted-foreground);
 		font-size: 0.875rem;
 		line-height: 1.75;
 	}
 
-	.feature-card a {
-		margin-top: 1.25rem;
-		padding: 0.7rem 1rem;
-		border: 1px solid var(--color-accent);
-		border-radius: 0.5rem;
-		background: var(--color-accent-soft);
-		color: var(--color-accent);
-		font-size: 0.875rem;
-		font-weight: 700;
-		text-decoration: none;
-	}
 </style>

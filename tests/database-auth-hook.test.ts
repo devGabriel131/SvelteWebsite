@@ -302,6 +302,7 @@ describeDatabase('auth hook with real Better Auth and isolated PostgreSQL fixtur
 				const layoutHeaders = new Headers();
 				expect(await loadRootLayout({
 					locals,
+					request: new Request(`http://localhost${path}`),
 					setHeaders(headers) {
 						for (const [name, value] of Object.entries(headers)) layoutHeaders.set(name, value);
 					}

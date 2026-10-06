@@ -1,3 +1,7 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@custom-variant dark (&:is(.dark *));
+
 @font-face {
 	font-family: 'Syncopate';
 	font-style: normal;
@@ -26,48 +30,93 @@
 	--brand-cream: #fff5d9;
 	--brand-slate: #7b949c;
 	--brand-sage: #b7c690;
-
-
 	--font-display: 'Syncopate', 'Trebuchet MS', sans-serif;
 	--font-body: 'Space Grotesk', 'Avenir Next', sans-serif;
-
-	font-family: var(--font-body);
-	font-weight: 500;
-	color-scheme: dark;
-	color: var(--color-text);
-	background: var(--color-background);
-	font-synthesis: none;
-	text-rendering: optimizeLegibility;
-	-webkit-font-smoothing: antialiased;
-
-	--color-background: #11151c;
-	--color-surface: #191f28;
-	--color-text: var(--brand-cream);
-	--color-muted: color-mix(in srgb, var(--brand-cream) 72%, transparent);
-	--color-border: color-mix(in srgb, var(--brand-slate) 30%, transparent);
-	--color-accent: var(--brand-sage);
-	--color-accent-secondary: var(--brand-slate);
-	--color-accent-soft: color-mix(in srgb, var(--brand-sage) 14%, var(--color-surface));
+	--font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+	--background: #11151c;
+	--foreground: var(--brand-cream);
+	--card: #191f28;
+	--card-foreground: var(--foreground);
+	--popover: var(--card);
+	--popover-foreground: var(--foreground);
+	--primary: var(--brand-sage);
+	--primary-foreground: var(--background);
+	--secondary: var(--brand-slate);
+	--secondary-foreground: var(--background);
+	--muted: color-mix(in srgb, var(--brand-slate) 12%, var(--card));
+	--muted-foreground: color-mix(in srgb, var(--brand-cream) 72%, transparent);
+	--accent: color-mix(in srgb, var(--brand-sage) 14%, var(--card));
+	--accent-foreground: var(--brand-sage);
+	--destructive: #f0a6a6;
+	--warning: #e8b779;
+	--border: color-mix(in srgb, var(--brand-slate) 30%, transparent);
+	--input: var(--border);
+	--ring: var(--brand-sage);
+	--radius: 0.625rem;
 }
 
-* {
-	box-sizing: border-box;
+@theme inline {
+	--font-sans: var(--font-body);
+	--font-weight-semibold: 700;
+	--radius-sm: calc(var(--radius) * 0.6);
+	--radius-md: calc(var(--radius) * 0.8);
+	--radius-lg: var(--radius);
+	--radius-xl: calc(var(--radius) * 1.4);
+	--radius-2xl: calc(var(--radius) * 1.8);
+	--radius-3xl: calc(var(--radius) * 2.2);
+	--radius-4xl: calc(var(--radius) * 2.6);
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+	--color-popover: var(--popover);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-destructive: var(--destructive);
+	--color-warning: var(--warning);
+	--color-border: var(--border);
+	--color-input: var(--input);
+	--color-ring: var(--ring);
 }
 
-body {
-	margin: 0;
-	min-width: 20rem;
-	line-height: 1.5;
-}
+@layer base {
+	:root {
+		font-family: var(--font-body);
+		font-weight: 500;
+		color-scheme: dark;
+		color: var(--foreground);
+		background: var(--background);
+		font-synthesis: none;
+		text-rendering: optimizeLegibility;
+		-webkit-font-smoothing: antialiased;
+	}
 
-:focus-visible {
-	outline: 2px solid var(--color-accent);
-	outline-offset: 4px;
-}
+	* {
+		box-sizing: border-box;
+		border-color: var(--border);
+	}
 
-button,
-input,
-select,
-textarea {
-	font: inherit;
+	body {
+		margin: 0;
+		min-width: 20rem;
+		line-height: 1.5;
+		background: var(--background);
+		color: var(--foreground);
+	}
+
+	:focus-visible {
+		outline: 2px solid var(--ring);
+		outline-offset: 4px;
+	}
+
+	button, input, select, textarea {
+		font: inherit;
+	}
 }

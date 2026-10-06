@@ -1,5 +1,12 @@
 <script lang="ts">
 	import { tick } from 'svelte';
+	import * as Alert from '#lib/components/ui/alert/index.js';
+	import { Badge } from '#lib/components/ui/badge/index.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import * as Card from '#lib/components/ui/card/index.js';
+	import { Input } from '#lib/components/ui/input/index.js';
+	import { Label } from '#lib/components/ui/label/index.js';
+	import { Progress } from '#lib/components/ui/progress/index.js';
 	import { useLanguage } from '#lib/i18n/language.svelte.ts';
 	import { formatMessage } from '#lib/i18n/translations.ts';
 	import {
@@ -20,8 +27,8 @@
 	let query = $state('');
 	let activeIndex = $state(0);
 	let suggestionsOpen = $state(false);
-	let answerInput = $state<HTMLInputElement>();
-	let nextButton = $state<HTMLButtonElement>();
+	let answerInput = $state<HTMLElement | null>(null);
+	let nextButton = $state<HTMLElement | null>(null);
 	let summary = $state<HTMLElement>();
 
 	const roundLabel = $derived(formatMessage(messages.roundLabel, {
@@ -43,9 +50,7 @@
 	const skippedCount = $derived(round?.answers.filter(({ outcome }) => outcome === 'skipped').length ?? 0);
 	const reviewWords = $derived(round ? wordsToReview(round) : []);
 	const answeredCount = $derived(round?.answers.length ?? 0);
-	const progress = $derived((answeredCount / roundSize) * 100);
 	const completeness = $derived(getCompleteness(frequencyWords, round?.progress ?? {}));
-	const passProgress = $derived((completeness.currentPassCompletedItems / completeness.totalItems) * 100);
 
 
 	function poolProgress(count: number): string {
@@ -125,7 +130,7 @@
 		<h1>{messages.title}</h1>
 		<p class="introduction">{messages.introduction}</p>
 		<div class="deck-facts">
-			<span class="direction">{messages.direction}</span>
+			<Badge variant="outline" class="h-auto min-w-0 whitespace-normal px-[0.7rem] py-[0.35rem] text-[0.8rem] text-primary">{messages.direction}</Badge>
 			<span>{formatMessage(messages.wordCount, { count: frequencyWords.length.toLocaleString(language.current) })}</span>
 			<span>{formatMessage(messages.roundSize, { count: roundSize })}</span>
 		</div>
@@ -134,9 +139,10 @@
 	<noscript><p class="notice">{messages.javascriptRequired}</p></noscript>
 
 	<section class="vocabulary-progress" aria-labelledby="vocabulary-progress-title">
+		<Card.Root class="gap-0 p-5 text-base">
 		<div class="pass-heading">
 			<h2 id="vocabulary-progress-title">{messages.progressTitle}</h2>
-			<span class="direction">{formatMessage(messages.currentPass, { pass: completeness.currentPass })}</span>
+			<Badge variant="outline" class="h-auto min-w-0 whitespace-normal px-[0.7rem] py-[0.35rem] text-[0.8rem] text-primary">{formatMessage(messages.currentPass, { pass: completeness.currentPass })}</Badge>
 		</div>
 		<dl class="coverage-stats">
 			<div><dt>{messages.practiceCoverage}</dt><dd>{poolProgress(completeness.practicedItems)}</dd></div>
@@ -147,18 +153,15 @@
 			<p>{messages.passProgressLabel}</p>
 			<p>{poolProgress(completeness.currentPassCompletedItems)}</p>
 		</div>
-		<div
-			class="progress-track pass-track"
-			role="progressbar"
+		<Progress
+			class="my-[0.65rem] h-[0.3rem]"
+			max={completeness.totalItems}
+			value={completeness.currentPassCompletedItems}
 			aria-label={messages.passProgressLabel}
-			aria-valuemin={0}
-			aria-valuemax={completeness.totalItems}
-			aria-valuenow={completeness.currentPassCompletedItems}
 			aria-valuetext={poolProgress(completeness.currentPassCompletedItems)}
-		>
-			<div style:width={`${passProgress}%`}></div>
-		</div>
+		/>
 
+		</Card.Root>
 	</section>
 
 
@@ -180,28 +183,25 @@
 					<div><dt>{messages.skippedCount}</dt><dd>{skippedCount}</dd></div>
 				</dl>
 			</div>
-			<div
-				class="progress-track"
-				role="progressbar"
+			<Progress
+				class="mt-4 mb-7 h-[0.3rem]"
+				max={roundSize}
+				value={answeredCount}
 				aria-label={messages.progressLabel}
-				aria-valuemin={0}
-				aria-valuemax={roundSize}
-				aria-valuenow={answeredCount}
 				aria-valuetext={formatMessage(messages.answeredProgress, { answered: answeredCount, total: roundSize })}
-			>
-				<div style:width={`${progress}%`}></div>
-			</div>
+			/>
 
 			{#if round.complete && !currentCard}
 				<section class="round-summary" tabindex="-1" bind:this={summary} aria-labelledby="round-complete-title">
+					<Card.Root class="gap-0 p-[clamp(1.25rem,4vw,2.5rem)] text-base">
 					<div class="completion-icon" aria-hidden="true">✓</div>
 					<h2 id="round-complete-title">{messages.completeTitle}</h2>
 					<p class="summary-score">{formatMessage(messages.completeMessage, { correct: correctCount, total: roundSize })}</p>
 					<p class="muted">{reviewWords.length ? messages.reviewMessage : messages.perfectMessage}</p>
 					<div class="summary-actions">
-						<button class="primary-button" onclick={beginRound}>
+						<Button class="gap-3 px-4 py-3 font-bold" onclick={beginRound}>
 							{messages.nextRound}<span aria-hidden="true">→</span>
-						</button>
+						</Button>
 					</div>
 					{#if reviewWords.length}
 						<div class="review-list">
@@ -213,6 +213,7 @@
 							</dl>
 						</div>
 					{/if}
+					</Card.Root>
 				</section>
 			{:else if currentCard && currentWord}
 				<div class="study-layout">
@@ -246,7 +247,8 @@
 
 					<div class="answer-area">
 						{#if feedback}
-							<div class="feedback" class:success={feedback.outcome === 'correct'}>
+							<div class="feedback">
+								<Alert.Root role="status" class={feedback.outcome === 'correct' ? 'gap-0 bg-accent p-5' : 'gap-0 p-5'}>
 								<p class="feedback-label">
 									<span aria-hidden="true">{feedback.outcome === 'correct' ? '✓' : '↺'}</span>
 									{messages[feedback.outcome]}
@@ -263,12 +265,13 @@
 								{#if feedback.value !== null}
 									<p class="chosen-answer">{messages.yourAnswer}: <span lang="es">{feedback.value}</span></p>
 								{/if}
+								</Alert.Root>
 							</div>
 
-							<button class="primary-button next-button" bind:this={nextButton} onclick={nextCard} aria-describedby="revealed-answer">
+							<Button class="mt-5 w-full justify-between gap-3 px-4 py-3 font-bold" bind:ref={nextButton} onclick={nextCard} aria-describedby="revealed-answer">
 								{round.complete ? messages.finishRound : messages.nextCard}
 								<span aria-hidden="true">→</span>
-							</button>
+							</Button>
 							<p id="revealed-answer" class="visually-hidden">
 								{messages[feedback.outcome]}. <span lang="en">{currentWord.english}</span>: <span lang="es">{currentWord.spanish}</span>.
 								{#if currentWord.alternatives?.length}
@@ -276,11 +279,12 @@
 								{/if}
 							</p>
 						{:else}
-							<label for="spanish-answer">{messages.answerLabel}</label>
+							<Label for="spanish-answer" class="block text-[0.9rem] font-bold">{messages.answerLabel}</Label>
 							<p class="answer-hint" id="answer-hint">{messages.answerHint}</p>
-							<input
+							<Input
 								id="spanish-answer"
-								bind:this={answerInput}
+								class="min-h-[3.25rem] px-4 py-[0.85rem]"
+								bind:ref={answerInput}
 								bind:value={query}
 								lang="es"
 								role="combobox"
@@ -303,19 +307,19 @@
 								<ul id="spanish-suggestions" role="listbox" aria-label={messages.suggestionsLabel} hidden={!popupOpen}>
 									{#each suggestions as option, index (option)}
 										<li role="presentation">
-											<button
+											<Button
+												variant="ghost"
 												id={`spanish-option-${index}`}
-												class="suggestion"
-												class:active={activeIndex === index}
+												class="w-full justify-between gap-4 px-3 py-[0.65rem] text-left [overflow-wrap:anywhere]"
 												role="option"
 												aria-selected={activeIndex === index}
-												tabindex="-1"
+												tabindex={-1}
 												lang="es"
 												onpointerdown={(event) => event.preventDefault()}
 												onclick={() => submitAnswer(option)}
 											>
-												{option}<span aria-hidden="true">↵</span>
-											</button>
+												{option}<span class="text-secondary text-[0.8rem]" aria-hidden="true">↵</span>
+											</Button>
 										</li>
 									{/each}
 								</ul>
@@ -326,8 +330,8 @@
 								{query.trim() ? (suggestions.length ? formatMessage(messages.suggestionCount, { count: suggestions.length }) : messages.noMatches) : ''}
 							</p>
 							<div class="answer-actions">
-								<button class="primary-button" disabled={!activeOption} onclick={() => { if (activeOption) void submitAnswer(activeOption); }}>{messages.checkAnswer}</button>
-								<button class="text-button" onclick={() => submitAnswer(null)}>{messages.dontKnow}</button>
+								<Button class="gap-3 px-4 py-3 font-bold" disabled={!activeOption} onclick={() => { if (activeOption) void submitAnswer(activeOption); }}>{messages.checkAnswer}</Button>
+								<Button variant="link" class="px-[0.1rem] py-2 underline" onclick={() => submitAnswer(null)}>{messages.dontKnow}</Button>
 							</div>
 						{/if}
 					</div>
@@ -335,11 +339,13 @@
 			{/if}
 		{:else}
 			<div class="round-start">
+				<Card.Root class="gap-0 p-[clamp(1.25rem,4vw,2.5rem)] text-base">
 				<h2>{messages.readyTitle}</h2>
 				<p class="muted">{formatMessage(messages.startHint, { count: roundSize })}</p>
-				<button type="button" class="primary-button" onclick={beginRound}>
+				<Button type="button" class="mt-3 self-center gap-3 px-4 py-3 font-bold" onclick={beginRound}>
 					{messages.startRound}<span aria-hidden="true">→</span>
-				</button>
+				</Button>
+				</Card.Root>
 			</div>
 		{/if}
 	</section>
@@ -348,53 +354,46 @@
 
 <style>
 	.frequency-page { max-width: 70rem; margin-inline: auto; }
-	.eyebrow { margin: 0 0 0.5rem; color: var(--color-accent); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+	.eyebrow { margin: 0 0 0.5rem; color: var(--primary); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
 	h1 { margin: 0; font-family: var(--font-display); font-size: clamp(1.4rem, 3vw, 2.25rem); line-height: 1.3; letter-spacing: -0.02em; text-transform: uppercase; overflow-wrap: anywhere; }
-	.introduction { max-width: 45rem; margin: 0.9rem 0 0; color: var(--color-muted); }
-	.deck-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1.25rem; margin-top: 1.25rem; color: var(--color-muted); font-size: 0.8rem; }
-	.direction { padding: 0.35rem 0.7rem; border: 1px solid var(--color-border); border-radius: 2rem; color: var(--color-accent); background: var(--color-accent-soft); }
-	.vocabulary-progress { margin-top: 2rem; padding: 1.25rem; border: 1px solid var(--color-border); border-radius: 0.75rem; background: var(--color-surface); }
+	.introduction { max-width: 45rem; margin: 0.9rem 0 0; color: var(--muted-foreground); }
+	.deck-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1.25rem; margin-top: 1.25rem; color: var(--muted-foreground); font-size: 0.8rem; }
+	.vocabulary-progress { margin-top: 2rem; }
 	.pass-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; }
 	.pass-heading h2 { margin: 0; font-size: 1rem; }
-	.pass-heading .direction { font-size: 0.8rem; }
 	.coverage-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin: 1.25rem 0; }
-	.coverage-stats dt { color: var(--color-muted); font-size: 0.75rem; }
-	.coverage-stats dd { margin: 0.35rem 0 0; color: var(--color-accent); font-size: 0.875rem; font-weight: 700; font-variant-numeric: tabular-nums; }
-	.pass-progress-heading p { margin: 0; color: var(--color-muted); font-size: 0.75rem; }
-	.progress-track.pass-track { margin: 0.65rem 0; }
+	.coverage-stats dt { color: var(--muted-foreground); font-size: 0.75rem; }
+	.coverage-stats dd { margin: 0.35rem 0 0; color: var(--primary); font-size: 0.875rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+	.pass-progress-heading p { margin: 0; color: var(--muted-foreground); font-size: 0.75rem; }
 
-	label { display: block; font-weight: 700; font-size: 0.9rem; }
-	input { border: 1px solid var(--color-border); border-radius: 0.5rem; background: var(--color-background); color: var(--color-text); }
 	.practice-area { margin-top: 2rem; }
 	.round-heading { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
 	.round-heading .eyebrow { margin-bottom: 0.15rem; }
-	.card-progress { margin: 0; font-size: 0.875rem; color: var(--color-muted); }
+	.card-progress { margin: 0; font-size: 0.875rem; color: var(--muted-foreground); }
 	.scoreboard { display: flex; gap: 1.5rem; margin: 0; text-align: right; }
-	.scoreboard dt { color: var(--color-muted); font-size: 0.7rem; }
+	.scoreboard dt { color: var(--muted-foreground); font-size: 0.7rem; }
 	.scoreboard dd { margin: 0; font-size: 1.5rem; font-weight: 700; line-height: 1.3; font-variant-numeric: tabular-nums; }
-	.scoreboard div:first-child dd { color: var(--color-accent); }
-	.progress-track { height: 0.3rem; margin: 1rem 0 1.75rem; border-radius: 1rem; background: var(--color-border); overflow: hidden; }
-	.progress-track > div { height: 100%; border-radius: inherit; background: var(--color-accent); transition: width 200ms ease; }
+	.scoreboard div:first-child dd { color: var(--primary); }
 	.study-layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 2rem; align-items: start; }
 	.card-stack { position: relative; isolation: isolate; margin: 0 0.3rem 0.6rem; }
-	.card-stack::before, .card-stack::after { content: ''; position: absolute; inset: 0; z-index: -1; border: 1px solid var(--color-border); border-radius: 1rem; background: var(--color-surface); }
+	.card-stack::before, .card-stack::after { content: ''; position: absolute; inset: 0; z-index: -1; border: 1px solid var(--border); border-radius: 1rem; background: var(--card); }
 	.card-stack::before { transform: rotate(-2deg) translateY(0.35rem); }
 	.card-stack::after { transform: rotate(1deg) translateY(0.2rem); }
-	.flashcard { display: flex; flex-direction: column; min-height: 23rem; padding: 1.5rem; border: 1px solid var(--color-border); border-radius: 1rem; background: radial-gradient(ellipse at 50% 0%, var(--color-accent-soft), transparent 75%), var(--color-surface); }
-	.flashcard.revealed { border-color: var(--color-accent-secondary); }
-	.flashcard.correct { border-color: var(--color-accent); }
-	.card-topline { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.5rem; color: var(--color-muted); font-size: 0.6875rem; }
+	.flashcard { display: flex; flex-direction: column; min-height: 23rem; padding: 1.5rem; border: 1px solid var(--border); border-radius: 1rem; background: radial-gradient(ellipse at 50% 0%, var(--accent), transparent 75%), var(--card); }
+	.flashcard.revealed { border-color: var(--brand-slate); }
+	.flashcard.correct { border-color: var(--primary); }
+	.card-topline { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.5rem; color: var(--muted-foreground); font-size: 0.6875rem; }
 	.card-face { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; padding: 2rem 0.25rem; text-align: center; animation: reveal 220ms ease-out; }
 	.english-word { margin: 0; font-size: clamp(2.75rem, 5vw, 4.5rem); line-height: 1.15; letter-spacing: -0.04em; overflow-wrap: anywhere; max-width: 100%; }
-	.card-prompt { margin: 1.25rem 0 0; color: var(--color-muted); font-size: 0.875rem; }
-	.original-word { margin: 0; font-size: 1.5rem; color: var(--color-muted); overflow-wrap: anywhere; max-width: 100%; }
-	.translation-arrow { margin: 0.5rem 0; color: var(--color-accent-secondary); }
-	.translation { max-width: 100%; margin: 0; font-size: clamp(1.75rem, 3vw, 2.75rem); line-height: 1.25; letter-spacing: -0.03em; overflow-wrap: anywhere; color: var(--color-accent); }
+	.card-prompt { margin: 1.25rem 0 0; color: var(--muted-foreground); font-size: 0.875rem; }
+	.original-word { margin: 0; font-size: 1.5rem; color: var(--muted-foreground); overflow-wrap: anywhere; max-width: 100%; }
+	.translation-arrow { margin: 0.5rem 0; color: var(--brand-slate); }
+	.translation { max-width: 100%; margin: 0; font-size: clamp(1.75rem, 3vw, 2.75rem); line-height: 1.25; letter-spacing: -0.03em; overflow-wrap: anywhere; color: var(--primary); }
 	.alternative-answers {
 		max-width: 100%;
 		margin: 1rem 0 0;
 		font-size: 0.85rem;
-		color: var(--color-muted);
+		color: var(--muted-foreground);
 		overflow-wrap: anywhere;
 	}
 
@@ -402,53 +401,37 @@
 		display: block;
 		margin-bottom: 0.25rem;
 		font-size: 0.7rem;
-		color: var(--color-accent-secondary);
+		color: var(--brand-slate);
 	}
 
 
-	.card-bottomline { display: flex; justify-content: center; gap: 1rem; color: var(--color-accent-secondary); font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; }
+	.card-bottomline { display: flex; justify-content: center; gap: 1rem; color: var(--brand-slate); font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; }
 	.answer-area { min-width: 0; padding-top: 0.25rem; }
-	.answer-hint { margin: 0.4rem 0 1rem; font-size: 0.8rem; line-height: 1.65; color: var(--color-muted); }
-	input { width: 100%; min-height: 3.25rem; padding: 0.85rem 1rem; background: var(--color-surface); }
-	input::placeholder { color: var(--color-muted); opacity: 0.8; }
+	.answer-hint { margin: 0.4rem 0 1rem; font-size: 0.8rem; line-height: 1.65; color: var(--muted-foreground); }
 	.search-results { min-height: 3.5rem; margin-top: 0.5rem; }
-	ul { margin: 0; padding: 0.35rem; list-style: none; border: 1px solid var(--color-border); border-radius: 0.75rem; background: var(--color-surface); }
-	button { cursor: pointer; }
-	.suggestion { display: flex; align-items: center; justify-content: space-between; gap: 1rem; width: 100%; min-height: 2.75rem; padding: 0.65rem 0.75rem; border: 0; border-radius: 0.4rem; background: transparent; color: var(--color-text); text-align: left; overflow-wrap: anywhere; }
-	.suggestion span { color: var(--color-accent-secondary); font-size: 0.8rem; }
-	.suggestion:hover, .suggestion.active { background: var(--color-accent-soft); color: var(--color-accent); }
-	.search-empty { margin: 0; padding: 0.5rem 0.25rem; color: var(--color-muted); font-size: 0.8rem; }
+	ul { margin: 0; padding: 0.35rem; list-style: none; border: 1px solid var(--border); border-radius: 0.75rem; background: var(--card); }
+	.search-empty { margin: 0; padding: 0.5rem 0.25rem; color: var(--muted-foreground); font-size: 0.8rem; }
 	.answer-actions { display: flex; flex-wrap: wrap; gap: 0.75rem 1rem; align-items: center; margin-top: 1rem; }
-	.primary-button { display: inline-flex; justify-content: center; align-items: center; gap: 0.75rem; min-height: 2.75rem; padding: 0.75rem 1rem; border: 1px solid var(--color-accent); border-radius: 0.5rem; font-size: 0.875rem; font-weight: 700; }
-	.primary-button { background: var(--color-accent); color: var(--color-background); }
-	.primary-button:hover:not(:disabled) { filter: brightness(1.1); }
-	.primary-button:disabled { opacity: 0.4; cursor: not-allowed; }
-
-	.text-button { min-height: 2.75rem; padding: 0.5rem 0.1rem; border: 0; background: transparent; color: var(--color-muted); font-size: 0.875rem; text-decoration: underline; text-underline-offset: 0.25rem; }
-	.text-button:hover { color: var(--color-text); }
-	.feedback { margin-top: 1.5rem; padding: 1.25rem; border: 1px solid var(--color-border); border-radius: 0.75rem; background: var(--color-surface); }
-	.feedback.success { background: var(--color-accent-soft); }
+	.feedback { margin-top: 1.5rem; }
 	.feedback-label { display: flex; align-items: center; gap: 0.65rem; margin: 0; font-size: 1.15rem; font-weight: 700; }
-	.feedback-label span { color: var(--color-accent); }
-	.feedback-hint { margin: 0.6rem 0 0; color: var(--color-muted); font-size: 0.875rem; }
-	.chosen-answer { margin: 1rem 0 0; color: var(--color-muted); font-size: 0.8rem; }
-	.chosen-answer span { color: var(--color-text); }
-	.next-button { margin-top: 1.25rem; width: 100%; justify-content: space-between; }
-	.round-start, .round-summary { padding: clamp(1.25rem, 4vw, 2.5rem); border: 1px solid var(--color-border); border-radius: 1rem; background: var(--color-surface); text-align: center; }
+	.feedback-label span { color: var(--primary); }
+	.feedback-hint { margin: 0.6rem 0 0; color: var(--muted-foreground); font-size: 0.875rem; }
+	.chosen-answer { margin: 1rem 0 0; color: var(--muted-foreground); font-size: 0.8rem; }
+	.chosen-answer span { color: var(--foreground); }
+	.round-start, .round-summary { text-align: center; }
 	.round-start h2 { margin: 0; font-size: 1.5rem; }
-	.round-start .primary-button { margin-top: 0.75rem; }
-	.completion-icon { display: grid; place-items: center; width: 3rem; height: 3rem; margin: 0 auto 1rem; border-radius: 50%; background: var(--color-accent-soft); color: var(--color-accent); font-size: 1.5rem; }
+	.completion-icon { display: grid; place-items: center; width: 3rem; height: 3rem; margin: 0 auto 1rem; border-radius: 50%; background: var(--accent); color: var(--primary); font-size: 1.5rem; }
 	.round-summary h2 { margin: 0; font-size: 1.75rem; }
-	.summary-score { margin: 0.5rem 0; font-size: 1.1rem; color: var(--color-accent); }
-	.muted { color: var(--color-muted); font-size: 0.875rem; }
+	.summary-score { margin: 0.5rem 0; font-size: 1.1rem; color: var(--primary); }
+	.muted { color: var(--muted-foreground); font-size: 0.875rem; }
 	.summary-actions { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 1rem; margin-top: 1.5rem; }
-	.review-list { max-width: 40rem; margin: 2rem auto 0; text-align: left; }
-	.review-list h3 { margin: 0; font-size: 0.875rem; color: var(--color-muted); }
+	.review-list { width: 100%; max-width: 40rem; margin: 2rem auto 0; text-align: left; }
+	.review-list h3 { margin: 0; font-size: 0.875rem; color: var(--muted-foreground); }
 	.review-list dl { margin: 0.5rem 0 0; }
-	.review-list dl div { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; padding: 0.65rem 0; border-bottom: 1px solid var(--color-border); overflow-wrap: anywhere; }
-	.review-list dd { margin: 0; color: var(--color-accent); }
+	.review-list dl div { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; padding: 0.65rem 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+	.review-list dd { margin: 0; color: var(--primary); }
 
-	.notice { padding: 1rem; border: 1px solid var(--color-border); border-radius: 0.5rem; }
+	.notice { padding: 1rem; border: 1px solid var(--border); border-radius: 0.5rem; }
 	.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 	@keyframes reveal { from { opacity: 0; transform: translateY(0.5rem); } to { opacity: 1; transform: translateY(0); } }
 	@media (max-width: 64rem) {
@@ -461,5 +444,5 @@
 		.round-heading { align-items: flex-start; flex-wrap: wrap; }
 		.scoreboard { gap: 0.75rem; }
 	}
-	@media (prefers-reduced-motion: reduce) { .card-face { animation: none; } .progress-track > div { transition: none; } }
+	@media (prefers-reduced-motion: reduce) { .card-face { animation: none; } }
 </style>

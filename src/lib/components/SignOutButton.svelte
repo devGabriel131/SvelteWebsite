@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { authClient } from '#lib/auth-client.ts';
+	import * as Alert from '#lib/components/ui/alert/index.js';
+	import { Button } from '#lib/components/ui/button/index.js';
 	import { useLanguage } from '#lib/i18n/language.svelte.ts';
 
 	let { redirectTo = '/' }: { redirectTo?: '/' | '/admin' } = $props();
@@ -29,17 +31,20 @@
 </script>
 
 <div class="sign-out" lang={language.current}>
-	<button type="button" onclick={signOut} disabled={pending} aria-busy={pending}
+	<Button variant="outline" class="px-[0.85rem] py-[0.6rem] text-[0.8125rem] font-bold"
+		type="button" onclick={signOut} disabled={pending} aria-busy={pending}
 		aria-describedby={error ? `${id}-error` : undefined}>
 		{pending ? language.messages.auth.signingOut : language.messages.auth.signOut}
-	</button>
-	{#if error}<p id={`${id}-error`} role="alert">{language.messages.auth.errors[error]}</p>{/if}
+	</Button>
+	{#if error}
+		<Alert.Root id={`${id}-error`} variant="destructive" class="max-w-[18rem]">
+			<Alert.Description class="text-[0.8rem] [overflow-wrap:anywhere]">
+				{language.messages.auth.errors[error]}
+			</Alert.Description>
+		</Alert.Root>
+	{/if}
 </div>
 
 <style>
 	.sign-out { display: grid; gap: 0.5rem; max-width: 100%; }
-	button { min-height: 2.75rem; padding: 0.6rem 0.85rem; border: 1px solid var(--color-border); border-radius: 0.5rem; color: var(--color-text); background: var(--color-surface); font-size: 0.8125rem; font-weight: 700; cursor: pointer; }
-	button:hover:not(:disabled) { border-color: var(--color-accent); color: var(--color-accent); }
-	button:disabled { opacity: 0.6; cursor: not-allowed; }
-	p { max-width: 18rem; margin: 0; color: #efbf9e; font-size: 0.8rem; overflow-wrap: anywhere; }
 </style>

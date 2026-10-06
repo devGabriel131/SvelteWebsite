@@ -2,6 +2,7 @@
 	import { asset, resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { useLanguage } from '#lib/i18n/language.svelte.ts';
+	import { Button } from '#lib/components/ui/button/index.js';
 	import LanguageSelector from './LanguageSelector.svelte';
 	import SignOutButton from './SignOutButton.svelte';
 
@@ -35,7 +36,7 @@
 			</div>
 			<SignOutButton />
 		{:else}
-			<a class="sign-in-link" href={resolve('/login')}>{language.messages.auth.student.title}</a>
+			<Button variant="ghost" class="px-[0.85rem] py-[0.6rem] text-[0.8125rem] font-bold" href={resolve('/login')}>{language.messages.auth.student.title}</Button>
 		{/if}
 	</div>
 </header>
@@ -49,8 +50,8 @@
 		gap: 1.5rem;
 		min-height: 5.5rem;
 		padding: 1rem 2rem;
-		border-bottom: 1px solid var(--color-border);
-		background: var(--color-surface);
+		border-bottom: 1px solid var(--border);
+		background: var(--card);
 	}
 
 	.header-controls {
@@ -64,23 +65,6 @@
 		margin-left: auto;
 	}
 
-	.sign-in-link {
-		display: inline-flex;
-		align-items: center;
-		min-height: 2.75rem;
-		padding: 0.6rem 0.85rem;
-		border: 1px solid var(--color-border);
-		border-radius: 0.5rem;
-		color: var(--color-accent);
-		font-size: 0.8125rem;
-		font-weight: 700;
-		text-decoration: none;
-	}
-
-	.sign-in-link:hover {
-		border-color: var(--color-accent);
-		background: var(--color-accent-soft);
-	}
 
 	.student {
 		display: flex;
@@ -102,7 +86,7 @@
 	}
 
 	.brand:hover .brand-name {
-		color: var(--color-accent);
+		color: var(--primary);
 	}
 
 	.brand-logo {
@@ -128,7 +112,7 @@
 	}
 
 	.brand-description {
-		color: var(--color-muted);
+		color: var(--muted-foreground);
 		font-size: 0.625rem;
 		letter-spacing: 0.16em;
 		text-transform: uppercase;
@@ -140,16 +124,16 @@
 		place-items: center;
 		width: 2.75rem;
 		height: 2.75rem;
-		border: 1px solid var(--color-border);
+		border: 1px solid var(--border);
 		border-radius: 50%;
-		background: var(--color-background);
-		color: var(--color-accent-secondary);
+		background: var(--background);
+		color: var(--brand-slate);
 	}
 
 	svg {
 		width: 1.4rem;
 		height: 1.4rem;
-		stroke: currentColor;
+		stroke: var(--brand-slate);
 		stroke-width: 1.6;
 		stroke-linecap: round;
 		stroke-linejoin: round;
@@ -170,7 +154,7 @@
 
 	.student-description {
 		font-size: 0.75rem;
-		color: var(--color-muted);
+		color: var(--muted-foreground);
 	}
 
 	@media (max-width: 40rem) {

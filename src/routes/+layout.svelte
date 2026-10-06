@@ -68,9 +68,9 @@
 		z-index: 100;
 		padding: 0.75rem 1rem;
 		border-radius: 0.5rem;
-		background: var(--color-surface);
-		color: var(--color-text);
-		border: 1px solid var(--color-accent);
+		background: var(--card);
+		color: var(--foreground);
+		border: 1px solid var(--primary);
 		text-decoration: none;
 		transform: translateY(calc(-100% - 2rem));
 	}

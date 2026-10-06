@@ -1,4 +1,7 @@
 <script lang="ts">
+	import { Input } from '#lib/components/ui/input/index.js';
+	import { Label } from '#lib/components/ui/label/index.js';
+
 	let {
 		name, id = `field-${name}`, label, value = $bindable(''), hint, error,
 		type = 'text', inputMode = 'text', autocomplete = 'off', disabled = false,
@@ -27,8 +30,8 @@
 </script>
 
 <div class="field" class:disabled>
-	<label for={id}>{label}</label>
-	<input {id} {name} {type} inputmode={inputMode} {autocomplete} {disabled} {required}
+	<Label class="mb-[0.45rem] block text-sm font-bold leading-normal" for={id}>{label}</Label>
+	<Input {id} {name} {type} inputmode={inputMode} {autocomplete} {disabled} {required}
 		maxlength={maxLength} {min} {max} bind:value
 		aria-invalid={error ? 'true' : undefined} aria-describedby={descriptions} />
 	{#if hint}<p class="hint" id={`${id}-hint`}>{hint}</p>{/if}
@@ -37,11 +40,8 @@
 
 <style>
 	.field { min-width: 0; }
-	label { display: block; margin-bottom: 0.45rem; font-size: 0.875rem; font-weight: 700; }
-	input { width: 100%; min-height: 2.8rem; padding: 0.7rem 0.85rem; border: 1px solid var(--color-border); border-radius: 0.5rem; background: var(--color-background); color: var(--color-text); }
-	[aria-invalid='true'] { border-color: #f0a6a6; }
 	.disabled { opacity: 0.55; }
 	.hint, .error { margin: 0.4rem 0 0; font-size: 0.75rem; line-height: 1.5; }
-	.hint { color: var(--color-muted); }
+	.hint { color: var(--muted-foreground); }
 	.error { color: #f0a6a6; }
 </style>

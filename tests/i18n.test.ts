@@ -21,6 +21,7 @@ function translationKeys(messages: object, prefix = ''): string[] {
 
 function renderRequest(cookie?: string) {
 	const event = {
+		request: new Request('http://localhost/'),
 		cookies: {
 			get(name: string) {
 				expect(name).toBe(languageCookie);

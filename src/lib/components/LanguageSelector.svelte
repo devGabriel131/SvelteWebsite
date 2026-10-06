@@ -1,22 +1,18 @@
 <script lang="ts">
 	import { useLanguage } from '#lib/i18n/language.svelte.ts';
 	import { languages } from '#lib/i18n/translations.ts';
+	import { Label } from '#lib/components/ui/label/index.js';
+	import { buttonVariants } from '#lib/components/ui/button/index.js';
 
 	const language = useLanguage();
 	const id = $props.id();
-	const selectedIndex = $derived(languages.findIndex((option) => option.code === language.current));
 </script>
 
 <fieldset class="language-selector" lang={language.current}>
 	<legend class="visually-hidden">{language.messages.language.label}</legend>
 	<div class="language-options">
-		<span
-			class="selection-highlight"
-			style:transform={`translateX(${selectedIndex * 100}%)`}
-			aria-hidden="true"
-		></span>
 		{#each languages as option (option.code)}
-			<label class="language-option" class:selected={language.current === option.code}>
+			<Label class={buttonVariants({ variant: 'ghost', class: 'relative min-w-0 gap-2 rounded-full px-0 text-[0.8125rem] tracking-[0.025em] font-bold cursor-pointer' })}>
 				<input
 					class="visually-hidden"
 					type="radio"
@@ -28,7 +24,7 @@
 				<span class="flag" aria-hidden="true">{option.flag}</span>
 				<span aria-hidden="true">{option.short}</span>
 				<span class="visually-hidden" lang={option.code}>{option.name}</span>
-			</label>
+			</Label>
 		{/each}
 	</div>
 </fieldset>
@@ -41,9 +37,9 @@
 		max-width: 100%;
 		margin: 0;
 		padding: 0.25rem;
-		border: 1px solid var(--color-border);
+		border: 1px solid var(--border);
 		border-radius: 999px;
-		background: var(--color-background);
+		background: var(--background);
 	}
 
 	.language-options {
@@ -53,47 +49,6 @@
 		border-radius: inherit;
 	}
 
-	.selection-highlight {
-		position: absolute;
-		inset: 0 auto 0 0;
-		width: 50%;
-		border: 1px solid var(--color-accent);
-		border-radius: inherit;
-		background: var(--color-accent-soft);
-		pointer-events: none;
-		transition: transform 180ms ease;
-	}
-
-	.language-option {
-		position: relative;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		gap: 0.5rem;
-		min-width: 0;
-		min-height: 2.75rem;
-		border-radius: inherit;
-		color: var(--color-muted);
-		font-size: 0.8125rem;
-		font-weight: 600;
-		letter-spacing: 0.025em;
-		cursor: pointer;
-		transition: color 180ms ease;
-	}
-
-	.language-option:hover {
-		color: var(--color-text);
-	}
-
-	.language-option.selected {
-		color: var(--color-accent);
-		font-weight: 700;
-	}
-
-	.language-option:has(input:focus-visible) {
-		outline: 2px solid var(--color-accent);
-		outline-offset: 2px;
-	}
 
 	.flag {
 		font-size: 1.125rem;
@@ -112,10 +67,4 @@
 		border: 0;
 	}
 
-	@media (prefers-reduced-motion: reduce) {
-		.selection-highlight,
-		.language-option {
-			transition: none;
-		}
-	}
 </style>

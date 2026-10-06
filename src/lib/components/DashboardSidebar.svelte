@@ -2,13 +2,14 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { useLanguage } from '#lib/i18n/language.svelte.ts';
+	import { Button } from '#lib/components/ui/button/index.js';
 
 	const language = useLanguage();
 </script>
 
 <aside class="dashboard-sidebar">
 	<nav aria-label={language.messages.navigation.label}>
-		<a
+		<Button variant="ghost"
 			class="dashboard-link"
 			href={resolve('/')}
 			aria-current={page.url.pathname === resolve('/') ? 'page' : undefined}
@@ -20,25 +21,25 @@
 				<rect x="14" y="14" width="7" height="7" rx="1.5" />
 			</svg>
 			{language.messages.navigation.dashboard}
-		</a>
+		</Button>
 
 		<div class="features">
 			<h2>{language.messages.navigation.features}</h2>
-			<a class="dashboard-link" href={resolve('/ist')}
+			<Button variant="ghost" class="dashboard-link" href={resolve('/ist')}
 				aria-current={page.url.pathname === resolve('/ist') ? 'page' : undefined}>
 				<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
 					<path d="M3 12h4l3-7 4 14 3-7h4" />
 				</svg>
 				{language.messages.navigation.ist}
-			</a>
-			<a class="dashboard-link" href={resolve('/attendance')}
+			</Button>
+			<Button variant="ghost" class="dashboard-link" href={resolve('/attendance')}
 				aria-current={page.url.pathname === resolve('/attendance') ? 'page' : undefined}>
 				<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
 					<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Zm0 0v6h6M8 13h8m-8 4h5" />
 				</svg>
 				{language.messages.navigation.attendance}
-			</a>
-			<a
+			</Button>
+			<Button variant="ghost"
 				class="dashboard-link"
 				href={resolve('/speed-math')}
 				aria-current={page.url.pathname === resolve('/speed-math') ? 'page' : undefined}
@@ -47,8 +48,8 @@
 					<path d="M12 3v3m0 0a8 8 0 1 0 8 8 8 8 0 0 0-8-8Zm-3-3h6m3 4 2-2m-8 6v4l3 2" />
 				</svg>
 				{language.messages.navigation.speedMath}
-			</a>
-			<a
+			</Button>
+			<Button variant="ghost"
 				class="dashboard-link"
 				href={resolve('/frequency')}
 				aria-current={page.route.id === '/frequency' ? 'page' : undefined}
@@ -58,15 +59,15 @@
 					<path d="M16 6V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h2m4-8h5m-5 4h3" />
 				</svg>
 				{language.messages.navigation.frequency}
-			</a>
+			</Button>
 		</div>
 		{#if page.data.viewer?.role === 'admin'}
-			<a class="dashboard-link admin-link" href={resolve('/admin')}>
+			<Button variant="ghost" class="dashboard-link mt-6" href={resolve('/admin')}>
 				<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
 					<path d="M9 5 2 12l7 7M2 12h20" />
 				</svg>
 				{language.messages.auth.backToAdmin}
-			</a>
+			</Button>
 		{/if}
 	</nav>
 </aside>
@@ -74,26 +75,19 @@
 <style>
 	.dashboard-sidebar {
 		padding: 1.5rem 1rem;
-		border-right: 1px solid var(--color-border);
-		background: var(--color-surface);
+		border-right: 1px solid var(--border);
+		background: var(--card);
 	}
 
-	.dashboard-link {
+	nav :global([data-slot='button']) {
 		display: flex;
-		align-items: center;
+		justify-content: flex-start;
 		gap: 0.75rem;
+		width: 100%;
 		padding: 0.8rem 1rem;
-		border-radius: 0.625rem;
-		color: var(--color-muted);
 		font-size: 0.875rem;
 		font-weight: 700;
-		text-decoration: none;
-	}
-
-	.dashboard-link:hover,
-	.dashboard-link[aria-current='page'] {
-		background: var(--color-accent-soft);
-		color: var(--color-accent);
+		text-align: left;
 	}
 
 	svg {
@@ -103,19 +97,15 @@
 		stroke-width: 1.6;
 	}
 
+
 	.features {
 		margin-top: 2rem;
 	}
 
-	.admin-link {
-		margin-top: 1.5rem;
-		border: 1px solid var(--color-border);
-		color: var(--color-accent);
-	}
 
 	h2 {
 		margin: 0 1rem 0.75rem;
-		color: var(--color-accent-secondary);
+		color: var(--brand-slate);
 		font-size: 0.6875rem;
 		font-weight: 700;
 		letter-spacing: 0.12em;
@@ -127,7 +117,7 @@
 		.dashboard-sidebar {
 			padding: 0.75rem 1rem;
 			border-right: 0;
-			border-bottom: 1px solid var(--color-border);
+			border-bottom: 1px solid var(--border);
 		}
 
 		.features {

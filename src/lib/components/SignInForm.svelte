@@ -2,6 +2,10 @@
 	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
 	import { adminAuthClient, authClient } from '#lib/auth-client.ts';
+	import * as Alert from '#lib/components/ui/alert/index.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { Input } from '#lib/components/ui/input/index.js';
+	import { Label } from '#lib/components/ui/label/index.js';
 	import { useLanguage } from '#lib/i18n/language.svelte.ts';
 
 	let { audience }: { audience: 'student' | 'admin' } = $props();
@@ -59,13 +63,14 @@
 
 <form method="POST" onsubmit={signIn} aria-label={copy.title} aria-busy={pending} lang={language.current}>
 	<div class="field">
-		<label for={`${id}-email`}>{messages.email}</label>
-		<input id={`${id}-email`} name="email" type="email" autocomplete="username" autocapitalize="none"
-			spellcheck={false} required readonly={pending} bind:value={email} />
+		<Label class="font-bold" for={`${id}-email`}>{messages.email}</Label>
+		<Input class="min-h-12 text-base md:text-base" id={`${id}-email`} name="email" type="email"
+			autocomplete="username" autocapitalize="none" spellcheck={false} required readonly={pending} bind:value={email} />
 	</div>
 	<div class="field">
-		<label for={`${id}-password`}>{copy.credential}</label>
-		<input id={`${id}-password`} name="password" type="password" autocomplete="current-password"
+		<Label class="font-bold" for={`${id}-password`}>{copy.credential}</Label>
+		<Input class="min-h-12 text-base md:text-base" id={`${id}-password`} name="password"
+			type="password" autocomplete="current-password"
 			inputmode={audience === 'student' ? 'numeric' : undefined}
 			pattern={audience === 'student' ? '[0-9]{4}' : undefined}
 			minlength={audience === 'student' ? 4 : 8} maxlength={audience === 'student' ? 4 : 128}
@@ -73,20 +78,19 @@
 			aria-invalid={credentialError} required readonly={pending} bind:value={password} />
 		<p class="hint" id={`${id}-hint`}>{copy.credentialHint}</p>
 	</div>
-	{#if error}<p class="error" id={`${id}-error`} role="alert">{errorMessage}</p>{/if}
-	<button type="submit" disabled={!ready || pending}>{pending ? messages.signingIn : messages.signIn}</button>
+	{#if error}
+		<Alert.Root id={`${id}-error`} variant="destructive" class="px-4 py-[0.85rem]">
+			<Alert.Description>{errorMessage}</Alert.Description>
+		</Alert.Root>
+	{/if}
+	<Button class="min-h-12 px-4 py-3 text-base font-bold" type="submit" disabled={!ready || pending}>
+		{pending ? messages.signingIn : messages.signIn}
+	</Button>
 	<noscript><p class="hint">{messages.javascriptRequired}</p></noscript>
 </form>
 
 <style>
 	form { display: grid; gap: 1.25rem; }
 	.field { display: grid; gap: 0.5rem; min-width: 0; }
-	label { font-size: 0.875rem; font-weight: 700; }
-	input { width: 100%; min-width: 0; min-height: 3rem; padding: 0.7rem 0.85rem; border: 1px solid var(--color-border); border-radius: 0.5rem; background: var(--color-background); color: var(--color-text); }
-	input[aria-invalid='true'] { border-color: #efbf9e; }
-	.hint { margin: 0; color: var(--color-muted); font-size: 0.8rem; line-height: 1.6; }
-	.error { margin: 0; padding: 0.85rem 1rem; border: 1px solid #8e6545; border-radius: 0.5rem; background: #33261e; color: #efbf9e; font-size: 0.875rem; }
-	button { min-height: 3rem; padding: 0.75rem 1rem; border: 1px solid var(--color-accent); border-radius: 0.5rem; background: var(--color-accent); color: var(--color-background); font-weight: 700; cursor: pointer; }
-	button:hover:not(:disabled) { background: var(--brand-cream); }
-	button:disabled { opacity: 0.6; cursor: not-allowed; }
+	.hint { margin: 0; color: var(--muted-foreground); font-size: 0.8rem; line-height: 1.6; }
 </style>

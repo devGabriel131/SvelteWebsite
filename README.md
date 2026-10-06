@@ -133,6 +133,7 @@ src/
   lib/                  Shared code and assets, imported through #lib
     assets/             Assets processed by Vite
     components/         Shared dashboard shell, form fields, and IST report components
+      ui/               Locally owned, branded shadcn-svelte primitives
     attendance/         Employer-letter types, shared validation, and bilingual presentation
     frequency/          Bundled word list, fuzzy Spanish search, and practice-round logic
     i18n/               English/Spanish translations and reactive language context
@@ -141,6 +142,7 @@ src/
     auth-client.ts      Same-origin student/admin Better Auth clients
     server/             Server-only auth, PDFKit reports, and lazy typed database connection
     speed-math/         Pure question generation, session timing, scoring, and statistics
+    utils.ts            Registry class utility and primitive prop/ref types
   routes/
     +layout.server.ts   Language and minimal verified account identity (no session tokens)
     +layout.svelte      Language context and route-specific student/admin shells
@@ -216,7 +218,7 @@ Open `/admin` and sign in with an admin account for the cockpit-inspired adminis
 The six sections demonstrate:
 
 - **Overview:** demo metrics, a 7/30-day activity chart, a visual score gauge, recent fictional activity, student check-ins, and a sample upcoming session.
-- **Students:** search and status filters, plus local-only add/edit dialogs for fictional students. Roster metrics reflect those edits.
+- **Students:** search and visible status choices, plus local-only add/edit dialogs for fictional students. Roster metrics reflect those edits. Clearing the optional score preserves “no score”; progress remains required.
 - **Payments:** payment-link previews and a confirmation dialog that marks a fictional refund request as reviewed, never refunded.
 - **Invitations:** local invitation previews with cohort and expiry selections; no emails or enrollments.
 - **Grade reports:** local CSV filename/size staging (up to 5 MB), a downloadable illustrative CSV, and sample report history. File contents are not parsed, transmitted, or applied to students.
@@ -224,19 +226,25 @@ The six sections demonstrate:
 
 All demo changes are held only in component memory and reset on reload or leaving the admin route. Preview URLs use the reserved `.invalid` domain and are intentionally not clickable checkout/enrollment links. These demo operations make no API calls, database writes, billing integrations, or browser-storage records. Authentication uses real Better Auth API calls/database sessions; the existing language preference cookie is unchanged.
 
-`src/lib/admin/demo.ts` holds fictional fixtures and pure presentation helpers; these types and the CSV columns are **not contracts for the database schema**. `AdminOverview.svelte`, `AdminStudents.svelte`, and `AdminOperations.svelte` separate the overview, roster controls, and future operational workflows. The `/admin` route owns the shared in-memory roster, while `admin.css` scopes the cockpit visual system to `.admin-console`.
+`src/lib/admin/demo.ts` holds fictional fixtures and pure presentation helpers; these types and the CSV columns are **not contracts for the database schema**. `AdminOverview.svelte`, `AdminStudents.svelte`, and `AdminOperations.svelte` separate the overview, roster controls, and future operational workflows. The `/admin` route owns the shared in-memory roster. `admin.css` retains cockpit geometry under `.admin-console` and portalled dialog layout under `.admin-console-dialog`; both use the shared root theme.
+
+Student and refund dialogs use the shared Dialog primitive with translated close labels, trapped keyboard focus, and ignored outside clicks. Escape, Cancel, and Close restore focus to the initiating action; confirming a refund review focuses the section title because that action becomes disabled. Fixed status, expiry, and event choices use pressed-button groups; dynamic student lists remain native selects.
 
 **The page is now guarded by verified admin identity; its operations remain a design prototype.** `noindex, nofollow` metadata is not the access-control boundary—the server page load is. Before connecting real student or financial data, enforce admin authorization on each read/action/API, and add validated import workflows, payment-provider integration, and audit logging. Do not replace fictional fixtures with real data based only on a page guard.
 
 ## Brand styling
 
-The dark theme uses the original charcoal background (`#11151C`) and surfaces (`#191F28`). Sage (`#B7C690`) is the primary accent; Slate (`#7B949C`) is the secondary accent for supporting labels, icons, and subtle borders. Cream (`#FFF5D9`) is reserved for text, with a softer variant for secondary copy. Navy, Deep Slate, and Deep Ink are not used.
+The dark theme uses the original charcoal background (`#11151C`) and surfaces (`#191F28`). Sage (`#B7C690`) is the primary accent; Slate (`#7B949C`) is the secondary accent for icons and subtle borders. Cream (`#FFF5D9`) and its softer variants are typography only: never control fills, backgrounds, borders, focus rings, shadows, or decorative indicators. Filled sage/slate actions use dark text and icons; outline and ghost actions use slate icons with sage hover/selection states. Semantic red/amber/green assessment meanings remain intact.
 
-Color and typography tokens live in `src/app.css`. Syncopate 700 is used for display text; Space Grotesk 500 and 700 are used for body text and UI. The Latin font files from the supplied reference are served locally from `src/lib/assets/fonts`, without runtime requests to a font provider.
+Color and typography tokens live in `src/app.css`, with one dark root palette mapped to Tailwind 4 semantic utilities. Syncopate 700 remains the display face; Space Grotesk 500 and 700 remain the body/control faces, with no synthetic weights. Admin data retains its monospace role. The Latin font files are served locally from `src/lib/assets/fonts`, without runtime requests to a font provider.
+
+`components.json` configures the official shadcn-svelte registry and existing `#lib` aliases. The vendored Button, Input, Label, Card, Badge, Alert, Dialog, Progress, Table, and NativeSelect sources live in `src/lib/components/ui`; their shared chrome owns hover/focus/disabled/invalid states, wrapping 44px action targets, and reduced-motion styling. Page styles own geometry and custom graphics, not a second control theme. Registry updates must preserve the brand customization, required Dialog `closeLabel`, and Table `containerProps` for its single keyboard-scrollable region.
+
+Native form, fieldset, heading, section, and article semantics remain around the primitives. Radio choices retain native keyboard/submission behavior; IST exercise-choice POSTs and full IST/attendance submissions still work without JavaScript. Game engines, authentication APIs, server validation, and PDF rendering are unchanged.
 
 ## Languages
 
-The header's sliding selector switches the interface between 🇺🇸 English and 🇵🇷 Español without reloading or changing the URL. English is the default. A `language` cookie remembers the choice for one year; the server uses it to render the saved language on the first response, including the document's `lang` attribute. This preference cookie is readable by the client and contains only `en` or `es`, not sensitive data.
+The header's two-option selector switches the interface between 🇺🇸 English and 🇵🇷 Español without reloading or changing the URL. English is the default. A `language` cookie remembers the choice for one year; the server uses it to render the saved language on the first response, including the document's `lang` attribute. This preference cookie is readable by the client and contains only `en` or `es`, not sensitive data.
 
 Translations live in `src/lib/i18n/translations.ts`. Add new interface text to both language dictionaries; TypeScript checks that Spanish matches the English message structure. Components call `useLanguage()` from `#lib/i18n/language.svelte.ts` and read `language.messages` reactively. Avoid destructuring messages into a nonreactive local value. Product names and user-provided content are not translated.
 

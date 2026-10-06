@@ -1,6 +1,11 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
 	import { useLanguage } from '#lib/i18n/language.svelte.ts';
+	import { Button, buttonVariants } from '#lib/components/ui/button/index.js';
+	import * as Card from '#lib/components/ui/card/index.js';
+	import { Input } from '#lib/components/ui/input/index.js';
+	import { Label } from '#lib/components/ui/label/index.js';
+	import { Progress } from '#lib/components/ui/progress/index.js';
 
 	import {
 		durations, operations, operationSymbols, startSession, submitAnswer,
@@ -18,7 +23,7 @@
 	let answer = $state('');
 	let invalidAnswer = $state(false);
 	let feedback = $state<{ correct: boolean; question: Question } | null>(null);
-	let answerInput = $state<HTMLInputElement>();
+	let answerInput = $state<HTMLElement | null>(null);
 	let resultsElement = $state<HTMLElement>();
 	let setupHeading = $state<HTMLHeadingElement>();
 
@@ -126,7 +131,8 @@
 	</header>
 
 	{#if !session}
-		<form class="panel setup-panel" onsubmit={(event) => { event.preventDefault(); start(); }}>
+		<form class="setup-panel" onsubmit={(event) => { event.preventDefault(); start(); }}>
+			<Card.Root class="gap-0 p-[clamp(1.25rem,3vw,2rem)] text-base">
 			<div class="panel-heading">
 				<h2 tabindex="-1" bind:this={setupHeading}>{messages.setupTitle}</h2>
 				<p>{messages.setupHint}</p>
@@ -135,10 +141,10 @@
 				<legend><span class="step" aria-hidden="true">1</span>{messages.duration}</legend>
 				<div class="duration-options">
 					{#each durations as minutes (minutes)}
-						<label class="choice duration-choice">
-							<input type="radio" name="duration" value={minutes} bind:group={duration} />
+						<Label class={buttonVariants({ variant: 'outline', class: 'relative min-w-0 min-h-14 gap-[0.4rem] p-3 text-sm font-bold cursor-pointer' })}>
+							<input class="visually-hidden" type="radio" name="duration" value={minutes} bind:group={duration} />
 							<span>{formatMessage(messages.minutes, { minutes })}</span>
-						</label>
+						</Label>
 					{/each}
 				</div>
 			</fieldset>
@@ -146,13 +152,11 @@
 				<legend><span class="step" aria-hidden="true">2</span>{messages.operation}</legend>
 				<div class="operation-options">
 					{#each operations as choice (choice)}
-						<label class="choice operation-choice">
-							<input type="radio" name="operation" value={choice} bind:group={operation} />
-							<span>
-								<span class="operation-symbol" aria-hidden="true">{operationSymbols[choice]}</span>
-								{messages.operations[choice]}
-							</span>
-						</label>
+						<Label class={buttonVariants({ variant: 'outline', class: 'relative min-w-0 min-h-24 flex-col gap-[0.4rem] p-3 text-sm font-bold cursor-pointer' })}>
+							<input class="visually-hidden" type="radio" name="operation" value={choice} bind:group={operation} />
+							<span class="operation-symbol text-secondary group-has-[input:checked]/button:text-primary" aria-hidden="true">{operationSymbols[choice]}</span>
+							<span>{messages.operations[choice]}</span>
+						</Label>
 					{/each}
 				</div>
 				<p class="hint" id="operation-hint">{messages.operationHints[operation]}</p>
@@ -161,22 +165,24 @@
 				<h3>{messages.rulesTitle}</h3>
 				<p>{messages.rules}</p>
 			</div>
-			<button class="primary-button start-button" type="submit" disabled={!ready}>
+			<Button class="w-full min-h-[2.9rem] gap-[0.6rem] px-5 py-3 font-bold" type="submit" disabled={!ready}>
 				{messages.start}
-				<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6" /></svg>
-			</button>
+				<svg class="start-arrow size-[1.1rem]" viewBox="0 0 24 24" fill="none" stroke="var(--primary-foreground)" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6" /></svg>
+			</Button>
 			<p class="session-note">{messages.timerNote}</p>
 			<noscript><p class="error" role="alert">{messages.javascriptRequired}</p></noscript>
+			</Card.Root>
 		</form>
 	{:else if session.status === 'running' && stats}
-		<section class="panel challenge-panel" aria-label={formatMessage(messages.challengeLabel, {
+		<section class="challenge-panel" aria-label={formatMessage(messages.challengeLabel, {
 			operation: messages.operations[session.operation], minutes: session.duration
 		})}>
+			<Card.Root class="gap-0 p-[clamp(1.25rem,3vw,2rem)] text-base">
 			<div class="challenge-topline">
 				<p class="challenge-label">{formatMessage(messages.challengeLabel, {
 					operation: messages.operations[session.operation], minutes: session.duration
 				})}</p>
-				<button class="text-button" type="button" onclick={finish}>{messages.end}</button>
+				<Button variant="link" class="px-0 py-[0.3rem] text-[0.8125rem] underline" type="button" onclick={finish}>{messages.end}</Button>
 			</div>
 			<dl class="live-stats">
 				<div class="timer" class:low-time={stats.remainingSeconds <= 30}>
@@ -187,7 +193,7 @@
 				<div><dt>{messages.incorrect}</dt><dd>{number.format(session.incorrect)}</dd></div>
 				<div><dt>{messages.accuracy}</dt><dd>{percent.format(stats.accuracy / 100)}</dd></div>
 			</dl>
-			<progress aria-label={messages.timeRemaining} max={session.duration * 60} value={stats.remainingSeconds}></progress>
+			<Progress class="h-[0.35rem]" aria-label={messages.timeRemaining} max={session.duration * 60} value={stats.remainingSeconds} />
 			<p class="visually-hidden" role="status">{stats.remainingSeconds <= 30 ? messages.lowTime : ''}</p>
 			<div class="question-area">
 				<p class="eyebrow">{formatMessage(messages.questionNumber, { number: stats.total + 1 })}</p>
@@ -195,14 +201,15 @@
 					<span aria-hidden="true">{session.question.left} <span class="equation-symbol">{operationSymbols[session.operation]}</span> {session.question.right} <span class="equation-symbol">=</span> ?</span>
 				</h2>
 				<form class="answer-form" onsubmit={checkAnswer} novalidate>
-					<label for="math-answer">{messages.answer}</label>
+					<Label class="mb-2 block text-left text-[0.8125rem]" for="math-answer">{messages.answer}</Label>
 					<div class="answer-controls">
-						<input id="math-answer" name="answer" type="text" inputmode="numeric" enterkeyhint="send"
-							bind:value={answer} bind:this={answerInput} autocomplete="off" spellcheck="false"
+						<Input class="px-4 py-3 text-xl md:text-xl tabular-nums placeholder:text-[0.9375rem]"
+							id="math-answer" name="answer" type="text" inputmode="numeric" enterkeyhint="send"
+							bind:value={answer} bind:ref={answerInput} autocomplete="off" spellcheck="false"
 							placeholder={messages.answerPlaceholder} aria-invalid={invalidAnswer}
 							aria-describedby={`question answer-hint${invalidAnswer ? ' answer-error' : ''}`}
 							oninput={() => { invalidAnswer = false; }} />
-						<button class="primary-button" type="submit">{messages.submit}</button>
+						<Button class="min-h-[2.9rem] gap-[0.6rem] px-5 py-3 font-bold" type="submit">{messages.submit}</Button>
 					</div>
 					<p class="hint" id="answer-hint">{messages.answerHint}</p>
 					{#if invalidAnswer}<p class="error" id="answer-error" role="alert">{messages.invalidAnswer}</p>{/if}
@@ -215,9 +222,11 @@
 					{/if}
 				</div>
 			</div>
+			</Card.Root>
 		</section>
 	{:else if stats}
-		<section class="panel results-panel" aria-labelledby="results-title" tabindex="-1" bind:this={resultsElement}>
+		<section class="results-panel" aria-labelledby="results-title" tabindex="-1" bind:this={resultsElement}>
+			<Card.Root class="gap-0 p-[clamp(1.25rem,3vw,2rem)] text-base">
 			<p class="eyebrow">{session.endedAt === session.endsAt ? messages.timeUp : messages.ended}</p>
 			<h2 id="results-title">{messages.resultsTitle}</h2>
 			<p class="challenge-label">{formatMessage(messages.challengeLabel, {
@@ -238,9 +247,10 @@
 				<div><dt>{messages.elapsed}</dt><dd>{formatTime(stats.elapsedSeconds)}</dd></div>
 			</dl>
 			<div class="result-actions">
-				<button class="primary-button" type="button" onclick={start}>{messages.playAgain}</button>
-				<button class="secondary-button" type="button" onclick={changeSettings}>{messages.changeSettings}</button>
+				<Button class="min-h-[2.9rem] gap-[0.6rem] px-5 py-3 font-bold" type="button" onclick={start}>{messages.playAgain}</Button>
+				<Button variant="outline" class="min-h-[2.9rem] gap-[0.6rem] px-5 py-3 font-bold" type="button" onclick={changeSettings}>{messages.changeSettings}</Button>
 			</div>
+			</Card.Root>
 		</section>
 	{/if}
 </div>
@@ -248,80 +258,55 @@
 <style>
 	.speed-math-page { max-width: 58rem; margin-inline: auto; }
 	.page-heading { margin-bottom: 1.75rem; }
-	.eyebrow { margin: 0 0 0.6rem; color: var(--color-accent); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+	.eyebrow { margin: 0 0 0.6rem; color: var(--primary); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
 	h1 { margin: 0; font-family: var(--font-display); font-size: clamp(1.4rem, 3vw, 2.1rem); line-height: 1.3; text-transform: uppercase; overflow-wrap: anywhere; }
-	.introduction { max-width: 42rem; margin: 0.9rem 0 0; color: var(--color-muted); font-size: 0.9375rem; }
-	.panel { padding: clamp(1.25rem, 3vw, 2rem); border: 1px solid var(--color-border); border-radius: 1rem; background: var(--color-surface); }
+	.introduction { max-width: 42rem; margin: 0.9rem 0 0; color: var(--muted-foreground); font-size: 0.9375rem; }
 	h2 { margin: 0; font-size: 1.25rem; }
-	.panel-heading p { margin: 0.4rem 0 0; color: var(--color-muted); font-size: 0.875rem; }
+	.panel-heading p { margin: 0.4rem 0 0; color: var(--muted-foreground); font-size: 0.875rem; }
 	fieldset { min-width: 0; margin: 1.75rem 0 0; padding: 0; border: 0; }
 	legend { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.85rem; padding: 0; font-size: 0.875rem; font-weight: 700; }
-	.step { display: grid; place-items: center; width: 1.5rem; height: 1.5rem; border-radius: 50%; background: var(--color-accent-soft); color: var(--color-accent); font-size: 0.75rem; }
+	.step { display: grid; place-items: center; width: 1.5rem; height: 1.5rem; border-radius: 50%; background: var(--accent); color: var(--primary); font-size: 0.75rem; }
 	.duration-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; }
 	.operation-options { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.75rem; }
-	.choice { position: relative; min-width: 0; cursor: pointer; }
-	.choice input { position: absolute; width: 1px; height: 1px; margin: 0; opacity: 0; }
-	.choice > span { display: flex; align-items: center; justify-content: center; gap: 0.4rem; min-height: 3.5rem; padding: 0.75rem; border: 1px solid var(--color-border); border-radius: 0.65rem; color: var(--color-muted); font-size: 0.875rem; font-weight: 700; text-align: center; }
-	.choice input:checked + span { border-color: var(--color-accent); background: var(--color-accent-soft); color: var(--color-accent); }
-	.choice input:focus-visible + span { outline: 2px solid var(--color-accent); outline-offset: 4px; }
-	.choice:hover > span { border-color: var(--color-accent-secondary); }
-	.operation-choice > span { flex-direction: column; min-height: 6rem; }
 	.operation-symbol { font-size: 1.75rem; line-height: 1; }
-	.hint { margin: 0.65rem 0 0; color: var(--color-muted); font-size: 0.8125rem; }
-	.rules { margin: 1.5rem 0; padding: 1rem; border-radius: 0.65rem; background: var(--color-background); }
+	.hint { margin: 0.65rem 0 0; color: var(--muted-foreground); font-size: 0.8125rem; }
+	.rules { margin: 1.5rem 0; padding: 1rem; border-radius: 0.65rem; background: var(--background); }
 	h3 { margin: 0; font-size: 0.875rem; }
-	.rules p { margin: 0.35rem 0 0; color: var(--color-muted); font-size: 0.8125rem; line-height: 1.7; }
-	.primary-button, .secondary-button { display: inline-flex; align-items: center; justify-content: center; gap: 0.6rem; min-height: 2.9rem; padding: 0.75rem 1.25rem; border: 1px solid var(--color-accent); border-radius: 0.5rem; font-size: 0.875rem; font-weight: 700; cursor: pointer; }
-	.primary-button { background: var(--color-accent); color: var(--color-background); }
-	.primary-button:hover { filter: brightness(1.08); }
-	.primary-button:disabled { cursor: not-allowed; opacity: 0.5; }
-	.secondary-button { background: var(--color-accent-soft); color: var(--color-accent); }
-	.secondary-button:hover { background: var(--color-background); }
-	.start-button { width: 100%; }
-	svg { width: 1.1rem; height: 1.1rem; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-	.session-note { margin: 0.85rem 0 0; color: var(--color-muted); font-size: 0.75rem; }
+	.rules p { margin: 0.35rem 0 0; color: var(--muted-foreground); font-size: 0.8125rem; line-height: 1.7; }
+	.start-arrow { stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+	.session-note { margin: 0.85rem 0 0; color: var(--muted-foreground); font-size: 0.75rem; }
 	.challenge-topline { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-	.challenge-label { margin: 0; color: var(--color-muted); font-size: 0.8125rem; }
-	.text-button { padding: 0.3rem 0; border: 0; background: none; color: var(--color-muted); font-size: 0.8125rem; text-decoration: underline; text-underline-offset: 0.2rem; cursor: pointer; }
-	.text-button:hover { color: var(--color-text); }
+	.challenge-label { margin: 0; color: var(--muted-foreground); font-size: 0.8125rem; }
 	.live-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; margin: 1.5rem 0; }
-	dt { color: var(--color-muted); font-size: 0.75rem; }
+	dt { color: var(--muted-foreground); font-size: 0.75rem; }
 	dd { margin: 0.25rem 0 0; font-size: clamp(1.25rem, 3vw, 1.8rem); font-weight: 700; font-variant-numeric: tabular-nums; }
-	.timer dd, .correct-count { color: var(--color-accent); }
+	.timer dd, .correct-count { color: var(--primary); }
 	.low-time dd { color: #f0c489; }
-	progress { display: block; width: 100%; height: 0.35rem; overflow: hidden; border: 0; border-radius: 1rem; appearance: none; background: var(--color-background); color: var(--color-accent); }
-	progress::-webkit-progress-bar { background: var(--color-background); }
-	progress::-webkit-progress-value { background: var(--color-accent); }
-	progress::-moz-progress-bar { background: var(--color-accent); }
 	.question-area { padding-top: 2.5rem; text-align: center; }
 	.equation { font-size: clamp(2rem, 7vw, 4.5rem); font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.4; }
-	.equation-symbol { color: var(--color-accent-secondary); }
+	.equation-symbol { color: var(--brand-slate); }
 	.answer-form { max-width: 28rem; margin: 1.5rem auto 0; }
-	.answer-form label { display: block; margin-bottom: 0.5rem; font-size: 0.8125rem; text-align: left; }
 	.answer-controls { display: flex; gap: 0.65rem; }
-	.answer-controls input { min-width: 0; width: 100%; padding: 0.75rem 1rem; border: 1px solid var(--color-border); border-radius: 0.5rem; background: var(--color-background); color: var(--color-text); font-size: 1.25rem; font-variant-numeric: tabular-nums; }
-	.answer-controls input::placeholder { color: var(--color-muted); font-size: 0.9375rem; }
-	.answer-controls input[aria-invalid='true'] { border-color: #f0a6a6; }
 	.feedback { min-height: 4.5rem; padding-top: 1.25rem; font-size: 0.875rem; }
 	.feedback p { margin: 0; }
-	.correct-feedback { color: var(--color-accent); }
+	.correct-feedback { color: var(--primary); }
 	.incorrect-feedback, .error { color: #f0a6a6; }
 	.error { margin: 0.65rem 0 0; font-size: 0.8125rem; }
 	.results-panel { text-align: center; }
 	.results-panel .challenge-label { margin-top: 0.5rem; }
-	.score { display: flex; flex-direction: column; margin-top: 1.5rem; color: var(--color-accent); font-size: 0.875rem; }
+	.score { display: flex; flex-direction: column; margin-top: 1.5rem; color: var(--primary); font-size: 0.875rem; }
 	.score-number { font-size: clamp(4rem, 10vw, 6rem); font-weight: 700; line-height: 1.15; font-variant-numeric: tabular-nums; }
-	.results-message { margin: 1rem 0 0; color: var(--color-muted); font-size: 0.9375rem; }
-	.result-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.5rem 1rem; margin: 2rem 0; padding: 1.5rem 0; border-top: 1px solid var(--color-border); border-bottom: 1px solid var(--color-border); }
+	.results-message { margin: 1rem 0 0; color: var(--muted-foreground); font-size: 0.9375rem; }
+	.result-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.5rem 1rem; margin: 2rem 0; padding: 1.5rem 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
 	.result-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 0.75rem; }
 	.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 	@media (max-width: 50rem) { .operation-options { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 	@media (max-width: 30rem) {
 		.duration-options { gap: 0.5rem; }
-		.duration-choice > span { padding: 0.65rem 0.3rem; font-size: 0.8125rem; }
+		.duration-options :global([data-slot='label']) { padding: 0.65rem 0.3rem; font-size: 0.8125rem; }
 		.live-stats, .result-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 		.answer-controls { flex-direction: column; }
-		.result-actions > button { width: 100%; }
+		.result-actions :global([data-slot='button']) { width: 100%; }
 		.question-area { padding-top: 1.75rem; }
 	}
 </style>

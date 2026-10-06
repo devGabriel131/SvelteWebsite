@@ -56,13 +56,13 @@
 		min-width: 0;
 		margin: 0;
 		padding: 1rem 1.1rem 1.2rem;
-		border: 1px solid var(--color-border);
+		border: 1px solid var(--border);
 		border-radius: 0.75rem;
 	}
 
 	legend {
 		padding-inline: 0.35rem;
-		color: var(--color-accent);
+		color: var(--primary);
 		font-weight: 700;
 		font-size: 0.9375rem;
 	}
@@ -87,7 +87,7 @@
 
 	.duration-hint {
 		margin: 0.4rem 0 0;
-		color: var(--color-muted);
+		color: var(--muted-foreground);
 		font-size: 0.75rem;
 		line-height: 1.5;
 	}

@@ -1,4 +1,7 @@
 <script lang="ts">
+	import { Button, buttonVariants } from '#lib/components/ui/button/index.js';
+	import { Label } from '#lib/components/ui/label/index.js';
+
 	let {
 		name, id = `choice-${name}`, label, choices, value = $bindable(''), hint, error,
 		onchange, hideLabel = false, submitName
@@ -26,7 +29,7 @@
 	<legend class:visually-hidden={hideLabel}>{label}</legend>
 	{#snippet choiceContent(text: string)}
 		<span>{text}</span>
-		<svg class="selection-check" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+		<svg class="selection-check hidden size-[0.9rem] group-has-[input:checked]/button:block group-aria-pressed/button:block" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" aria-hidden="true">
 			<path d="m5 12 4 4L19 6" />
 		</svg>
 	{/snippet}
@@ -34,16 +37,18 @@
 	<div class="choice-buttons">
 		{#each choices as choice (choice.value)}
 			{#if submitName}
-				<button class="choice-option" type="submit" name={submitName} value={`${name}:${choice.value}`}
-					formnovalidate aria-pressed={value === choice.value} aria-describedby={descriptions}>
+				<Button class="relative min-w-0 min-h-[3.25rem] gap-[0.35rem] p-[0.65rem] text-[0.8125rem] font-bold"
+					variant="outline" type="submit" name={submitName} value={`${name}:${choice.value}`}
+					formnovalidate aria-pressed={value === choice.value} aria-invalid={error ? 'true' : undefined} aria-describedby={descriptions}>
 					{@render choiceContent(choice.label)}
-				</button>
+				</Button>
 			{:else}
-				<label class="choice-option">
+				<Label class={buttonVariants({ variant: 'outline', class: 'relative min-w-0 min-h-[3.25rem] gap-[0.35rem] p-[0.65rem] text-[0.8125rem] font-bold cursor-pointer' })}
+					aria-invalid={error ? 'true' : undefined}>
 					<input class="visually-hidden" type="radio" {name} value={choice.value}
 						bind:group={value} {onchange} required aria-describedby={descriptions} />
 					{@render choiceContent(choice.label)}
-				</label>
+				</Label>
 			{/if}
 		{/each}
 	</div>
@@ -72,66 +77,10 @@
 		gap: 0.5rem;
 	}
 
-	.choice-option {
-		position: relative;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		gap: 0.35rem;
-		min-width: 0;
-		min-height: 3.25rem;
-		padding: 0.65rem;
-		border: 1px solid var(--color-border);
-		border-radius: 0.5rem;
-		background: var(--color-background);
-		color: var(--color-muted);
-		font-size: 0.8125rem;
-		font-weight: 700;
-		text-align: center;
-		cursor: pointer;
-	}
-
-	.choice-option:hover {
-		border-color: var(--color-accent);
-		color: var(--color-text);
-	}
-
-	.choice-option:has(input:checked),
-	.choice-option[aria-pressed='true'] {
-		border-color: var(--color-accent);
-		box-shadow: inset 0 0 0 1px var(--color-accent);
-		background: var(--color-accent-soft);
-		color: var(--color-accent);
-	}
-
-	.choice-option:has(input:focus-visible),
-	button.choice-option:focus-visible {
-		outline: 2px solid var(--color-accent);
-		outline-offset: 3px;
-	}
-
-	.choice-group[aria-invalid='true'] .choice-option {
-		border-color: #f0a6a6;
-	}
-
-	.choice-option:has(input:disabled) {
-		cursor: wait;
-	}
-
 	.selection-check {
-		flex-shrink: 0;
-		width: 0.9rem;
-		height: 0.9rem;
-		stroke: currentColor;
 		stroke-width: 2.5;
 		stroke-linecap: round;
 		stroke-linejoin: round;
-		display: none;
-	}
-
-	.choice-option:has(input:checked) .selection-check,
-	.choice-option[aria-pressed='true'] .selection-check {
-		display: block;
 	}
 
 	.visually-hidden {
@@ -152,6 +101,6 @@
 		line-height: 1.5;
 	}
 
-	.hint { color: var(--color-muted); }
+	.hint { color: var(--muted-foreground); }
 	.error { color: #f0a6a6; }
 </style>

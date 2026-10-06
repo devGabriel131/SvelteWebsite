@@ -11,6 +11,9 @@
 	} from '#lib/attendance/validation.ts';
 	import ChoiceGroup from '#lib/components/ChoiceGroup.svelte';
 	import FormField from '#lib/components/FormField.svelte';
+	import * as Alert from '#lib/components/ui/alert/index.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import * as Card from '#lib/components/ui/card/index.js';
 	import { useLanguage } from '#lib/i18n/language.svelte.ts';
 	import { formatMessage, languages } from '#lib/i18n/translations.ts';
 	import type { PageProps } from './$types';
@@ -97,6 +100,7 @@
 				}
 			};
 		}}>
+		<Card.Root class="gap-0 p-0">
 		<fieldset class="form-body" disabled={submitting}>
 			<legend class="visually-hidden">{messages.title}</legend>
 			<section class="form-section" aria-labelledby="student-details-title">
@@ -149,8 +153,10 @@
 				</div>
 				{#if schedule}
 					<div class="schedule" aria-live="polite">
-						<h3>{messages.scheduleLabel}</h3>
-						<p>{schedule}</p>
+						<Card.Root class="gap-0 bg-accent p-4">
+							<h3>{messages.scheduleLabel}</h3>
+							<p>{schedule}</p>
+						</Card.Root>
 					</div>
 				{/if}
 			</section>
@@ -177,29 +183,42 @@
 		</fieldset>
 		<div class="form-footer">
 
-			{#if hasErrors}<p class="error-summary" role="alert">{messages.errorSummary}</p>{/if}
-			{#if requestError || form?.serverError}<p class="error-summary" role="alert">{messages.serverError}</p>{/if}
-			<button class="primary-button" type="submit" disabled={submitting} aria-busy={submitting}>
+			{#if hasErrors}
+				<Alert.Root variant="destructive" class="mb-4">
+					<Alert.Description>{messages.errorSummary}</Alert.Description>
+				</Alert.Root>
+			{/if}
+			{#if requestError || form?.serverError}
+				<Alert.Root variant="destructive" class="mb-4">
+					<Alert.Description>{messages.serverError}</Alert.Description>
+				</Alert.Root>
+			{/if}
+			<Button class="min-h-[2.8rem] gap-[0.6rem] px-[1.05rem] py-[0.7rem] font-bold disabled:cursor-wait max-[30rem]:w-full"
+				type="submit" disabled={submitting} aria-busy={submitting}>
 				{submitting ? messages.submitting : messages.submit}
-				<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6" /></svg>
-			</button>
+				<svg class="size-[1.1rem] text-primary-foreground" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6" /></svg>
+			</Button>
 		</div>
+		</Card.Root>
 	</form>
 
 	{#if certificate && form?.certificate && form.reports}
 		<section class="results" aria-labelledby="certificate-title" tabindex="-1" bind:this={resultsElement}>
+			<Card.Root class="gap-0 p-[clamp(1.1rem,3vw,1.75rem)]">
 			<h2 id="certificate-title">{messages.resultsTitle}</h2>
 			<p class="ready-message">{messages.ready}</p>
 			<div class="downloads">
 				{#each languages as { code } (code)}
-					<a class="download-button" href={`data:application/pdf;base64,${form.reports[code]}`}
+					<Button variant="outline" class="min-h-[2.8rem] gap-[0.6rem] px-[1.05rem] py-[0.7rem] font-bold max-[30rem]:w-full"
+						href={`data:application/pdf;base64,${form.reports[code]}`}
 						download={presentAttendanceCertificate(form.certificate, code).filename}>
-						<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4" /></svg>
+						<svg class="size-[1.1rem] text-secondary group-hover/button:text-primary" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4" /></svg>
 						{code === 'en' ? messages.downloadEnglish : messages.downloadSpanish}
-					</a>
+					</Button>
 				{/each}
 			</div>
 			<article class="letter-preview" aria-label={messages.previewTitle} lang={certificate.language}>
+				<Card.Root class="gap-0 bg-background p-[clamp(1rem,4vw,2rem)] leading-[1.65]">
 				<header>
 					<h3>{certificate.title}</h3>
 					<p>{certificate.issuedDate}</p>
@@ -214,46 +233,40 @@
 					<p>{certificate.signature.phone}</p>
 					<p>{certificate.signature.email}</p>
 				</div>
+				</Card.Root>
 			</article>
 			<p class="snapshot-note">{messages.snapshotNote}</p>
+			</Card.Root>
 		</section>
 	{/if}
 </div>
 
 <style>
 	.attendance-page { max-width: 64rem; margin-inline: auto; }
-	.eyebrow { margin: 0 0 0.6rem; color: var(--color-accent); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+	.eyebrow { margin: 0 0 0.6rem; color: var(--primary); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
 	h1 { margin: 0; font-family: var(--font-display); font-size: clamp(1.4rem, 3vw, 2.1rem); line-height: 1.3; text-transform: uppercase; overflow-wrap: anywhere; }
-	.introduction { max-width: 44rem; margin: 0.9rem 0 0; color: var(--color-muted); font-size: 0.9375rem; }
+	.introduction { max-width: 44rem; margin: 0.9rem 0 0; color: var(--muted-foreground); font-size: 0.9375rem; }
 	.page-heading { margin-bottom: 1.75rem; }
-	form, .results { border: 1px solid var(--color-border); border-radius: 1rem; background: var(--color-surface); }
 	.form-body { min-width: 0; margin: 0; padding: 0; border: 0; }
 	.form-section { padding: clamp(1.1rem, 3vw, 1.75rem); }
-	.form-section + .form-section { border-top: 1px solid var(--color-border); }
+	.form-section + .form-section { border-top: 1px solid var(--border); }
 	h2 { margin: 0; font-size: 1.125rem; }
 	.section-heading { margin-bottom: 1.25rem; }
-	.section-heading p { margin: 0.35rem 0 0; color: var(--color-muted); font-size: 0.8125rem; }
+	.section-heading p { margin: 0.35rem 0 0; color: var(--muted-foreground); font-size: 0.8125rem; }
 	.fields-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
 	.full-width { grid-column: 1 / -1; }
-	.schedule { margin-top: 1rem; padding: 1rem; border: 1px solid var(--color-border); border-radius: 0.5rem; background: var(--color-accent-soft); }
-	.schedule h3 { margin: 0; color: var(--color-accent); font-size: 0.8125rem; }
+	.schedule { margin-top: 1rem; }
+	.schedule h3 { margin: 0; color: var(--primary); font-size: 0.8125rem; }
 	.schedule p { margin: 0.4rem 0 0; font-size: 0.875rem; }
-	.form-footer { padding: 1.25rem clamp(1.1rem, 3vw, 1.75rem); border-top: 1px solid var(--color-border); }
-	.snapshot-note { margin: 0 0 1rem; color: var(--color-muted); font-size: 0.8125rem; }
-	.error-summary { margin: 0 0 1rem; color: #f0a6a6; font-size: 0.875rem; }
-	.primary-button, .download-button { display: inline-flex; align-items: center; justify-content: center; gap: 0.6rem; min-height: 2.8rem; padding: 0.7rem 1.05rem; border: 1px solid var(--color-accent); border-radius: 0.5rem; font-weight: 700; font-size: 0.875rem; text-decoration: none; cursor: pointer; }
-	.primary-button { background: var(--color-accent); color: var(--color-background); }
-	.primary-button:hover { filter: brightness(1.08); }
-	.primary-button:disabled { cursor: wait; opacity: 0.6; }
-	.download-button { color: var(--color-accent); background: var(--color-accent-soft); }
-	.download-button:hover { background: color-mix(in srgb, var(--color-accent) 22%, var(--color-surface)); }
-	svg { flex-shrink: 0; width: 1.1rem; height: 1.1rem; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-	.results { margin-top: 2rem; padding: clamp(1.1rem, 3vw, 1.75rem); }
-	.ready-message { margin: 0.5rem 0 1rem; color: var(--color-muted); font-size: 0.875rem; }
+	.form-footer { padding: 1.25rem clamp(1.1rem, 3vw, 1.75rem); border-top: 1px solid var(--border); }
+	.snapshot-note { margin: 0 0 1rem; color: var(--muted-foreground); font-size: 0.8125rem; }
+	svg { stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+	.results { margin-top: 2rem; }
+	.ready-message { margin: 0.5rem 0 1rem; color: var(--muted-foreground); font-size: 0.875rem; }
 	.downloads { display: flex; flex-wrap: wrap; gap: 0.75rem; }
-	.letter-preview { margin-top: 1.5rem; padding: clamp(1rem, 4vw, 2rem); border: 1px solid var(--color-border); border-radius: 0.5rem; background: var(--color-background); font-size: 0.875rem; line-height: 1.65; overflow-wrap: anywhere; }
+	.letter-preview { margin-top: 1.5rem; overflow-wrap: anywhere; }
 	.letter-preview h3 { margin: 0; font-size: 1rem; }
-	.letter-preview header p { margin: 0.3rem 0 0; color: var(--color-muted); }
+	.letter-preview header p { margin: 0.3rem 0 0; color: var(--muted-foreground); }
 	.recipient { margin-block: 1.5rem; }
 	.recipient p, .signature p { margin: 0; }
 	.recipient p:first-child { font-weight: 700; }
@@ -261,5 +274,4 @@
 	.snapshot-note { margin: 1rem 0 0; }
 	.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 	@media (max-width: 40rem) { .fields-grid { grid-template-columns: minmax(0, 1fr); } }
-	@media (max-width: 30rem) { .primary-button, .download-button { width: 100%; } }
 </style>
