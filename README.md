@@ -126,7 +126,7 @@ See [authentication setup and security boundaries](docs/authentication.md) for p
 ```text
 src/
   app.html              HTML document template
-  env.ts                Private runtime database/auth declarations (optional until used)
+  env.ts                Private runtime database/auth/Drive declarations (optional until used)
   app.d.ts              Application-wide type declarations
   app.css               Global styles and color tokens
   hooks.server.ts       Composed language, Better Auth handler, and server session hooks
@@ -140,7 +140,7 @@ src/
     ist/                IST types, shared input validation, pure assessment, and presentation
     admin/              Isolated admin design components, scoped styles, and fictional fixtures
     auth-client.ts      Same-origin student/admin Better Auth clients
-    server/             Server-only auth, PDFKit reports, and lazy typed database connection
+    server/             Server-only auth, PDFKit reports, Google Drive archive, and database connection
     speed-math/         Pure question generation, session timing, scoring, and statistics
     utils.ts            Registry class utility and primitive prop/ref types
   routes/
@@ -175,7 +175,7 @@ The shared validator runs in the browser and server. It preserves decimal measur
 
 A successful server submission evaluates the inputs once and creates English and Spanish PDFKit reports from that same result. The on-screen report and downloads share the presentation model. Grades use text as well as color. PDFs feature the Masterminds logo from `static/logo.png`, grouped student details, an upfront readiness summary, and five result cards with textual grade badges, outcomes, and applicable thresholds. Typical reports fit on one Letter page; extended content wraps and paginates with repeated branding and result-column headers. Built-in Helvetica fonts support precomposed Spanish accents. Vite embeds the logo in the server bundle, so generation needs no network requests or deployment-specific filesystem paths. The page works with standard server form submissions when JavaScript is unavailable: exercise choices submit a form update that preserves other entries and clears the exercise’s previous values when inability is chosen, without generating an assessment. Result fields stay disabled until a recorded result is selected. Enhanced submissions add immediate validation and focus handling.
 
-IST names are still entered manually; profile linkage is not implemented. Fitness results are not stored in a database, browser storage, or cookies. Assessment responses are marked `Cache-Control: no-store`; PDFs are returned with the assessment and downloaded directly from the page. Results are self-reported, not official military clearance or a medical evaluation.
+IST names are still entered manually; profile linkage is not implemented. Fitness results are not stored in a database, browser storage, or cookies. With [Google Drive archiving](docs/google-drive.md) configured, a verified sign-in is required and both language PDFs must be saved to the organization's Drive folder before the submission succeeds. Without Drive configuration, the existing public download-only flow remains available. Assessment responses are marked `Cache-Control: no-store`; PDFs are returned with the assessment and downloaded directly from the page. Results are self-reported, not official military clearance or a medical evaluation.
 
 ## Employer attendance certificate
 
@@ -185,9 +185,15 @@ This ports the document rules from the legacy Go `internal/cartaasistencia` impl
 
 Shared browser/server validation requires all eight fields, rejects invalid calendar dates, duplicate form entries, uploaded files, hidden control characters, and overlong text, and normalizes accents and whitespace. The built-in PDF fonts support Spanish accents and WinAnsi punctuation, not every writing system; unsupported characters receive a localized validation error rather than generating a corrupted name. It does not introduce a restriction on future program start dates that the legacy validator did not have. Each server submission creates English and Spanish PDFKit letters from one validated snapshot. The page offers both downloads and a localized text preview; changing the language never reissues a letter. Typical letters fit on one Letter page; longer entries wrap or paginate with repeated branding and an intact signature block positioned near the bottom of the final page. There is no page-number footer. The logo and original signature PNG are embedded in the server build; the signature source is under `src/lib/server/assets`, not publicly served from `static`.
 
-This feature uses the IST-style direct-download flow, not the legacy certificate worker, Gmail delivery, Drive archiving, Postgres persistence, or email-based monthly quota. It needs no service secrets or new dependencies. Entries and generated PDFs are not stored in a database, browser storage, or cookies, and action responses are marked `Cache-Control: no-store`. Standard POST submissions work without JavaScript; enhanced submissions add validation, progress state, and focus handling. The legacy Go files are unchanged.
+This feature uses the IST-style direct-download flow with optional [Google Drive archiving](docs/google-drive.md), not the legacy certificate worker, Gmail delivery, Postgres report persistence, or email-based monthly quota. Without Drive configuration it needs no service secrets. Entries and generated PDFs are not stored in a database, browser storage, or cookies, and action responses are marked `Cache-Control: no-store`. Standard POST submissions work without JavaScript; enhanced submissions add validation, progress state, and focus handling. The legacy Go files are unchanged.
 
-This is a private-development feature. Student details are still manually entered; enrollment lookup and authentication integration are outside this step.
+Student details are still manually entered; enrollment lookup is not implemented. When Drive is enabled, report actions require an existing verified student or admin session. This does not verify the student's enrollment or authority to issue a certificate for someone else.
+
+## Google Drive report archive
+
+Both IST assessments and attendance certificates can automatically save their English and Spanish PDFs in one organization-owned Drive folder. The legacy Go uploader is ported to server-side TypeScript with no new dependencies. Configure private `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `DRIVE_OAUTH_REFRESH_TOKEN`, and `DRIVE_REPORTS_FOLDER_ID` values, plus the existing authentication setup. No secrets or Drive IDs are sent to the browser.
+
+Archiving requires sign-in and waits for both uploads before returning success/downloads. English/Spanish notices disclose the storage change and show success or actionable failure states. Without Drive configuration, reports retain the existing download-only behavior. There is no historical backfill, durable retry queue, or cross-request deduplication; partial/ambiguous upload failures can leave files in Drive. See [Google Drive configuration, permissions, privacy, and retry limits](docs/google-drive.md) before enabling it.
 
 ## English frequency deck
 

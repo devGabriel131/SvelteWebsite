@@ -3,6 +3,7 @@
 
 	import { tick, untrack } from 'svelte';
 	import IstAssessmentReport from '#lib/components/IstAssessmentReport.svelte';
+	import ReportArchiveStatus from '#lib/components/ReportArchiveStatus.svelte';
 		import IstChoiceGroup from '#lib/components/IstChoiceGroup.svelte';
 	import IstExerciseInput from '#lib/components/IstExerciseInput.svelte';
 	import IstField from '#lib/components/IstField.svelte';
@@ -15,7 +16,7 @@
 	import { readIstFormData, revalidateIstErrors, validateIstInput } from '#lib/ist/validation.ts';
 	import type { PageProps } from './$types';
 
-	let { form }: PageProps = $props();
+	let { form, data }: PageProps = $props();
 	const language = useLanguage();
 	const messages = $derived(language.messages.ist);
 	let values = $state<IstFormValues>(untrack(() => form?.values ??
@@ -65,6 +66,10 @@
 		<p class="introduction">{messages.introduction}</p>
 
 	</header>
+
+	{#if data.driveArchiveEnabled}
+		<ReportArchiveStatus state="notice" />
+	{/if}
 
 	<form
 		method="POST" novalidate bind:this={formElement}
@@ -162,6 +167,9 @@
 					<Alert.Description>{messages.serverError}</Alert.Description>
 				</Alert.Root>
 			{/if}
+			{#if form?.archiveError}
+				<ReportArchiveStatus state={form.archiveError} />
+			{/if}
 			<Button class="min-h-[2.8rem]" type="submit" disabled={submitting} aria-busy={submitting}>
 				{submitting ? messages.submitting : messages.submit}
 				<svg class="submit-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6" /></svg>
@@ -181,6 +189,7 @@
 					{messages.download}
 				</Button>
 			</div>
+			{#if form.archived}<ReportArchiveStatus state="saved" />{/if}
 			<IstAssessmentReport {report} />
 			</Card.Root>
 		</section>

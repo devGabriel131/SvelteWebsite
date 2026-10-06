@@ -133,6 +133,28 @@ describe('frequency start screen', () => {
 	});
 });
 
+describe('frequency practice guidance', () => {
+	test('provides setup, session-only progress, and keyboard guidance in both languages', () => {
+		for (const { code } of languages) {
+			const messages = translations[code].frequency;
+			for (const key of ['sessionOnly', 'methodTitle', 'untimed', 'sessionLabel', 'setupTitle', 'setupDescription', 'keyboardTip'] as const) {
+				expect(messages[key].trim().length).toBeGreaterThan(0);
+			}
+		}
+	});
+
+	test('provides recall, search, and repeat method steps in both languages', () => {
+		for (const { code } of languages) {
+			const steps = translations[code].frequency.methodSteps;
+			expect(Object.keys(steps)).toEqual(['recall', 'search', 'repeat']);
+			for (const key of ['recall', 'search', 'repeat'] as const) {
+				expect(steps[key].title.trim().length).toBeGreaterThan(0);
+				expect(steps[key].description.trim().length).toBeGreaterThan(0);
+			}
+		}
+	});
+});
+
 describe('frequency round numbering', () => {
 	test.each([1, 2, 15])('labels round %i in both languages', (round) => {
 		expect(formatMessage(translations.en.frequency.roundLabel, { round })).toBe(`Round ${round}`);

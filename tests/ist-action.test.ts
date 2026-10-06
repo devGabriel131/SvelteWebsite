@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { actions } from '../src/routes/ist/+page.server';
+import { createIstActions } from '../src/lib/server/ist-action';
 import { istFields, type IstField, type IstFormValues } from '../src/lib/ist/types';
 import { presentIstAssessment } from '../src/lib/ist/presentation';
+
+const actions = createIstActions(() => null);
 
 function recordedValues(): IstFormValues {
 	return {

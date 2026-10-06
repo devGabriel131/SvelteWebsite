@@ -478,6 +478,12 @@ const english = {
 	designPreview: englishDesignPreview,
 	admin: englishAdmin,
 	attendance: englishAttendance,
+	reportArchive: {
+		notice: 'When you generate a report, both the English and Spanish PDFs, including the personal details entered here, are saved in Masterminds’ Google Drive. Sign-in is required.',
+		saved: 'Both language versions were saved to Masterminds’ Google Drive.',
+		signIn: 'Sign in before generating a report and saving it to Google Drive. Your entries have been kept on this page.',
+		unavailable: 'We could not confirm that both PDFs were saved to Google Drive. The report is not complete. Your entries have been kept; please try again later or contact an administrator.'
+	},
 	auth: {
 		email: 'Email address',
 		signIn: 'Sign in',
@@ -626,6 +632,28 @@ frequency: {
 	eyebrow: 'Word by word',
 	title: 'English frequency deck',
 	introduction: 'See the English word. Recall it in Spanish. Build your vocabulary, one card at a time.',
+
+	sessionOnly: 'Progress is only kept while you’re on this page. Leaving or reloading resets it.',
+	methodTitle: 'The rhythm',
+	methodSteps: {
+		recall: {
+			title: 'Recall',
+			description: 'Read the English word. Think of its Spanish meaning.'
+		},
+		search: {
+			title: 'Choose',
+			description: 'Type in Spanish, then choose a suggestion.'
+		},
+		repeat: {
+			title: 'Build',
+			description: 'Review the translation. Missed words get more practice when eligible.'
+		}
+	},
+	untimed: 'At your pace',
+	sessionLabel: 'Vocabulary practice',
+	setupTitle: 'A stronger vocabulary starts here.',
+	setupDescription: 'Practice frequent English words in short, adaptive rounds. No timer. Just one word at a time.',
+	keyboardTip: 'Use ↑ ↓ to choose a suggestion and Enter to answer.',
 	direction: 'English → Spanish',
 	englishShort: 'EN',
 	spanishShort: 'ES',
@@ -747,6 +775,12 @@ const spanish: Messages = {
 	designPreview: spanishDesignPreview,
 	admin: spanishAdmin,
 	attendance: spanishAttendance,
+	reportArchive: {
+		notice: 'Al generar un informe, los PDF en inglés y español, incluidos los datos personales ingresados aquí, se guardan en el Google Drive de Masterminds. Debes iniciar sesión.',
+		saved: 'Ambas versiones se guardaron en el Google Drive de Masterminds.',
+		signIn: 'Inicia sesión antes de generar un informe y guardarlo en Google Drive. Tus datos se han conservado en esta página.',
+		unavailable: 'No pudimos confirmar que ambos PDF se guardaran en Google Drive. El informe no está completo. Tus datos se han conservado; inténtalo más tarde o comunícate con un administrador.'
+	},
 	auth: {
 		email: 'Correo electrónico',
 		signIn: 'Iniciar sesión',
@@ -895,6 +929,28 @@ frequency: {
 	eyebrow: 'Palabra por palabra',
 	title: 'Tarjetas de inglés frecuente',
 	introduction: 'Mira la palabra en inglés. Recuérdala en español. Amplía tu vocabulario, una tarjeta a la vez.',
+
+	sessionOnly: 'Tu progreso solo se conserva mientras estás en esta página. Al salir o recargar, se reinicia.',
+	methodTitle: 'El ritmo',
+	methodSteps: {
+		recall: {
+			title: 'Recuerda',
+			description: 'Lee la palabra en inglés. Piensa en su significado en español.'
+		},
+		search: {
+			title: 'Elige',
+			description: 'Escribe en español y elige una sugerencia.'
+		},
+		repeat: {
+			title: 'Refuerza',
+			description: 'Repasa la traducción. Las palabras que falles se practican más mientras sean elegibles.'
+		}
+	},
+	untimed: 'A tu ritmo',
+	sessionLabel: 'Práctica de vocabulario',
+	setupTitle: 'Un vocabulario más sólido empieza aquí.',
+	setupDescription: 'Practica palabras frecuentes en inglés en rondas cortas y adaptativas. Sin cronómetro. Una palabra a la vez.',
+	keyboardTip: 'Usa ↑ ↓ para elegir una sugerencia y Enter para responder.',
 	direction: 'Inglés → español',
 	englishShort: 'EN',
 	spanishShort: 'ES',

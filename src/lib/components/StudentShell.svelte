@@ -14,20 +14,21 @@
 		preview = false
 	}: {
 		children: Snippet;
-		activePage?: 'home' | 'speed-math';
+		activePage?: 'home' | 'speed-math' | 'frequency' | 'ist' | 'attendance';
 		preview?: boolean;
 	} = $props();
 	const language = useLanguage();
 	const messages = $derived(language.messages.designPreview);
 	const viewer = $derived(page.data.viewer);
 	const homeHref = $derived(preview ? `${resolve('/design-preview')}?direction=focus` : resolve('/'));
-	const pageTitle = $derived(activePage === 'home' ? messages.home : messages.tools.math.title);
+
 	const tools = $derived([
-		{ key: 'math', href: resolve('/speed-math'), icon: Zap, ...messages.tools.math },
-		{ key: 'vocabulary', href: resolve('/frequency'), icon: BookOpen, ...messages.tools.vocabulary },
-		{ key: 'ist', href: resolve('/ist'), icon: Dumbbell, ...messages.tools.ist },
-		{ key: 'attendance', href: resolve('/attendance'), icon: FileText, ...messages.tools.attendance }
+		{ key: 'math', page: 'speed-math', href: resolve('/speed-math'), icon: Zap, ...messages.tools.math },
+		{ key: 'vocabulary', page: 'frequency', href: resolve('/frequency'), icon: BookOpen, ...messages.tools.vocabulary },
+		{ key: 'ist', page: 'ist', href: resolve('/ist'), icon: Dumbbell, ...messages.tools.ist },
+		{ key: 'attendance', page: 'attendance', href: resolve('/attendance'), icon: FileText, ...messages.tools.attendance }
 	]);
+	const pageTitle = $derived(tools.find((tool) => tool.page === activePage)?.title ?? messages.home);
 </script>
 
 <div class="student-shell" data-preview={preview ? '' : undefined}>
@@ -47,7 +48,7 @@
 				{#if index === 0 || index === 2}
 					<p class="nav-group">{index === 0 ? messages.practice : messages.resources}</p>
 				{/if}
-				<Button href={tool.href} variant="ghost" aria-current={activePage === 'speed-math' && tool.key === 'math' ? 'page' : undefined} class="justify-start gap-3 px-3 text-left">
+				<Button href={tool.href} variant="ghost" aria-current={activePage === tool.page ? 'page' : undefined} class="justify-start gap-3 px-3 text-left">
 					<tool.icon aria-hidden="true" />{tool.title}
 				</Button>
 			{/each}

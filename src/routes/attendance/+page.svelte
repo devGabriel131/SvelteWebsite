@@ -11,6 +11,7 @@
 	} from '#lib/attendance/validation.ts';
 	import ChoiceGroup from '#lib/components/ChoiceGroup.svelte';
 	import FormField from '#lib/components/FormField.svelte';
+	import ReportArchiveStatus from '#lib/components/ReportArchiveStatus.svelte';
 	import * as Alert from '#lib/components/ui/alert/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Card from '#lib/components/ui/card/index.js';
@@ -18,7 +19,7 @@
 	import { formatMessage, languages } from '#lib/i18n/translations.ts';
 	import type { PageProps } from './$types';
 
-	let { form }: PageProps = $props();
+	let { form, data }: PageProps = $props();
 	const language = useLanguage();
 	const messages = $derived(language.messages.attendance);
 	let values = $state<AttendanceFormValues>(untrack(() => form?.values ??
@@ -69,6 +70,10 @@
 		<h1>{messages.title}</h1>
 		<p class="introduction">{messages.introduction}</p>
 	</header>
+
+	{#if data.driveArchiveEnabled}
+		<ReportArchiveStatus state="notice" />
+	{/if}
 
 	<form method="POST" novalidate bind:this={formElement}
 		use:enhance={({ formElement, cancel }) => {
@@ -193,6 +198,9 @@
 					<Alert.Description>{messages.serverError}</Alert.Description>
 				</Alert.Root>
 			{/if}
+			{#if form?.archiveError}
+				<ReportArchiveStatus state={form.archiveError} />
+			{/if}
 			<Button class="min-h-[2.8rem] gap-[0.6rem] px-[1.05rem] py-[0.7rem] font-bold disabled:cursor-wait max-[30rem]:w-full"
 				type="submit" disabled={submitting} aria-busy={submitting}>
 				{submitting ? messages.submitting : messages.submit}
@@ -207,6 +215,7 @@
 			<Card.Root class="gap-0 p-[clamp(1.1rem,3vw,1.75rem)]">
 			<h2 id="certificate-title">{messages.resultsTitle}</h2>
 			<p class="ready-message">{messages.ready}</p>
+			{#if form.archived}<ReportArchiveStatus state="saved" />{/if}
 			<div class="downloads">
 				{#each languages as { code } (code)}
 					<Button variant="outline" class="min-h-[2.8rem] gap-[0.6rem] px-[1.05rem] py-[0.7rem] font-bold max-[30rem]:w-full"

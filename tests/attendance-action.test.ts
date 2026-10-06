@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { actions } from '../src/routes/attendance/+page.server';
+import { createAttendanceActions } from '../src/lib/server/attendance-action';
 import { presentAttendanceCertificate } from '../src/lib/attendance/presentation';
 import {
 	attendanceFields, attendanceTextLimits,
 	type AttendanceField, type AttendanceFormValues
 } from '../src/lib/attendance/types';
+
+const actions = createAttendanceActions(() => null);
 
 function validValues(): AttendanceFormValues {
 	return {

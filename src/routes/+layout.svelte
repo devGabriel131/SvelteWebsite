@@ -5,6 +5,7 @@
 	import { asset, resolve } from '$app/paths';
 	import DashboardHeader from '#lib/components/DashboardHeader.svelte';
 	import DashboardSidebar from '#lib/components/DashboardSidebar.svelte';
+	import StudentShell from '#lib/components/StudentShell.svelte';
 	import { provideLanguage } from '#lib/i18n/language.svelte.ts';
 	import type { LayoutProps } from './$types';
 
@@ -26,7 +27,13 @@
 	<main id="main-content" class="admin-main" tabindex="-1">
 		{@render children()}
 	</main>
-{:else if page.route.id === '/' || page.route.id === '/design-preview' || page.route.id === '/speed-math'}
+{:else if page.route.id === '/ist' || page.route.id === '/attendance'}
+	<main id="main-content" class="home-main" tabindex="-1">
+		<StudentShell activePage={page.route.id === '/ist' ? 'ist' : 'attendance'}>
+			{@render children()}
+		</StudentShell>
+	</main>
+{:else if page.route.id === '/' || page.route.id === '/design-preview' || page.route.id === '/speed-math' || page.route.id === '/frequency'}
 	<main id="main-content" class="home-main" tabindex="-1">
 		{@render children()}
 	</main>
