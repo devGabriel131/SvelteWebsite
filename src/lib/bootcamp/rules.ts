@@ -1,5 +1,13 @@
 import { eventTimeZone, depositCents, priceCents, type BootcampEvent, type RegistrationStatus } from './types';
 
+export function parseEventLocalDate(raw: string): Date | null {
+	if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(raw)) return null;
+	const value = raw.length === 16 ? `${raw}:00` : raw;
+	const result = new Date(`${value}-04:00`);
+	if (!Number.isFinite(result.getTime()) || new Date(result.getTime() - 4 * 3600000).toISOString().slice(0, 19) !== value) return null;
+	return result;
+}
+
 export function signingDate(now: Date): string {
 	const parts = new Intl.DateTimeFormat('en-US', { timeZone: eventTimeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now);
 	const part = (key: string) => parts.find((p) => p.type === key)!.value;

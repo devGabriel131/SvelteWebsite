@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
-import { crc32, deflateSync } from 'node:zlib';
+import { crc32, deflateSync, inflateSync } from 'node:zlib';
 import { and, eq, inArray } from 'drizzle-orm';
 import { assertLocalDatabaseUrl, verifyLocalDatabase } from '../scripts/db/local-target';
 import { migrateDatabase } from '../scripts/db/migrate';
@@ -78,7 +78,7 @@ function birthday(years: number): string {
 function waiverForm(event: Event, student: Student, overrides: Record<string, string> = {}): FormData {
 	const values: Record<string, string> = {
 		eventId: event.id, revision: String(event.revision), identityVersion: studentIdentityVersion(student),
-		language: 'en', dateOfBirth: '1990-01-01',
+		language: 'es', dateOfBirth: '1990-01-01',
 		phone: '787-555-0100', municipality: 'Mayagüez', signingCity: 'Añasco', ...signatures
 	};
 	for (const key of sectionKeys) values[`read${key[0].toUpperCase()}${key.slice(1)}`] = 'true';
@@ -89,10 +89,39 @@ function letterForm(event: Event, overrides: Record<string, string> = {}): FormD
 		employer: 'Empresa Ficticia', contact: 'Alex de Prueba', position: 'Gerencia', workplace: 'Oficina de Prueba',
 		...overrides });
 }
+function localTimestamp(date: Date): string { return new Date(date.getTime() - 4 * 3600000).toISOString().slice(0, 19); }
+function eventForm(overrides: Record<string, string> = {}): FormData {
+	const now = Date.now();
+	return form({ title: 'Bootcamp Ficticio Estándar', venue: 'Cancha de Añasco', legalSource: 'standard', legalApproved: 'true',
+		startsAt: localTimestamp(new Date(now + 10 * day)), endsAt: localTimestamp(new Date(now + 11 * day)),
+		arrivalAt: localTimestamp(new Date(now + 10 * day - 3600000)), registrationClosesAt: localTimestamp(new Date(now + 9 * day)),
+		...overrides });
+}
 function sha256(pdf: Uint8Array): string { return createHash('sha256').update(pdf).digest('hex'); }
 function expectPdf(pdf: Buffer) {
 	expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
 	expect(pdf.toString('latin1').trimEnd()).toEndWith('%%EOF');
+}
+// Same PDFKit stream inspection as bootcamp-pdf.test.ts, limited to the legal body.
+// Importing that test module would register its tests a second time.
+function pdfLegalText(pdf: Buffer): string {
+	const objects = new Map([...pdf.toString('latin1').matchAll(/(\d+) 0 obj\n([\s\S]*?)\nendobj/g)]
+		.map((match) => [Number(match[1]), match[2]]));
+	const decoder = new TextDecoder('windows-1252');
+	let text = '';
+	for (const object of objects.values()) {
+		if (!/\/Type \/Page\b/.test(object)) continue;
+		const resources = objects.get(Number(object.match(/\/Resources (\d+) 0 R/)?.[1]))!;
+		const fonts = new Map([...resources.matchAll(/\/(F\d+) (\d+) 0 R/g)]
+			.map((match) => [match[1], objects.get(Number(match[2]))!.match(/\/BaseFont \/([^\s]+)/)![1]]));
+		const content = objects.get(Number(object.match(/\/Contents (\d+) 0 R/)?.[1]))!;
+		const commands = inflateSync(Buffer.from(content.match(/stream\n([\s\S]*?)\nendstream/)![1], 'latin1')).toString('latin1');
+		for (const match of commands.matchAll(/BT\n([\s\S]*?)\nET/g)) {
+			if (fonts.get(match[1].match(/\/(F\d+) [\d.]+ Tf/)![1]) !== 'Times-Roman') continue;
+			text += decoder.decode(Buffer.concat([...match[1].matchAll(/<([\da-f]+)>/gi)].map((hex) => Buffer.from(hex[1], 'hex'))));
+		}
+	}
+	return text;
 }
 function postgresError(error: unknown): unknown {
 	let current = error;
@@ -209,6 +238,12 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 			}).returning();
 			return row;
 		}
+		async function createEvent(input: FormData) {
+			const id = await saveEvent(db, admin.id, input);
+			owned.events.push(id);
+			const [row] = await db.select().from(events).where(eq(events.id, id));
+			return row;
+		}
 		async function registration(person: Participant, event: Event) {
 			const [row] = await db.select().from(registrations).where(and(
 				eq(registrations.studentId, person.student.id), eq(registrations.eventId, event.id)
@@ -225,7 +260,7 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 			await service.submitLetter(person.account.id, form({ eventId: event.id, needsLetter: 'false' }));
 			return { person, registration: await registration(person, event) };
 		}
-		return { db, service, admin, account, student, participant, event, registration, document, ready };
+		return { db, service, admin, account, student, participant, event, createEvent, registration, document, ready };
 	}
 
 	test('email matching never links an account; only the explicit administrator mapping grants access', async () => {
@@ -315,62 +350,58 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 		});
 	});
 
-	for (const language of ['en', 'es'] as const) {
-		test(`${language} preview renders a real PDF without saving registration, birthday, or documents`, async () => {
-			await withFixtures(async (f) => {
-				const person = await f.participant({ dateOfBirth: null });
-				const event = await f.event();
-				let backups = 0;
-				const service = createRegistrationService(f.db, async () => { backups++; });
-				expectPdf(await service.preview(person.account.id, waiverForm(event, person.student, { language })));
-				expect(await f.registration(person, event)).toBeUndefined();
-				expect((await linkedStudent(f.db, person.account.id))?.dateOfBirth).toBeNull();
-				const registrationId = await service.start(person.account.id, event.id);
-				const before = await f.registration(person, event);
-				expectPdf(await service.preview(person.account.id, waiverForm(event, person.student, { language })));
-				expect(await f.registration(person, event)).toEqual(before);
-				expect(await f.db.select().from(documents).where(eq(documents.registrationId, registrationId))).toHaveLength(0);
-				expect(backups).toBe(0);
-			});
+	test('Spanish preview renders a real PDF without saving registration, birthday, or documents', async () => {
+		await withFixtures(async (f) => {
+			const person = await f.participant({ dateOfBirth: null });
+			const event = await f.event();
+			let backups = 0;
+			const service = createRegistrationService(f.db, async () => { backups++; });
+			expectPdf(await service.preview(person.account.id, waiverForm(event, person.student)));
+			expect(await f.registration(person, event)).toBeUndefined();
+			expect((await linkedStudent(f.db, person.account.id))?.dateOfBirth).toBeNull();
+			const registrationId = await service.start(person.account.id, event.id);
+			const before = await f.registration(person, event);
+			expectPdf(await service.preview(person.account.id, waiverForm(event, person.student)));
+			expect(await f.registration(person, event)).toEqual(before);
+			expect(await f.db.select().from(documents).where(eq(documents.registrationId, registrationId))).toHaveLength(0);
+			expect(backups).toBe(0);
 		});
-	}
+	});
 
-	for (const language of ['en', 'es'] as const) {
-		test(`${language} preview token saves the exact reviewed PDF, not a newly dated rendering`, async () => {
-			await withFixtures(async (f) => {
-				const person = await f.participant({ dateOfBirth: null });
-				const event = await f.event();
-				const backups: Buffer[] = [];
-				const service = createRegistrationService(f.db, async (id) => {
-					backups.push((await f.document(id)).pdf);
-					throw new Error('Fictional backup outage');
-				}, previewSecret);
-				const input = waiverForm(event, person.student, { language });
-				const preview = await service.previewDocument(person.account.id, input);
-				expectPdf(preview.pdf);
-				expect(typeof preview.token).toBe('string');
-				expect(preview.token.length).toBeGreaterThan(0);
-				expect(await f.registration(person, event)).toBeUndefined();
-				expect((await linkedStudent(f.db, person.account.id))?.dateOfBirth).toBeNull();
-				expect(backups).toHaveLength(0);
-				// PDF metadata has second precision. Cross a second boundary so accidentally
-				// re-rendering with a fresh signing time cannot pass a byte-equality assertion.
-				await Bun.sleep(1100);
-				const submittedAt = Date.now();
-				input.set('previewToken', preview.token);
-				const documentId = await service.submitWaiver(person.account.id, input);
-				const saved = await f.document(documentId);
-				expect(saved.pdf).toEqual(preview.pdf);
-				expect(saved.sha256).toBe(sha256(preview.pdf));
-				expect(saved).toMatchObject({ language, kind: 'waiver', backupStatus: 'pending' });
-				expect(Date.parse((saved.snapshot as WaiverSnapshot).signedAt)).toBeLessThan(submittedAt);
-				expect(saved.snapshot).toEqual((await f.registration(person, event)).waiver!);
-				expect((await linkedStudent(f.db, person.account.id))?.dateOfBirth).toBe('1990-01-01');
-				expect(backups).toEqual([preview.pdf]);
-				expect((await documentForViewer(f.db, documentId, { id: person.account.id, role: 'student' }))?.pdf).toEqual(preview.pdf);
-			});
-		}, 15000);
-	}
+	test('Spanish preview token saves the exact reviewed PDF, not a newly dated rendering', async () => {
+		await withFixtures(async (f) => {
+			const person = await f.participant({ dateOfBirth: null });
+			const event = await f.event();
+			const backups: Buffer[] = [];
+			const service = createRegistrationService(f.db, async (id) => {
+				backups.push((await f.document(id)).pdf);
+				throw new Error('Fictional backup outage');
+			}, previewSecret);
+			const input = waiverForm(event, person.student);
+			const preview = await service.previewDocument(person.account.id, input);
+			expectPdf(preview.pdf);
+			expect(typeof preview.token).toBe('string');
+			expect(preview.token.length).toBeGreaterThan(0);
+			expect(await f.registration(person, event)).toBeUndefined();
+			expect((await linkedStudent(f.db, person.account.id))?.dateOfBirth).toBeNull();
+			expect(backups).toHaveLength(0);
+			// PDF metadata has second precision. Cross a second boundary so accidentally
+			// re-rendering with a fresh signing time cannot pass a byte-equality assertion.
+			await Bun.sleep(1100);
+			const submittedAt = Date.now();
+			input.set('previewToken', preview.token);
+			const documentId = await service.submitWaiver(person.account.id, input);
+			const saved = await f.document(documentId);
+			expect(saved.pdf).toEqual(preview.pdf);
+			expect(saved.sha256).toBe(sha256(preview.pdf));
+			expect(saved).toMatchObject({ language: 'es', kind: 'waiver', backupStatus: 'pending' });
+			expect(Date.parse((saved.snapshot as WaiverSnapshot).signedAt)).toBeLessThan(submittedAt);
+			expect(saved.snapshot).toEqual((await f.registration(person, event)).waiver!);
+			expect((await linkedStudent(f.db, person.account.id))?.dateOfBirth).toBe('1990-01-01');
+			expect(backups).toEqual([preview.pdf]);
+			expect((await documentForViewer(f.db, documentId, { id: person.account.id, role: 'student' }))?.pdf).toEqual(preview.pdf);
+		});
+	}, 15000);
 
 	test('tampered preview tokens are rejected without saving any registration or birthday', async () => {
 		await withFixtures(async (f) => {
@@ -465,6 +496,26 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 		});
 	}
 
+	test('new waiver previews and submissions reject every language except exact es without side effects', async () => {
+		await withFixtures(async (f) => {
+			const person = await f.participant({ dateOfBirth: null });
+			const event = await f.event();
+			let backups = 0;
+			const service = createRegistrationService(f.db, async () => { backups++; }, previewSecret);
+			for (const language of [null, 'en', 'fr', '', 'ES', 'es-PR', ' es ', new File(['es'], 'language.txt')]) {
+				const input = waiverForm(event, person.student);
+				if (language === null) input.delete('language');
+				else input.set('language', language);
+				await expect(service.preview(person.account.id, input)).rejects.toMatchObject({ name: 'BootcampError', code: 'invalid' });
+				await expect(service.previewDocument(person.account.id, input)).rejects.toMatchObject({ code: 'invalid' });
+				await expect(service.submitWaiver(person.account.id, input)).rejects.toMatchObject({ code: 'invalid' });
+				expect(await f.registration(person, event)).toBeUndefined();
+				expect((await linkedStudent(f.db, person.account.id))?.dateOfBirth).toBeNull();
+			}
+			expect(backups).toBe(0);
+		});
+	});
+
 	test('stale revisions, a changed saved birthday, and invalid languages cannot create a waiver', async () => {
 		await withFixtures(async (f) => {
 			const person = await f.participant();
@@ -478,52 +529,50 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 		});
 	});
 
-	for (const language of ['en', 'es'] as const) {
-		test(`${language} waiver commits exact snapshot/PDF/birthday before a real backup-service failure`, async () => {
-			await withFixtures(async (f) => {
-				const person = await f.participant({ dateOfBirth: null });
-				const event = await f.event();
-				const uploads: DriveUpload[] = [];
-				const observed: { document: typeof documents.$inferSelect; registration: typeof registrations.$inferSelect; birthday: string | null | undefined }[] = [];
-				const fileId = `fictional-drive-${randomUUID()}`;
-				const drive: DriveClient = {
-					async generateFileId() { return fileId; },
-					async upload(upload) {
-						uploads.push(upload);
-						observed.push({ document: await f.document(upload.appProperties!.bootcampDocumentId),
-							registration: await f.registration(person, event), birthday: (await linkedStudent(f.db, person.account.id))?.dateOfBirth });
-						throw new Error('Fictional Drive outage; do not persist provider details');
-					},
-					async getFile() { throw new Error('Unexpected fake Drive read'); },
-					async createFolder() { throw new Error('Unexpected fake Drive folder creation'); }
-				};
-				const backup = createBootcampBackup(f.db, drive, 'fictional-folder');
-				const service = createRegistrationService(f.db, backup.backupDocument);
-				const documentId = await service.submitWaiver(person.account.id, waiverForm(event, person.student, { language, ssn: '000-00-0000' }));
-				const registration = await f.registration(person, event);
-				const saved = await f.document(documentId);
-				expect(saved).toMatchObject({ registrationId: registration.id, kind: 'waiver', language,
-					backupStatus: 'failed', backupError: 'drive_unavailable', backupAttempts: 1, driveFileId: fileId });
-				expect(saved.snapshot).toEqual(registration.waiver!);
-				expect(saved.snapshot).toMatchObject({ event: eventView(event), language,
-					student: { name: 'María de Prueba', email: person.student.email, dateOfBirth: '1990-01-01' },
-					signatures: Object.fromEntries(sectionKeys.map((key) => [key, validateSignature(signatures[key])])) });
-				expect(JSON.stringify(saved.snapshot)).not.toContain('000-00-0000');
-				expectPdf(saved.pdf);
-				expect(saved.pdf).toEqual(await renderWaiverPdf(saved.snapshot as WaiverSnapshot));
-				expect(saved.sha256).toBe(sha256(saved.pdf));
-				expect(uploads).toHaveLength(1);
-				expect(uploads[0].bytes).toEqual(saved.pdf);
-				expect(uploads[0].appProperties).toEqual({ bootcampDocumentId: documentId, sha256: saved.sha256 });
-				expect(observed).toHaveLength(1);
-				expect(observed[0].document.pdf).toEqual(saved.pdf);
-				expect(saved.snapshot).toEqual(observed[0].registration.waiver!);
-				expect(observed[0].birthday).toBe('1990-01-01');
-				expect(await backup.backupDocument(documentId)).toEqual({ documentId, status: 'busy' });
-				expect(uploads).toHaveLength(1);
-			});
+	test('Spanish waiver commits exact snapshot/PDF/birthday before a real backup-service failure', async () => {
+		await withFixtures(async (f) => {
+			const person = await f.participant({ dateOfBirth: null });
+			const event = await f.event();
+			const uploads: DriveUpload[] = [];
+			const observed: { document: typeof documents.$inferSelect; registration: typeof registrations.$inferSelect; birthday: string | null | undefined }[] = [];
+			const fileId = `fictional-drive-${randomUUID()}`;
+			const drive: DriveClient = {
+				async generateFileId() { return fileId; },
+				async upload(upload) {
+					uploads.push(upload);
+					observed.push({ document: await f.document(upload.appProperties!.bootcampDocumentId),
+						registration: await f.registration(person, event), birthday: (await linkedStudent(f.db, person.account.id))?.dateOfBirth });
+					throw new Error('Fictional Drive outage; do not persist provider details');
+				},
+				async getFile() { throw new Error('Unexpected fake Drive read'); },
+				async createFolder() { throw new Error('Unexpected fake Drive folder creation'); }
+			};
+			const backup = createBootcampBackup(f.db, drive, 'fictional-folder');
+			const service = createRegistrationService(f.db, backup.backupDocument);
+			const documentId = await service.submitWaiver(person.account.id, waiverForm(event, person.student, { ssn: '000-00-0000' }));
+			const registration = await f.registration(person, event);
+			const saved = await f.document(documentId);
+			expect(saved).toMatchObject({ registrationId: registration.id, kind: 'waiver', language: 'es',
+				backupStatus: 'failed', backupError: 'drive_unavailable', backupAttempts: 1, driveFileId: fileId });
+			expect(saved.snapshot).toEqual(registration.waiver!);
+			expect(saved.snapshot).toMatchObject({ event: eventView(event), language: 'es',
+				student: { name: 'María de Prueba', email: person.student.email, dateOfBirth: '1990-01-01' },
+				signatures: Object.fromEntries(sectionKeys.map((key) => [key, validateSignature(signatures[key])])) });
+			expect(JSON.stringify(saved.snapshot)).not.toContain('000-00-0000');
+			expectPdf(saved.pdf);
+			expect(saved.pdf).toEqual(await renderWaiverPdf(saved.snapshot as WaiverSnapshot));
+			expect(saved.sha256).toBe(sha256(saved.pdf));
+			expect(uploads).toHaveLength(1);
+			expect(uploads[0].bytes).toEqual(saved.pdf);
+			expect(uploads[0].appProperties).toEqual({ bootcampDocumentId: documentId, sha256: saved.sha256 });
+			expect(observed).toHaveLength(1);
+			expect(observed[0].document.pdf).toEqual(saved.pdf);
+			expect(saved.snapshot).toEqual(observed[0].registration.waiver!);
+			expect(observed[0].birthday).toBe('1990-01-01');
+			expect(await backup.backupDocument(documentId)).toEqual({ documentId, status: 'busy' });
+			expect(uploads).toHaveLength(1);
 		});
-	}
+	});
 
 	test('a throwing backup callback cannot roll back the saved waiver or force a replacement on repeat submission', async () => {
 		await withFixtures(async (f) => {
@@ -795,17 +844,123 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 		});
 	});
 
-	test('admin event saves retain both legal languages, enforce approval/readiness, and reject stale edits', async () => {
+	test('admin standard creation needs no legal inputs; saves regenerate Spanish from the new dates and venue', async () => {
+		await withFixtures(async (f) => {
+			const input = eventForm({ legalApproved: 'false' });
+			expect([...input.keys()].some((key) => key.startsWith('legal_'))).toBe(false);
+			const event = await f.createEvent(input);
+			expect(event).toMatchObject({ revision: 1, registrationOpen: false, legalApproved: false,
+				approvedBy: null, createdBy: f.admin.id });
+			expect(event.legal.en).toEqual(event.legal.es);
+			for (const section of sectionKeys) {
+				expect(event.legal.es[section].length).toBeGreaterThan(100);
+				expect(event.legal.es[section]).not.toMatch(/\{\w+\}/);
+			}
+			for (const value of [event.venue, '$30.00', '$15.00']) expect(event.legal.es.agreement).toContain(value);
+			await expect(toggleEvent(f.db, form({ eventId: event.id, revision: '1', open: 'true' }), true))
+				.rejects.toMatchObject({ code: 'unavailable' });
+			const date = signingDate(new Date(event.startsAt.getTime() + 2 * day));
+			const edit = eventForm({ id: event.id, revision: '1', venue: 'Cancha Nueva de Ponce',
+				startsAt: `${date}T13:15:16`, endsAt: `${date}T18:00:00`, arrivalAt: `${date}T12:10:11` });
+			for (const language of ['en', 'es']) for (const section of sectionKeys) {
+				edit.set(`legal_${language}_${section}`, 'Tampered browser clauses 🖊');
+			}
+			expect(await saveEvent(f.db, f.admin.id, edit)).toBe(event.id);
+			const [saved] = await f.db.select().from(events).where(eq(events.id, event.id));
+			expect(saved).toMatchObject({ revision: 2, registrationOpen: false, legalApproved: true,
+				approvedBy: f.admin.id, venue: 'Cancha Nueva de Ponce', startsAt: new Date(`${date}T13:15:16-04:00`) });
+			expect(saved.legal.en).toEqual(saved.legal.es);
+			const eventDate = new Intl.DateTimeFormat('es-PR', { timeZone: 'America/Puerto_Rico', dateStyle: 'long' }).format(saved.startsAt);
+			for (const section of ['agreement', 'liability'] as const) {
+				expect(saved.legal.es[section]).toContain(saved.venue);
+				expect(saved.legal.es[section]).toContain(eventDate);
+				expect(saved.legal.es[section]).not.toContain(event.venue);
+				expect(saved.legal.es[section]).not.toContain('Tampered');
+				expect(saved.legal.es[section]).not.toBe(event.legal.es[section]);
+			}
+			expect(saved.legal.es.agreement).toContain('El registro comienza a las 12:10:11.');
+			expect(saved.legal.es.agreement).toContain('No se aceptarán estudiantes después de las 13:15:16.');
+			expect(saved.legal.es.media).toBe(event.legal.es.media);
+			await expect(saveEvent(f.db, f.admin.id, edit)).rejects.toMatchObject({ code: 'stale' });
+		});
+	});
+
+	test('standard clauses reach the student page, Spanish snapshot and PDF unchanged; rescheduling preserves signed bytes', async () => {
+		await withFixtures(async (f) => {
+			const event = await f.createEvent(eventForm());
+			await toggleEvent(f.db, form({ eventId: event.id, revision: '1', open: 'true' }), true);
+			const person = await f.participant();
+			const displayed = (await studentPage(f.db, person.account.id, false)).events.find((row) => row.id === event.id)!;
+			expect(displayed.legal).toEqual(event.legal);
+			const service = createRegistrationService(f.db, undefined, previewSecret);
+			const input = waiverForm(event, person.student);
+			const preview = await service.previewDocument(person.account.id, input);
+			input.set('previewToken', preview.token);
+			const documentId = await service.submitWaiver(person.account.id, input);
+			const saved = await f.document(documentId);
+			const snapshot = saved.snapshot as WaiverSnapshot;
+			expect(saved).toMatchObject({ language: 'es', kind: 'waiver', sha256: sha256(preview.pdf) });
+			expect(snapshot.language).toBe('es');
+			expect(snapshot.event.legal).toEqual(displayed.legal);
+			expect(saved.pdf).toEqual(preview.pdf);
+			expect(saved.pdf.toString('latin1')).toContain('/Lang (es)');
+			expect(pdfLegalText(saved.pdf)).toBe(sectionKeys.map((key) => displayed.legal.es[key].replace(/\r\n|\r|\n/g, '')).join(''));
+			expect(saved.pdf).toEqual(await renderWaiverPdf(snapshot));
+			const edit = eventForm({ id: event.id, revision: '1', venue: 'Cancha Nueva de Ponce' });
+			for (const key of ['startsAt', 'endsAt', 'arrivalAt', 'registrationClosesAt'] as const) {
+				edit.set(key, localTimestamp(new Date(event[key].getTime() + 2 * day)));
+			}
+			await saveEvent(f.db, f.admin.id, edit);
+			const [current] = await f.db.select().from(events).where(eq(events.id, event.id));
+			expect(current).toMatchObject({ revision: 2, registrationOpen: false });
+			expect(current.legal.es.agreement).not.toBe(snapshot.event.legal.es.agreement);
+			expect(current.legal.es.liability).not.toBe(snapshot.event.legal.es.liability);
+			expect(await f.document(documentId)).toEqual(saved);
+			expect((await f.registration(person, event)).waiver).toEqual(snapshot);
+			expect((await documentForViewer(f.db, documentId, { id: person.account.id, role: 'student' }))?.pdf).toEqual(preview.pdf);
+			expect(await renderWaiverPdf(snapshot)).toEqual(preview.pdf);
+			await toggleEvent(f.db, form({ eventId: event.id, revision: '2', open: 'true' }), true);
+			const nextPerson = await f.participant();
+			const nextId = await service.submitWaiver(nextPerson.account.id, waiverForm(current, nextPerson.student));
+			const next = await f.document(nextId);
+			expect(next.language).toBe('es');
+			expect(next.snapshot.event.legal).toEqual(current.legal);
+			expect(pdfLegalText(next.pdf)).toBe(sectionKeys.map((key) => current.legal.es[key].replace(/\r\n|\r|\n/g, '')).join(''));
+			expect(await f.document(documentId)).toEqual(saved);
+		});
+	});
+
+	for (const language of ['en', 'es'] as const) {
+		test(`an optional ${language} employer letter remains available after a Spanish-only waiver`, async () => {
+			await withFixtures(async (f) => {
+				const event = await f.event();
+				const person = await f.participant();
+				const waiverId = await f.service.submitWaiver(person.account.id, waiverForm(event, person.student));
+				const waiver = await f.document(waiverId);
+				const letterId = await f.service.submitLetter(person.account.id, letterForm(event, { language }));
+				const letter = await f.document(letterId!);
+				expect(letter).toMatchObject({ kind: 'letter', language });
+				expect(letter.snapshot.language).toBe(language);
+				expect(letter.pdf.toString('latin1')).toContain(`/Lang (${language})`);
+				expect(letter.pdf).toEqual(await renderLetterPdf(letter.snapshot as LetterSnapshot));
+				expect(await f.document(waiverId)).toEqual(waiver);
+			});
+		});
+	}
+
+	test('admin custom saves copy Spanish into both slots, preserve manual clauses, enforce approval/readiness and reject stale edits', async () => {
 		await withFixtures(async (f) => {
 			const event = await f.event({ registrationOpen: false });
-			const values: Record<string, string> = { id: event.id, revision: '1', title: 'Evento Ficticio Editado', venue: event.venue, legalApproved: 'false' };
+			const values: Record<string, string> = { id: event.id, revision: '1', title: 'Evento Ficticio Editado',
+				venue: 'Cancha Nueva', legalSource: 'custom', legalApproved: 'false' };
 			for (const key of ['startsAt', 'endsAt', 'arrivalAt', 'registrationClosesAt'] as const) {
-				values[key] = new Date(event[key].getTime() - 4 * 3600000).toISOString().slice(0, 19);
+				values[key] = localTimestamp(new Date(event[key].getTime() + day));
 			}
-			for (const language of ['en', 'es'] as const) for (const section of sectionKeys) values[`legal_${language}_${section}`] = event.legal[language][section];
+			for (const section of sectionKeys) values[`legal_es_${section}`] = ` \n${event.legal.es[section].normalize('NFD')}\n `;
 			expect(await saveEvent(f.db, f.admin.id, form(values))).toBe(event.id);
 			const [saved] = await f.db.select().from(events).where(eq(events.id, event.id));
-			expect(saved).toMatchObject({ revision: 2, registrationOpen: false, legalApproved: false, approvedBy: null, legal: event.legal });
+			expect(saved).toMatchObject({ revision: 2, registrationOpen: false, legalApproved: false, approvedBy: null,
+				legal: { en: event.legal.es, es: event.legal.es } });
 			await expect(saveEvent(f.db, f.admin.id, form(values))).rejects.toMatchObject({ code: 'stale' });
 			await expect(toggleEvent(f.db, form({ eventId: event.id, revision: '2', open: 'true' }), true)).rejects.toMatchObject({ code: 'unavailable' });
 			await saveEvent(f.db, f.admin.id, form({ ...values, revision: '2', legalApproved: 'true' }));

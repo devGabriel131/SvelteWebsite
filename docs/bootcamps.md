@@ -6,7 +6,7 @@
 - `/admin/bootcamps`: real, persistent event management, student-account linking, event reports/CSV, private saved documents, backup retries, and payment reconciliation. This is separate from the existing fictional admin console panels.
 - Flow: begin registration → three mandatory read-and-sign sections → optional bootcamp employer letter → one ATH Móvil purchase of **$30 full payment** or **$15 deposit**.
 - A verified deposit confirms registration and flags **$15 remaining**. The remainder is collected outside this checkout. There is no recurring charge, subsequent balance checkout, offline payment editor, or carryover to another event.
-- English and Spanish UI, document labels, and errors use the shared translations. Each document is saved in the language the student chose. Do not translate an already-signed agreement into a second signed document.
+- The surrounding UI, accessibility labels, and errors remain available in English and Spanish through the shared translations. **Legal agreements and newly signed waiver PDFs are Spanish-only**, including when the interface is English. Optional employer letters still use the student's selected language. Historical signed documents retain their original language and bytes; do not translate them into a second signed document.
 
 ## Required setup before opening an event
 
@@ -16,15 +16,23 @@
 4. Configure the existing private [Google Drive variables](google-drive.md): `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `DRIVE_OAUTH_REFRESH_TOKEN`, `DRIVE_REPORTS_FOLDER_ID`. The configured app/account must be allowed to create and inspect its private files.
 5. Resolve the protocol questions in [ATH Móvil integration notes](ath-bootcamps.md). Configure private `ATH_PUBLIC_TOKEN`, `ATH_PRIVATE_TOKEN`, and a **64-hex-character** `BOOTCAMP_PAYMENT_KEY` generated from 32 cryptographically random bytes. Retain that key securely: losing/changing it prevents decryption of outstanding payment capabilities.
 6. Configure a private `BOOTCAMP_WORKER_SECRET` of at least 32 random characters and the recurring worker invocation below. Set `BOOTCAMP_PAYMENTS_ENABLED=true` **only after separately approved live merchant verification**. Merely having credentials or passing mock tests is not production certification.
-7. Enter the event title, venue, arrival, start/end, registration deadline, and **all three approved legal sections in both languages**. Dates entered in the admin form are Puerto Rico local time (`America/Puerto_Rico`, UTC−04:00). Review and approve both languages, then open registration.
+7. Enter the event title, venue, check-in opening (`arrivalAt`), event start/latest permitted arrival (`startsAt`), end, and registration deadline. All admin dates/times are Puerto Rico local time (`America/Puerto_Rico`, UTC−04:00). New events default to the built-in Spanish legal sections with automatic event details; no manual legal text is required in standard mode. Review all three sections and the legal warnings, explicitly approve them, then open registration. Custom Spanish edits are optional, not a prerequisite for creating an event.
 
 Registration activation requires configured backup, explicitly enabled/configured payments, and approved legal text. Configuration readiness is not an upstream health check. Outages still leave completed documents safe in PostgreSQL.
 
 ### Legal text and event edits
 
-No sample agreement is published as approved legal advice. The legacy media revocation contradiction, refund/no-show language, and remaining screen/PDF differences still require organizational/legal approval. Under-21 handling remains deferred; there is no guardian bypass.
+The canonical source is the **user-provided Spanish legacy wording**, consolidated in `src/lib/bootcamp/legal-templates.ts` and exposed as `translations.es.bootcamp.waiver.legalText`. Its provenance is the original Masterminds `frontends/waiver/src/lib/legal-text.ts` and adult PDF template `apps/certificate-worker/internal/waiver/templates/adult.html`. It is not a newly invented agreement or a separate English translation. The adult version incorporates the weapons, parking/arrival, companion-area, belongings/loss, and waiver-signing clauses so the screen and PDF use the same terms. Paper delivery/carry-a-copy and guardian/minor instructions are omitted for this digital **21+** flow; there is no guardian bypass.
 
-All three sections—including promotional media authorization—are mandatory. The same event text is displayed and printed without template-only additions. Event information is printed separately from the approved legal text; do not embed stale fixed dates or unsupported template placeholders in the agreement.
+**Standard mode is automatic, not automatically approved.** `defaultLegalText` resolves the actual event's Puerto Rico date or date range, venue, check-in opening time, latest arrival/event start time, and the **$30.00** price, **$15.00** deposit, and **$15.00** remaining balance. Times use 24-hour notation including seconds; check-in also includes its calendar date when it falls before the event's start day. `arrivalAt` opens check-in; `startsAt` is the event start and latest arrival, not a second check-in opening. There is no fixed August 1, 2026 date or legacy park name. The balance is handled by administration outside the website; the fixed Saturday/1600 no-show balance deadline is omitted without inventing a replacement deadline. The original absence/nonrefund provision remains.
+
+All three sections—including promotional media authorization—are mandatory. The saved event's Spanish clauses are the exact text presented for signing, copied into the immutable waiver snapshot, and printed in the PDF without PDF-only legal additions. New waiver forms submit `language=es` even with an English interface; new English waiver previews/signatures are rejected. The PDF renderer still understands historical English snapshots.
+
+The imported source deliberately retains **both** the media authorization's “irrevocable” wording and its exception for express written revocation. The administrator warning calls out this contradiction; the software does not interpret or reconcile it. The named releases for Masterminds Programa ASVAB, the United States Army, the Río Piedras recruitment office, and the Municipio de Bayamón remain, as does the Sra. Menéndez reference; only the event venue is substituted. Those entities may not fit every new venue. These explicit content decisions are **not lawyer approval or legal advice**: an authorized administrator must review the contradiction, named entities, refund terms and suitability before approving/opening each event.
+
+For optional custom wording, supply the three Spanish sections (`legal_es_agreement`, `legal_es_liability`, `legal_es_media`). `legalSource=standard` generates the clauses from validated event fields and ignores submitted manual legal strings. `legalSource=custom` (or a missing source for older callers) requires all three Spanish fields; English input cannot replace a missing Spanish section. Unknown sources are rejected. Custom input is trimmed and NFC-normalized once, then preserved rather than silently rewritten or having placeholders expanded. Administrators are responsible for updating any dates, times, venues or amounts embedded in custom text.
+
+Storage retains the `LegalText.en`/`LegalText.es` shape for compatibility with immutable historical snapshots. For new standard or custom saves **both slots contain identical Spanish sections**; `en` is not an English translation. This does not migrate or overwrite existing signed documents. `usesDefaultLegalText` recognizes standard mode only when all three Spanish clauses match the generated wording exactly. It ignores a historical English translation and does not overwrite custom clauses. Saving an event in standard mode regenerates the clauses for its new dates/venue; saving custom mode preserves the submitted wording.
 
 The PDF fonts support precomposed English/Spanish Latin and WinAnsi punctuation. Event validation rejects unsupported pasted characters (including internal tabs and nonbreaking hyphens) before an event can be approved/published; it does not silently rewrite legal wording.
 
@@ -34,7 +42,7 @@ Saving an event edit increments its revision and **closes registration** until a
 
 - The student scrolls each section to its end, acknowledges reading, and draws each signature. Pointer and keyboard drawing are supported. Server validation decodes bounded PNGs and checks visible ink; this is not proof of comprehension or legal identity.
 - Preview/download before submission is **optional** and does not create a registration, completed document, backup, or payment. A server-authenticated preview proof binds the exact identity, content, signatures, and signing timestamp for up to 24 hours. An unchanged preview submitted with that proof becomes the **same PDF bytes**, not a newly dated rendering.
-- Draft signatures live in page memory, not local storage. Changing signer details or language invalidates them; a reload before submission requires re-signing. Completed steps persist and resume from the server.
+- Draft signatures live in page memory, not local storage. Changing signer details or the event revision invalidates them; a reload before submission requires re-signing. The waiver language stays Spanish regardless of interface language. Completed steps persist and resume from the server.
 - Successful waiver submission atomically stores its snapshot, student information, validated signatures, exact PDF `bytea`, and SHA-256. An optional letter is stored similarly at its completion. No download or payment is required for storage/backup.
 - Database-first persistence is followed by an immediate Drive backup attempt. Failures remain in a durable queue. The Drive file ID is reserved before upload, so a timeout followed by retry does not create another file. A conflict must match stored metadata, checksum, size, MIME type, and destination folder before it is accepted as saved.
 - Student downloads read the saved bytes, never regenerate from edited event text. Only the owning linked account can download through the event's current end time, even after registration closes or the student's active status changes. Pending-payment documents are included. Admin downloads do not expire with the event.
@@ -76,6 +84,14 @@ CSV includes a UTF-8 BOM for Excel and escapes spreadsheet-formula values. It in
 
 ## Validation
 
+Targeted regression checks:
+
+```sh
+bun test tests/bootcamp-validation.test.ts tests/bootcamp-legal.test.ts tests/bootcamp-pdf.test.ts
+```
+
+Broader checks and the separately managed disposable database suite:
+
 ```sh
 bun test
 bun run check
@@ -86,4 +102,4 @@ bun run db:test
 bun run db:test:down
 ```
 
-The PostgreSQL suite uses only the guarded disposable loopback test target, never the development/production database. Tests cover exact PDFs, signature decoding, age boundaries, linkage/ownership, immutable evidence, optional letters, Drive recovery, provider mocks, and real PostgreSQL registration/payment concurrency. Live ATH charges, live Drive uploads, and browser/device sign-off remain separate verification steps.
+The PostgreSQL suite uses only the guarded disposable loopback test target, never the development/production database. Legal regressions cover the real canonical templates, Puerto Rico token resolution, strict Spanish custom input, standard creation without legal inputs, regenerated event details, preserved custom clauses, and Spanish-only new waivers. PostgreSQL cases compare student-page legal data with the saved snapshot and extracted PDF legal text, then verify that rescheduling preserves the original saved bytes and hash while new signatures use the updated clauses. Historical English PDF rendering and bilingual optional letters remain covered. Tests also cover signature decoding, age boundaries, linkage/ownership, immutable evidence, Drive recovery, provider mocks, and real PostgreSQL registration/payment concurrency. Live ATH charges, live Drive uploads, and browser/device sign-off remain separate verification steps.

@@ -7,18 +7,12 @@ const attemptId = 'a13e4517-2bc9-4abc-8def-0123456789ab';
 const reference = 'b24f5628-3cda-4bcd-9efa-123456789abc';
 const languages = ['en', 'es'] as const;
 const dateKeys = ['startsAt', 'endsAt', 'arrivalAt', 'registrationClosesAt'] as const;
-const legal: LegalText = {
-	en: {
-		agreement: 'APPROVED AGREEMENT  §1: Preserve  these exact words.\nSecond paragraph: café — “approved”.',
-		liability: 'APPROVED LIABILITY: Do not alter punctuation; exceptions (a), (b).',
-		media: 'APPROVED MEDIA: Photos and video.\n\nSeparate paragraph.'
-	},
-	es: {
-		agreement: 'ACUERDO APROBADO  §1: Conservar  estas palabras exactas.\nSegundo párrafo: café — “aprobado”.',
-		liability: 'RELEVO APROBADO: No alterar la puntuación; excepciones (a), (b).',
-		media: 'IMAGEN APROBADA: Fotografías y vídeo.\n\nPárrafo separado.'
-	}
+const spanishLegal = {
+	agreement: 'ACUERDO APROBADO  §1: Conservar  estas palabras exactas.\nSegundo párrafo: café — “aprobado”.',
+	liability: 'RELEVO APROBADO: No alterar la puntuación; excepciones (a), (b).',
+	media: 'IMAGEN APROBADA: Fotografías y vídeo.\n\nPárrafo separado.'
 };
+const legal: LegalText = { en: spanishLegal, es: spanishLegal };
 
 function form(values: Record<string, string | Blob> = {}): FormData {
 	const result = new FormData();
@@ -32,7 +26,7 @@ function eventForm(overrides: Record<string, string | Blob> = {}): FormData {
 		arrivalAt: '2026-10-10T07:30', registrationClosesAt: '2026-10-09T23:59:59',
 		legalApproved: 'true'
 	});
-	for (const language of languages) for (const section of sectionKeys) result.set(`legal_${language}_${section}`, legal[language][section]);
+	if (overrides.legalSource !== 'standard') for (const section of sectionKeys) result.set(`legal_es_${section}`, legal.es[section]);
 	for (const [key, value] of Object.entries(overrides)) result.set(key, value);
 	return result;
 }
@@ -62,7 +56,7 @@ function streamed(chunks: Uint8Array[], contentType: string, contentLength?: str
 }
 
 test('event publication rejects PDF-unsupported title, venue, and approved legal characters', () => {
-	for (const key of ['title', 'venue', ...languages.flatMap((language) => sectionKeys.map((section) => `legal_${language}_${section}`))]) {
+	for (const key of ['title', 'venue', ...sectionKeys.map((section) => `legal_es_${section}`)]) {
 		for (const value of ['Non\u2011breaking hyphen', 'Internal\ttab', 'Unsupported 🖊']) {
 			expect(() => eventFields(eventForm({ [key]: value }))).toThrow(BootcampError);
 			try { eventFields(eventForm({ [key]: value })); } catch (error) { expect(error).toMatchObject({ code: 'unsupportedText' }); }
@@ -215,7 +209,7 @@ describe('event timestamps, legal text, and approval', () => {
 		]) expectInvalid(() => eventFields(eventForm({ [key]: value })));
 	});
 
-	test('preserves all six canonical legal texts exactly and never conflates translations or sections', () => {
+	test('preserves the three Spanish custom sections exactly in both compatibility language slots', () => {
 		expect(sectionKeys).toEqual(['agreement', 'liability', 'media']);
 		const input = eventForm({ title: '  Preparacio\u0301n ', venue: '  An\u0303asco ' });
 		const rawValues = [...input.entries()];
@@ -225,36 +219,127 @@ describe('event timestamps, legal text, and approval', () => {
 		expect(saved.legal).toEqual(legal);
 		expect(saved.legal).not.toBe(legal);
 		expect([...input.entries()]).toEqual(rawValues);
-		input.set('legal_en_agreement', 'Changed later');
+		input.set('legal_es_agreement', 'Cambio posterior');
 		expect(saved.legal.en.agreement).toBe(legal.en.agreement);
 	});
 
 	test('trims/NFC-normalizes legal input once; resaving canonical displayed/PDF text is lossless', () => {
 		const input = eventForm();
-		for (const language of languages) for (const section of sectionKeys) {
-			input.set(`legal_${language}_${section}`, ` \n${legal[language][section].normalize('NFD')}\n\t `);
-		}
+		for (const section of sectionKeys) input.set(`legal_es_${section}`, ` \n${legal.es[section].normalize('NFD')}\n\t `);
 		const saved = eventFields(input);
 		expect(saved.legal).toEqual(legal);
 		const resubmitted = eventForm();
-		for (const language of languages) for (const section of sectionKeys) {
-			resubmitted.set(`legal_${language}_${section}`, saved.legal[language][section]);
-		}
+		for (const section of sectionKeys) resubmitted.set(`legal_es_${section}`, saved.legal.es[section]);
 		expect(eventFields(resubmitted).legal).toEqual(saved.legal);
 	});
 
-	for (const language of languages) for (const section of sectionKeys) {
-		const key = `legal_${language}_${section}`;
+	for (const section of sectionKeys) {
+		const key = `legal_es_${section}`;
 		test(`${key} is mandatory text with an inclusive 30,000-character bound`, () => {
 			const missing = eventForm();
 			missing.delete(key);
 			expectInvalid(() => eventFields(missing));
-			expect(eventFields(eventForm({ [key]: 'x'.repeat(30000) })).legal[language][section]).toBe('x'.repeat(30000));
+			expect(eventFields(eventForm({ [key]: 'x'.repeat(30000) })).legal.es[section]).toBe('x'.repeat(30000));
 			for (const value of ['', ' \r\n\t', 'x'.repeat(30001), 'Invalid\0legal', new File(['Approved'], 'legal.txt')]) {
 				expectInvalid(() => eventFields(eventForm({ [key]: value })));
 			}
 		});
 	}
+
+	test('missing or custom source reads only Spanish, never English as an alternative', () => {
+		for (const source of [undefined, 'custom']) {
+			const input = eventForm(source ? { legalSource: source } : {});
+			for (const section of sectionKeys) input.set(`legal_en_${section}`, 'Different English wording 🖊');
+			expect(eventFields(input).legal).toEqual(legal);
+			for (const section of sectionKeys) {
+				for (const value of [null, '', ' \n', new File(['Texto'], 'legal.txt')]) {
+					if (value === null) input.delete(`legal_es_${section}`);
+					else input.set(`legal_es_${section}`, value);
+					expectInvalid(() => eventFields(input));
+				}
+				input.set(`legal_es_${section}`, legal.es[section]);
+			}
+		}
+	});
+
+	test('rejects unknown, noncanonical and uploaded legal sources', () => {
+		for (const legalSource of ['', 'default', 'STANDARD', ' standard ', 'custom\n', new File(['standard'], 'source.txt')]) {
+			expectInvalid(() => eventFields(eventForm({ legalSource })));
+		}
+	});
+
+	test('standard source needs no manual legal fields and generates Spanish from canonical event fields', () => {
+		const input = eventForm({ legalSource: 'standard', venue: '  An\u0303asco ', startsAt: '2027-02-11T22:03:04',
+			endsAt: '2027-02-11T23:30:00', arrivalAt: '2027-02-11T21:30:05' });
+		expect([...input.keys()].some((key) => key.startsWith('legal_'))).toBe(false);
+		const before = [...input.entries()];
+		const saved = eventFields(input);
+		expect(saved.legal.en).toEqual(saved.legal.es);
+		expect(saved.legalApproved).toBe(true);
+		for (const value of ['Añasco', '11 de febrero de 2027', '21:30:05', '22:03:04', '$30.00', '$15.00']) {
+			expect(saved.legal.es.agreement).toContain(value);
+		}
+		expect(Object.values(saved.legal.es).join('\n')).not.toMatch(/\{\w+\}/);
+		expect([...input.entries()]).toEqual(before);
+	});
+
+	test('standard source ignores tampered submitted clauses rather than validating or storing them', () => {
+		const expected = eventFields(eventForm({ legalSource: 'standard' })).legal;
+		for (const value of ['', 'Injected English terms', 'No válido\0🖊', 'x'.repeat(30001), new File(['Texto'], 'legal.txt')]) {
+			const input = eventForm({ legalSource: 'standard' });
+			for (const language of languages) for (const section of sectionKeys) input.set(`legal_${language}_${section}`, value);
+			expect(eventFields(input).legal).toEqual(expected);
+		}
+	});
+
+	test('standard edits regenerate dates, check-in, latest arrival and venue without mutating old text', () => {
+		const original = eventFields(eventForm({ legalSource: 'standard' }));
+		const before = structuredClone(original);
+		const input = eventForm({ legalSource: 'standard', venue: 'Cancha Nueva de Ponce',
+			startsAt: '2027-02-12T13:15:16', endsAt: '2027-02-13T18:00:00', arrivalAt: '2027-02-12T12:10:11' });
+		for (const section of sectionKeys) input.set(`legal_es_${section}`, original.legal.es[section]);
+		const saved = eventFields(input);
+		expect(saved.legal.en).toEqual(saved.legal.es);
+		expect(saved.legal.es.agreement).toMatch(/12.*13 de febrero de 2027/s);
+		for (const value of ['Cancha Nueva de Ponce', '12:10:11', '13:15:16']) expect(saved.legal.es.agreement).toContain(value);
+		for (const section of ['agreement', 'liability'] as const) {
+			expect(saved.legal.es[section]).not.toContain('San Juan, Puerto Rico');
+			expect(saved.legal.es[section]).not.toContain('10 de octubre de 2026');
+		}
+		expect(original).toEqual(before);
+	});
+
+	test('custom edits keep manual dates, placeholders, spaces and punctuation instead of regenerating clauses', () => {
+		const input = eventForm({ legalSource: 'custom', venue: 'Cancha Nueva de Ponce',
+			startsAt: '2027-02-12T13:15:16', endsAt: '2027-02-13T18:00:00', arrivalAt: '2027-02-12T12:10:11',
+			legal_es_agreement: 'Acuerdo  especial: 1 de agosto de 2026, {venue}.\nSin sustituciones.' });
+		const saved = eventFields(input);
+		expect(saved.legal.es.agreement).toBe(input.get('legal_es_agreement') as string);
+		expect(saved.legal.es.liability).toBe(legal.es.liability);
+		expect(saved.legal.es.media).toBe(legal.es.media);
+		expect(saved.legal.en).toEqual(saved.legal.es);
+	});
+
+	test('standard mode still enforces chronology, required fields, approval and PDF-safe dynamic venue', () => {
+		for (const key of ['title', 'venue', ...dateKeys]) {
+			const input = eventForm({ legalSource: 'standard' });
+			input.delete(key);
+			expectInvalid(() => eventFields(input));
+		}
+		for (const [key, value] of [['endsAt', '2026-10-10T08:00'], ['arrivalAt', '2026-10-10T08:00:01'],
+			['registrationClosesAt', '2026-10-10T08:00:01'], ['startsAt', '2026-02-30T08:00']]) {
+			expectInvalid(() => eventFields(eventForm({ legalSource: 'standard', [key]: value })));
+		}
+		for (const key of ['title', 'venue']) for (const value of ['Cancha 🖊', 'Cancha\u2011Nueva', 'Cancha\tNueva']) {
+			expect(() => eventFields(eventForm({ legalSource: 'standard', [key]: value }))).toThrow('unsupportedText');
+		}
+		const unapproved = eventForm({ legalSource: 'standard' });
+		unapproved.delete('legalApproved');
+		expect(eventFields(unapproved).legalApproved).toBe(false);
+		for (const value of ['false', 'on', '1', new File(['true'], 'approval.txt')]) {
+			expect(eventFields(eventForm({ legalSource: 'standard', legalApproved: value })).legalApproved).toBe(false);
+		}
+	});
 
 	for (const [key, limit] of [['title', 200], ['venue', 300]] as const) {
 		test(`${key} is required and bounded, and rejects uploaded files`, () => {

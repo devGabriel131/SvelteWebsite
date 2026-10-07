@@ -94,7 +94,8 @@ export function createRegistrationService(db: Database, backupDocument: (id: str
 		if (previewToken !== null && typeof previewToken !== 'string') throw new BootcampError('invalid');
 		const signedAt = previewToken ? proof.signedAt(previewToken) : now.toISOString();
 		if (!isAdult(dateOfBirth, new Date(signedAt))) throw new BootcampError('ineligible');
-		const snapshot: WaiverSnapshot = { event: eventView(event), student: info, language: languageField(form), signedAt, signatures };
+		if (languageField(form) !== 'es') throw new BootcampError('invalid');
+		const snapshot: WaiverSnapshot = { event: eventView(event), student: info, language: 'es', signedAt, signatures };
 		if (previewToken) proof.verify(previewToken, userId, snapshot, studentIdentityVersion(student));
 		let pdf: Buffer;
 		try { pdf = await renderWaiverPdf(snapshot); } catch { throw new BootcampError('invalid'); }

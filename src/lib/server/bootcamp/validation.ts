@@ -1,4 +1,6 @@
 import { sectionKeys, type EmployerDetails, type LegalText } from '../../bootcamp/types';
+import { defaultLegalText } from '../../bootcamp/legal';
+import { parseEventLocalDate } from '../../bootcamp/rules';
 import type { Language } from '../../i18n/translations';
 import { isSupportedPdfText } from '../../bootcamp/pdf-text';
 
@@ -27,11 +29,8 @@ export function revisionField(form: FormData): number {
 	return value;
 }
 function localDate(form: FormData, key: string): Date {
-	const raw = field(form, key, 19);
-	if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(raw)) throw new BootcampError('invalid');
-	const value = raw.length === 16 ? `${raw}:00` : raw;
-	const result = new Date(`${value}-04:00`);
-	if (!Number.isFinite(result.getTime()) || new Date(result.getTime() - 4 * 3600000).toISOString().slice(0, 19) !== value) throw new BootcampError('invalid');
+	const result = parseEventLocalDate(field(form, key, 19));
+	if (!result) throw new BootcampError('invalid');
 	return result;
 }
 export function eventFields(form: FormData) {
@@ -40,10 +39,19 @@ export function eventFields(form: FormData) {
 	const arrivalAt = localDate(form, 'arrivalAt');
 	const registrationClosesAt = localDate(form, 'registrationClosesAt');
 	if (endsAt <= startsAt || arrivalAt > startsAt || registrationClosesAt > startsAt) throw new BootcampError('invalid');
-	const legal = { en: {}, es: {} } as LegalText;
-	for (const lang of ['en', 'es'] as const) for (const section of sectionKeys) legal[lang][section] = field(form, `legal_${lang}_${section}`, 30000);
 	const title = field(form, 'title');
 	const venue = field(form, 'venue', 300);
+	const source = form.get('legalSource');
+	if (source !== null && source !== 'standard' && source !== 'custom') throw new BootcampError('invalid');
+	let legal: LegalText;
+	if (source === 'standard') {
+		legal = defaultLegalText({ venue, startsAt, endsAt, arrivalAt });
+	} else {
+		const spanish = {} as LegalText['es'];
+		for (const section of sectionKeys) spanish[section] = field(form, `legal_es_${section}`, 30000);
+		// Retain the historical JSON shape, not a separately maintained English agreement.
+		legal = { es: spanish, en: { ...spanish } };
+	}
 	if (![title, venue, ...Object.values(legal.en), ...Object.values(legal.es)].every(isSupportedPdfText)) throw new BootcampError('unsupportedText');
 	return {
 		title, venue, startsAt, endsAt, arrivalAt, registrationClosesAt,

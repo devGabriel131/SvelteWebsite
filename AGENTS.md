@@ -47,3 +47,6 @@
 ## Design
 
 - Use buttons instead of a dropdown menu when options are minimal.
+- Always retain the shared workspace sidebar/navigation and header on feature pages. New features belong inside the existing shell, not on standalone pages without navigation. Do not remove or bypass the shell unless explicitly requested.
+- Every authenticated admin page, including nested routes such as bootcamps, must inherit `src/routes/admin/+layout.svelte` and the shared `src/lib/admin/AdminShell.svelte`. Keep the sidebar, header, language selector, account controls, and active navigation available across pages and responsive layouts; do not duplicate them in individual pages. The unauthenticated sign-in screen is separate.
+- When changing layouts or adding routes, verify that the shared navigation and header remain present on direct visits, refreshes, and navigation between pages.

@@ -24,16 +24,14 @@
 <a class="skip-link" href="#main-content">{language.messages.accessibility.skipToContent}</a>
 
 {#if page.url.pathname === resolve('/admin') || page.url.pathname.startsWith(`${resolve('/admin')}/`)}
-	<main id="main-content" class="admin-main" tabindex="-1">
-		{@render children()}
-	</main>
+	{@render children()}
 {:else if page.route.id === '/ist' || page.route.id === '/attendance'}
 	<main id="main-content" class="home-main" tabindex="-1">
 		<StudentShell activePage={page.route.id === '/ist' ? 'ist' : 'attendance'}>
 			{@render children()}
 		</StudentShell>
 	</main>
-{:else if page.route.id === '/' || page.route.id === '/design-preview' || page.route.id === '/speed-math' || page.route.id === '/frequency' || page.route.id === '/bootcamps'}
+{:else if page.route.id === '/' || page.route.id === '/design-preview' || page.route.id === '/courses-preview' || page.route.id === '/speed-math' || page.route.id === '/frequency' || page.route.id === '/bootcamps'}
 	<main id="main-content" class="home-main" tabindex="-1">
 		{@render children()}
 	</main>
@@ -50,7 +48,6 @@
 {/if}
 
 <style>
-	.admin-main,
 	.home-main {
 		padding: 0;
 	}

@@ -1,4 +1,5 @@
 import { bootcampDocumentMessages } from '../bootcamp/document-messages';
+import { spanishBootcampLegal } from '../bootcamp/legal-templates';
 
 export type Language = 'en' | 'es';
 
@@ -19,6 +20,29 @@ export function formatMessage(message: string, values: Record<string, string | n
 		values[key] === undefined ? placeholder : String(values[key])
 	);
 }
+
+const englishCoursesPreview = {
+	pageTitle: 'Topic library preview | Masterminds ASVAB', description: 'Browse grouped course topics and lesson placeholders in the topic library preview.',
+	title: 'Topic library', label: 'Courses', preview: 'Layout preview only · No lessons or progress are saved.',
+
+	part: 'Part 1 of 15', course: 'Fractions and Mixed Numbers', intro: 'Build the foundations, work through mixed numbers, then practice.',
+	foundations: 'Fraction foundations', mixed: 'Mixed numbers', review: 'Practice & review',
+	lesson: 'Lesson preview', placeholder: 'Your explanation will live here.', body: 'This is a layout placeholder, not course content. A Markdown document could fill this reading area, with optional interactive Svelte examples alongside it.',
+	interactive: 'Interactive example area', interactiveNote: 'Optional space for a visual demonstration or a small exercise. Nothing is connected yet.',
+	back: 'All topics', previous: 'Previous topic', next: 'Next topic', open: 'Open topic',
+	topics: ['Simplifying Fractions', 'Adding and Subtracting Fractions', 'Multiplying and Dividing Fractions', 'Adding Mixed Numbers', 'Subtracting Mixed Numbers', 'Multiplying Mixed Numbers', 'Dividing Mixed Numbers', 'Practices', 'Answers']
+};
+const spanishCoursesPreview: typeof englishCoursesPreview = {
+	pageTitle: 'Vista previa de la biblioteca de temas | Masterminds ASVAB', description: 'Explora temas de cursos agrupados y espacios de muestra para lecciones en la biblioteca de temas.',
+	title: 'Biblioteca de temas', label: 'Cursos', preview: 'Solo una propuesta de diseño · No se guardan lecciones ni progreso.',
+
+	part: 'Parte 1 de 15', course: 'Fracciones y números mixtos', intro: 'Aprende los fundamentos, trabaja con números mixtos y luego practica.',
+	foundations: 'Fundamentos de fracciones', mixed: 'Números mixtos', review: 'Práctica y repaso',
+	lesson: 'Vista previa de la lección', placeholder: 'Tu explicación irá aquí.', body: 'Este es un espacio de muestra, no contenido del curso. Un documento Markdown podría llenar esta área de lectura, con ejemplos interactivos opcionales de Svelte.',
+	interactive: 'Área de ejemplo interactivo', interactiveNote: 'Espacio opcional para una demostración visual o un ejercicio breve. Todavía no está conectado.',
+	back: 'Todos los temas', previous: 'Tema anterior', next: 'Tema siguiente', open: 'Abrir tema',
+	topics: ['Simplificar fracciones', 'Sumar y restar fracciones', 'Multiplicar y dividir fracciones', 'Sumar números mixtos', 'Restar números mixtos', 'Multiplicar números mixtos', 'Dividir números mixtos', 'Prácticas', 'Respuestas']
+};
 
 const englishAdmin = {
 	pageTitle: 'Admin command center | Masterminds ASVAB',
@@ -497,7 +521,7 @@ const englishBootcamp = {
 				unsupportedText: 'PDFs support English and Spanish Latin characters. Replace tabs and unsupported special characters from pasted text, then review the corrected text before approval.'
 	},
 	event: {
-		venue: 'Venue', startsAt: 'Starts', endsAt: 'Ends', arrivalAt: 'Arrive by', registrationClosesAt: 'Registration deadline',
+		venue: 'Venue', startsAt: 'Start / latest arrival', endsAt: 'Ends', arrivalAt: 'Check-in opens', registrationClosesAt: 'Registration deadline',
 		timeZone: 'All event times are in Puerto Rico time.', open: 'Registration open', closed: 'Registration closed',
 		closedNote: 'New registrations are unavailable. Saved documents remain available until the event ends.', ended: 'This event has ended. The document download period has closed.',
 		revision: 'Revision {revision}', documents: 'Saved documents', downloadsUntil: 'Downloads available through {date}.',
@@ -508,10 +532,12 @@ const englishBootcamp = {
 		municipality: 'Municipality of residence', signingCity: 'City where you are signing now',
 		known: 'Your name, email, and any recorded date of birth come from your student record. Contact an administrator if they are incorrect.',
 		signingCityHint: 'Enter the city where you are physically signing, not your residence or the event venue unless you are there now.',
-		resetHint: 'Changing your information, the document language, or the event revision clears all draft signatures. Review and sign again.'
+		resetHint: 'Changing your information or the event revision clears all draft signatures. Review and sign again.'
 	},
 	waiver: {
+		legalText: spanishBootcampLegal,
 		title: 'Read and sign', introduction: 'Read each complete section, confirm you have read it, then sign in its signature box. All three signatures are required.',
+		spanishOnly: 'The legal agreements and signed waiver PDF are in Spanish, regardless of your interface language.',
 		sections: { agreement: 'Participation agreement', liability: 'Liability waiver', media: 'Media authorization' },
 		readRegion: '{section} — complete legal text', scrollHint: 'Scroll to the bottom to unlock the read confirmation. You can focus the text and use the arrow keys, Page Down, or End.',
 		readConfirm: 'I have read this entire section', readReady: 'You have reached the end. Confirm that you have read this section to unlock signing.',
@@ -563,10 +589,14 @@ const englishBootcamp = {
 		events: 'Events', create: 'Create event', edit: 'Edit event', editing: 'Edit: {title}', titleField: 'Event title', venue: 'Venue',
 		timeZone: 'Enter all dates and times in Puerto Rico local time (America/Puerto_Rico).',
 		editWarning: 'Saving edits closes registration. Review the updated event before reopening it. New documents use the current details; existing documents, including signed waivers, remain unchanged.',
-		legal: 'Canonical legal text', legalHint: 'Provide the approved text for all three sections in both languages. No sample legal clauses are supplied.',
-		legalLabel: '{section} — {language}', legalApproved: 'The legal text in both languages has been reviewed and approved',
+		legal: 'Bootcamp agreements · Spanish', legalHint: 'The supplied participation agreement, liability waiver, and media authorization are included automatically. Their dates, venue, and times come from this event. No English version is needed.',
+		legalLabel: '{section} — Spanish', legalApproved: 'I have reviewed and approved the Spanish agreements for this event',
+		legalPreviewPending: 'Enter a valid venue, check-in time, and start/end schedule to preview the completed agreements.',
+		legalCustomize: 'Edit wording for this event', legalRestore: 'Use the supplied agreements',
+		legalCustomHint: 'Custom wording is saved exactly as entered. Review any dates, times, and venue references yourself when rescheduling. Using the supplied agreements replaces these edits.',
+		legalReview: 'Review before approval: the original media text says both “irrevocable” and “revocable in writing.” This conflict has not been interpreted or corrected. Confirm the named organizations, parking rules, and refund terms apply to this event; use event-specific edits for counsel-approved changes.',
 		approved: 'Legal text approved', unapproved: 'Legal approval required', saveEvent: 'Save event',
-		open: 'Open registration', close: 'Close registration', activationGuard: 'Opening requires configured payments, configured document backup, and approved legal text in both languages.',
+		open: 'Open registration', close: 'Close registration', activationGuard: 'Opening requires configured payments, configured document backup, and approved Spanish legal text.',
 		linkTitle: 'Link a student account', linkHint: 'Link an existing roster student to their sign-in account. This is saved on the server.',
 		studentEmail: 'Student email in the roster', accountEmail: 'Sign-in account email', link: 'Save student link',
 		report: 'Registration report', selectEvent: 'Select an event for its report', reportEmpty: 'There are no student rows for this event.',
@@ -599,7 +629,7 @@ const spanishBootcamp: typeof englishBootcamp = {
 				unsupportedText: 'Los PDF admiten caracteres latinos del español y del inglés. Reemplaza las tabulaciones y los caracteres especiales no admitidos del texto pegado y revisa el texto corregido antes de aprobarlo.'
 	},
 	event: {
-		venue: 'Lugar', startsAt: 'Comienza', endsAt: 'Termina', arrivalAt: 'Hora de llegada', registrationClosesAt: 'Cierre de inscripción',
+		venue: 'Lugar', startsAt: 'Inicio / hora límite de llegada', endsAt: 'Termina', arrivalAt: 'Apertura del registro presencial', registrationClosesAt: 'Cierre de inscripción',
 		timeZone: 'Todos los horarios del evento corresponden a la hora de Puerto Rico.', open: 'Inscripción abierta', closed: 'Inscripción cerrada',
 		closedNote: 'No se aceptan inscripciones nuevas. Los documentos guardados están disponibles hasta que termine el evento.', ended: 'Este evento terminó. El período de descarga de documentos ha cerrado.',
 		revision: 'Revisión {revision}', documents: 'Documentos guardados', downloadsUntil: 'Descargas disponibles hasta {date}.',
@@ -610,10 +640,12 @@ const spanishBootcamp: typeof englishBootcamp = {
 		municipality: 'Municipio de residencia', signingCity: 'Ciudad donde estás firmando ahora',
 		known: 'Tu nombre, correo y fecha de nacimiento registrada provienen de tu expediente estudiantil. Comunícate con un administrador si son incorrectos.',
 		signingCityHint: 'Indica la ciudad donde estás físicamente al firmar, no tu residencia ni el lugar del evento a menos que estés allí ahora.',
-		resetHint: 'Cambiar tu información, el idioma del documento o la revisión del evento borra todas las firmas en borrador. Revisa y firma de nuevo.'
+		resetHint: 'Cambiar tu información o la revisión del evento borra todas las firmas en borrador. Revisa y firma de nuevo.'
 	},
 	waiver: {
+		legalText: spanishBootcampLegal,
 		title: 'Lee y firma', introduction: 'Lee cada sección completa, confirma que la leíste y firma en su recuadro. Las tres firmas son obligatorias.',
+		spanishOnly: 'Los acuerdos legales y el PDF del relevo firmado están en español, sin importar el idioma de la interfaz.',
 		sections: { agreement: 'Acuerdo de participación', liability: 'Relevo de responsabilidad', media: 'Autorización de uso de imagen' },
 		readRegion: '{section} — texto legal completo', scrollHint: 'Desplázate hasta el final para habilitar la confirmación de lectura. Puedes enfocar el texto y usar las flechas, Av Pág o Fin.',
 		readConfirm: 'He leído esta sección completa', readReady: 'Llegaste al final. Confirma que leíste esta sección para habilitar la firma.',
@@ -665,10 +697,14 @@ const spanishBootcamp: typeof englishBootcamp = {
 		events: 'Eventos', create: 'Crear evento', edit: 'Editar evento', editing: 'Editar: {title}', titleField: 'Título del evento', venue: 'Lugar',
 		timeZone: 'Ingresa todas las fechas y horas en la hora local de Puerto Rico (America/Puerto_Rico).',
 		editWarning: 'Guardar cambios cierra la inscripción. Revisa el evento actualizado antes de volver a abrirla. Los documentos nuevos usan los detalles actuales; los documentos existentes, incluidos los relevos firmados, permanecen sin cambios.',
-		legal: 'Texto legal oficial', legalHint: 'Proporciona el texto aprobado de las tres secciones en ambos idiomas. No se incluyen cláusulas legales de ejemplo.',
-		legalLabel: '{section} — {language}', legalApproved: 'El texto legal en ambos idiomas fue revisado y aprobado',
+		legal: 'Acuerdos del bootcamp · Español', legalHint: 'El acuerdo de participación, el relevo de responsabilidad y la autorización de imagen proporcionados ya están incluidos. Sus fechas, lugar y horarios se completan con los datos del evento. No se necesita una versión en inglés.',
+		legalLabel: '{section} — Español', legalApproved: 'Revisé y aprobé los acuerdos en español para este evento',
+		legalPreviewPending: 'Ingresa un lugar, una hora de registro presencial y un horario de inicio y fin válidos para ver los acuerdos completos.',
+		legalCustomize: 'Editar el texto para este evento', legalRestore: 'Usar los acuerdos proporcionados',
+		legalCustomHint: 'El texto personalizado se guarda tal como se ingresa. Revisa las fechas, los horarios y las referencias al lugar al reprogramar. Usar los acuerdos proporcionados reemplaza estas ediciones.',
+		legalReview: 'Revisa antes de aprobar: el texto original de imagen dice tanto «irrevocable» como «revocación expresa por escrito». No se ha interpretado ni corregido esa contradicción. Confirma que las entidades mencionadas, las normas de estacionamiento y los términos de reembolso apliquen a este evento; usa la edición del evento para cambios aprobados por tu abogado.',
 		approved: 'Texto legal aprobado', unapproved: 'Se requiere aprobación legal', saveEvent: 'Guardar evento',
-		open: 'Abrir inscripción', close: 'Cerrar inscripción', activationGuard: 'Para abrir se requieren pagos y respaldo de documentos configurados, y texto legal aprobado en ambos idiomas.',
+		open: 'Abrir inscripción', close: 'Cerrar inscripción', activationGuard: 'Para abrir se requieren pagos y respaldo de documentos configurados, y texto legal en español aprobado.',
 		linkTitle: 'Vincular cuenta estudiantil', linkHint: 'Vincula un estudiante del registro con su cuenta de acceso. El vínculo se guarda en el servidor.',
 		studentEmail: 'Correo del estudiante en el registro', accountEmail: 'Correo de la cuenta de acceso', link: 'Guardar vínculo estudiantil',
 		report: 'Informe de inscripción', selectEvent: 'Selecciona un evento para ver su informe', reportEmpty: 'No hay filas de estudiantes para este evento.',
@@ -683,6 +719,7 @@ const spanishBootcamp: typeof englishBootcamp = {
 const english = {
 	bootcamp: englishBootcamp,
 	designPreview: englishDesignPreview,
+		coursesPreview: englishCoursesPreview,
 	admin: englishAdmin,
 	attendance: englishAttendance,
 	reportArchive: {
@@ -983,6 +1020,7 @@ export type Messages = typeof english;
 const spanish: Messages = {
 	bootcamp: spanishBootcamp,
 	designPreview: spanishDesignPreview,
+		coursesPreview: spanishCoursesPreview,
 	admin: spanishAdmin,
 	attendance: spanishAttendance,
 	reportArchive: {

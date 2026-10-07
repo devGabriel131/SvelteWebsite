@@ -20,7 +20,7 @@
 	let drafts = $state<Partial<Record<SectionKey, { key: string; signature: string; read: boolean }>>>({});
 	const identityVersion = $derived(student.identityVersion ?? '');
 	const identityKey = $derived(JSON.stringify([
-		event.id, event.revision, event.legal, language.current, student.id, identityVersion, student.name, student.email,
+		event.id, event.revision, event.legal.es, student.id, identityVersion, student.name, student.email,
 		student.dateOfBirth ?? dateOfBirth, phone, municipality, signingCity
 	]));
 	const signatures = $derived(Object.fromEntries(sectionKeys.map((section) => [section,
@@ -95,7 +95,7 @@
 			<legend>{messages.identity.title}</legend>
 			<input type="hidden" name="eventId" value={event.id} />
 			<input type="hidden" name="revision" value={event.revision} />
-			<input type="hidden" name="language" value={language.current} />
+			<input type="hidden" name="language" value="es" />
 			<input type="hidden" name="identityVersion" value={identityVersion} />
 			<input type="hidden" name="previewToken" value={currentPreview?.token ?? ''} />
 			{#if !identityVersion}<FormFeedback result={{ error: 'stale' }} />{/if}
@@ -117,10 +117,11 @@
 			<div class="bc-section">
 				<h2>{messages.waiver.title}</h2>
 				<p>{messages.waiver.introduction}</p>
+				<p class="bc-hint">{messages.waiver.spanishOnly}</p>
 				<noscript><p class="bc-notice">{messages.waiver.javascript}</p></noscript>
 				{#key identityKey}
 					{#each sectionKeys as section (section)}
-						<LegalSignature {section} text={event.legal[language.current][section]} disabled={pending || previewing}
+						<LegalSignature {section} text={event.legal.es[section]} disabled={pending || previewing}
 							onchange={(signature, read) => { drafts[section] = { key: identityKey, signature, read }; }} />
 					{/each}
 				{/key}

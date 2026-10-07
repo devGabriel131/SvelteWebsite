@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import LanguageSelector from '#lib/components/LanguageSelector.svelte';
+
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Card from '#lib/components/ui/card/index.js';
 	import ActionForm from '#lib/bootcamp/ActionForm.svelte';
@@ -42,17 +42,9 @@
 </svelte:head>
 
 <div class="bootcamp bc-admin" lang={language.current}>
-	<div class="bc-card-heading">
-		<header class="bc-heading"><p class="bc-eyebrow">{messages.title}</p><h1>{messages.admin.title}</h1><p class="bc-hint">{messages.admin.introduction}</p></header>
-		<div class="bc-actions"><LanguageSelector /><Button href={resolve('/admin')} variant="outline">{messages.backToAdmin}</Button><Button href={resolve('/')} variant="ghost">{messages.backToStudents}</Button></div>
-	</div>
+	<header class="bc-heading"><p class="bc-eyebrow">{messages.title}</p><h1>{messages.admin.title}</h1></header>
 	<FormFeedback result={form} />
 	<div class="bc-stack">
-		<Card.Root class="bc-card">
-			<h2>{messages.admin.connections}</h2>
-			<div class="bc-actions"><span class="bc-status">{data.paymentEnabled ? messages.admin.paymentReady : messages.admin.paymentMissing}</span><span class="bc-status">{data.driveEnabled ? messages.admin.driveReady : messages.admin.driveMissing}</span></div>
-			<p class="bc-hint">{messages.admin.activationGuard}</p>
-		</Card.Root>
 
 		<section class="bc-stack" aria-label={messages.admin.events}>
 			<div class="bc-card-heading"><h2>{messages.admin.events}</h2><Button type="button" onclick={() => editingId = null}>{messages.admin.create}</Button></div>

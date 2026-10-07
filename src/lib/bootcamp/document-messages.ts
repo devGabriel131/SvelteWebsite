@@ -12,7 +12,7 @@ export const bootcampDocumentMessages = {
 		},
 		labels: {
 			event: 'Bootcamp', eventId: 'Event reference', revision: 'Event revision',
-			venue: 'Venue', startsAt: 'Starts', endsAt: 'Ends', arrivalAt: 'Arrival',
+			venue: 'Venue', startsAt: 'Start / latest arrival', endsAt: 'Ends', arrivalAt: 'Check-in opens',
 			student: 'Participant information', name: 'Full name', email: 'Email',
 			dateOfBirth: 'Date of birth', phone: 'Phone', municipality: 'Municipality',
 			signingCity: 'Signing city', signedAt: 'Signed at', issuedAt: 'Issued at',
@@ -43,7 +43,7 @@ export const bootcampDocumentMessages = {
 		},
 		labels: {
 			event: 'Bootcamp', eventId: 'Referencia del evento', revision: 'Revisión del evento',
-			venue: 'Lugar', startsAt: 'Inicio', endsAt: 'Fin', arrivalAt: 'Llegada',
+			venue: 'Lugar', startsAt: 'Inicio / hora límite de llegada', endsAt: 'Fin', arrivalAt: 'Apertura del registro presencial',
 			student: 'Información de quien participa', name: 'Nombre completo', email: 'Correo electrónico',
 			dateOfBirth: 'Fecha de nacimiento', phone: 'Teléfono', municipality: 'Municipio',
 			signingCity: 'Municipio donde se firma', signedAt: 'Fecha y hora de firma', issuedAt: 'Fecha y hora de emisión',

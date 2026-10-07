@@ -126,7 +126,7 @@
 	<!-- svelte-ignore a11y_no_noninteractive_tabindex (The scroll region must be keyboard-focusable to read the complete legal text.) -->
 	<div class="bc-legal-text" bind:this={reader} tabindex="0" role="region"
 		aria-label={formatMessage(messages.readRegion, { section: messages.sections[section] })}
-		aria-describedby={`${id}-scroll`} onscroll={measure}>{text}</div>
+		aria-describedby={`${id}-scroll`} onscroll={measure}><div lang="es">{text}</div></div>
 	<p class="bc-hint" aria-live="polite">{reachedEnd ? messages.readReady : messages.locked}</p>
 	<label class="bc-check">
 		<input type="checkbox" checked={read} disabled={!reachedEnd || disabled}
