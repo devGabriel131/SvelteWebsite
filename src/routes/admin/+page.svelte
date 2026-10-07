@@ -55,7 +55,7 @@
 			<p class="eyebrow">{language.messages.auth.admin.eyebrow}</p>
 			<h1 id="sign-in-title">{language.messages.auth.admin.title}</h1>
 			<p class="sign-in-introduction">{language.messages.auth.admin.introduction}</p>
-			<SignInForm audience="admin" />
+			<SignInForm audience="admin" localAdmin={data.localAdmin} />
 			</Card.Root>
 		</section>
 	</div>

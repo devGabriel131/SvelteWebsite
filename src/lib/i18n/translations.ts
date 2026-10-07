@@ -693,6 +693,8 @@ const english = {
 	},
 	auth: {
 		email: 'Email address',
+		usernameOrEmail: 'Username or email',
+		localAdminHint: 'Local development only: use username admin and password admin.',
 		signIn: 'Sign in',
 		signingIn: 'Signing in…',
 		signOut: 'Sign out',
@@ -724,7 +726,7 @@ const english = {
 			credential: 'Password',
 			credentialHint: 'Use your admin password (8–128 characters).',
 			invalidCredential: 'Enter a password between 8 and 128 characters.',
-			invalidCredentials: 'The email or password is incorrect. Try again.'
+			invalidCredentials: 'The account or password is incorrect. Try again.'
 		},
 		errors: {
 			rateLimited: 'Too many attempts. Please wait a moment before trying again.',
@@ -991,6 +993,8 @@ const spanish: Messages = {
 	},
 	auth: {
 		email: 'Correo electrónico',
+		usernameOrEmail: 'Usuario o correo electrónico',
+		localAdminHint: 'Solo para desarrollo local: usa el usuario admin y la contraseña admin.',
 		signIn: 'Iniciar sesión',
 		signingIn: 'Iniciando sesión…',
 		signOut: 'Cerrar sesión',
@@ -1022,7 +1026,7 @@ const spanish: Messages = {
 			credential: 'Contraseña',
 			credentialHint: 'Usa tu contraseña de administrador (8–128 caracteres).',
 			invalidCredential: 'Introduce una contraseña de entre 8 y 128 caracteres.',
-			invalidCredentials: 'El correo o la contraseña es incorrecto. Inténtalo de nuevo.'
+			invalidCredentials: 'La cuenta o la contraseña es incorrecta. Inténtalo de nuevo.'
 		},
 		errors: {
 			rateLimited: 'Demasiados intentos. Espera un momento antes de volver a intentarlo.',

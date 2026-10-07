@@ -258,7 +258,7 @@ describeDatabase('auth hook with real Better Auth and isolated PostgreSQL fixtur
 			return Response.json(await loadAdminPage({ locals } as Parameters<typeof loadAdminPage>[0]));
 		});
 		expect(response.status).toBe(200);
-		expect(await response.json()).toEqual({ isAdmin: false });
+		expect(await response.json()).toEqual({ isAdmin: false, localAdmin: false });
 		expect(audiences).toEqual([]);
 		expect(addressCalls).toBe(0);
 	});
@@ -310,7 +310,7 @@ describeDatabase('auth hook with real Better Auth and isolated PostgreSQL fixtur
 				expect(layoutHeaders.get('cache-control')).toBe('private, no-store');
 				expect(getAdminPageState(locals)).toEqual({ isAdmin: true });
 				if (path === '/admin') {
-					expect(await loadAdminPage({ locals } as Parameters<typeof loadAdminPage>[0])).toEqual({ isAdmin: true });
+					expect(await loadAdminPage({ locals } as Parameters<typeof loadAdminPage>[0])).toEqual({ isAdmin: true, localAdmin: false });
 				}
 				expect(locals.session?.id).toBe(storedSession.id);
 			}, path);

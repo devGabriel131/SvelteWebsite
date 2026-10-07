@@ -8,6 +8,7 @@ declare global {
 		// interface Error {}
 		interface Locals {
 			language: Language;
+			localAdmin?: boolean;
 			user: Auth['$Infer']['Session']['user'] | null;
 			session: Auth['$Infer']['Session']['session'] | null;
 		}

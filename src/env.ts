@@ -8,6 +8,12 @@ export const variables = defineEnvVars({
 		schema: (value: string | undefined) => value,
 		description: 'Server-only PostgreSQL connection URL; required when database features are used.'
 	},
+	LOCAL_ADMIN_ENABLED: {
+		public: false,
+		static: false,
+		schema: (value: string | undefined) => value,
+		description: 'Opt in to the seeded admin/admin account in loopback development only; ignored in production.'
+	},
 	BETTER_AUTH_SECRET: {
 		public: false,
 		static: false,

@@ -4,6 +4,7 @@ import type { Handle } from '@sveltejs/kit/hooks';
 import { AUTH_IP_HEADER, createAuth, type Auth } from '../src/lib/server/auth/core';
 import { createAuthHandle } from '../src/lib/server/auth/handle';
 import { createDatabase, type DatabaseConnection } from '../src/lib/server/db/connection';
+import { load as loadAdminPage } from '../src/routes/admin/+page.server';
 
 type HookEvent = Parameters<Handle>[0]['event'];
 const baseURL = 'https://auth-hook.example.test';
@@ -55,6 +56,17 @@ async function expectAnonymousPassThrough(handle: Handle, event: HookEvent) {
 }
 
 describe('auth hook without database I/O', () => {
+	for (const localAdmin of [false, true]) {
+		test(`the local login flag (${localAdmin}) configures the form without granting admin access`, async () => {
+			const event = createEvent('/admin');
+			event.locals.user = null;
+			event.locals.session = null;
+			event.locals.localAdmin = localAdmin;
+			expect(await loadAdminPage(event as Parameters<typeof loadAdminPage>[0])).toEqual({
+				isAdmin: false, localAdmin
+			});
+		});
+	}
 	for (const path of ['/', '/ist', '/admin', '/login', '/admin/auth-other', '/api/authentication', '/api/auth-other']) {
 		test(`a public request without a session cookie bypasses the auth getter: ${path}`, async () => {
 			await expectAnonymousPassThrough(createAuthHandle(unexpectedAuth, false), createEvent(path));

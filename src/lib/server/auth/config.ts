@@ -1,13 +1,20 @@
+import { isLocalAdminEnabled } from './local-admin';
+
 export type AuthEnvironment = {
 	BETTER_AUTH_SECRET?: string;
 	BETTER_AUTH_URL?: string;
 	BETTER_AUTH_TRUSTED_ORIGINS?: string;
+	LOCAL_ADMIN_ENABLED?: string;
+	NODE_ENV?: string;
+	RAILWAY_PROJECT_ID?: string;
+	RAILWAY_ENVIRONMENT_ID?: string;
 };
 
 export type AuthConfig = {
 	secret: string;
 	baseURL: string;
 	trustedOrigins: string[];
+	localAdmin?: boolean;
 };
 
 function readOrigin(value: string, name: string): string {
@@ -54,5 +61,8 @@ export function readAuthConfig(env: AuthEnvironment): AuthConfig | null {
 		? [origin]
 		: trustedOrigins.split(',').map((value) => readOrigin(value.trim(), 'BETTER_AUTH_TRUSTED_ORIGINS'));
 
-	return { secret, baseURL: origin, trustedOrigins: [...new Set(origins)] };
+	return {
+		secret, baseURL: origin, trustedOrigins: [...new Set(origins)],
+		...(isLocalAdminEnabled(env) ? { localAdmin: true } : {})
+	};
 }

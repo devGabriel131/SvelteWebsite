@@ -8,11 +8,12 @@
 	import { Label } from '#lib/components/ui/label/index.js';
 	import { useLanguage } from '#lib/i18n/language.svelte.ts';
 
-	let { audience }: { audience: 'student' | 'admin' } = $props();
+	let { audience, localAdmin = false }: { audience: 'student' | 'admin'; localAdmin?: boolean } = $props();
 	const language = useLanguage();
 	const id = $props.id();
 	const messages = $derived(language.messages.auth);
 	const copy = $derived(messages[audience]);
+	const allowLocalAdmin = $derived(audience === 'admin' && localAdmin);
 	let email = $state('');
 	let password = $state('');
 	let ready = $state(false);
@@ -20,7 +21,7 @@
 	let error = $state<'invalidCredential' | 'invalidCredentials' | 'rateLimited' | 'unavailable' | null>(null);
 	const credentialError = $derived(error === 'invalidCredential' || error === 'invalidCredentials');
 	const errorMessage = $derived(error === 'invalidCredential' || error === 'invalidCredentials'
-		? copy[error]
+		? allowLocalAdmin ? copy.invalidCredentials : copy[error]
 		: error ? messages.errors[error] : '');
 
 	onMount(() => { ready = true; });
@@ -31,7 +32,9 @@
 		error = null;
 
 		// Keep PINs as strings: numeric conversion would discard leading zeros.
-		if (audience === 'student' ? password.length !== 4 || !/^[0-9]{4}$/.test(password) : password.length < 8 || password.length > 128) {
+		if (audience === 'student'
+			? password.length !== 4 || !/^[0-9]{4}$/.test(password)
+			: !(allowLocalAdmin && password === 'admin') && (password.length < 8 || password.length > 128)) {
 			error = 'invalidCredential';
 			return;
 		}
@@ -63,8 +66,8 @@
 
 <form method="POST" onsubmit={signIn} aria-label={copy.title} aria-busy={pending} lang={language.current}>
 	<div class="field">
-		<Label class="font-bold" for={`${id}-email`}>{messages.email}</Label>
-		<Input class="min-h-12 text-base md:text-base" id={`${id}-email`} name="email" type="email"
+		<Label class="font-bold" for={`${id}-email`}>{allowLocalAdmin ? messages.usernameOrEmail : messages.email}</Label>
+		<Input class="min-h-12 text-base md:text-base" id={`${id}-email`} name="email" type={allowLocalAdmin ? 'text' : 'email'}
 			autocomplete="username" autocapitalize="none" spellcheck={false} required readonly={pending} bind:value={email} />
 	</div>
 	<div class="field">
@@ -73,10 +76,10 @@
 			type="password" autocomplete="current-password"
 			inputmode={audience === 'student' ? 'numeric' : undefined}
 			pattern={audience === 'student' ? '[0-9]{4}' : undefined}
-			minlength={audience === 'student' ? 4 : 8} maxlength={audience === 'student' ? 4 : 128}
+			minlength={audience === 'student' ? 4 : allowLocalAdmin ? 5 : 8} maxlength={audience === 'student' ? 4 : 128}
 			aria-describedby={`${id}-hint${credentialError ? ` ${id}-error` : ''}`}
 			aria-invalid={credentialError} required readonly={pending} bind:value={password} />
-		<p class="hint" id={`${id}-hint`}>{copy.credentialHint}</p>
+		<p class="hint" id={`${id}-hint`}>{allowLocalAdmin ? messages.localAdminHint : copy.credentialHint}</p>
 	</div>
 	{#if error}
 		<Alert.Root id={`${id}-error`} variant="destructive" class="px-4 py-[0.85rem]">

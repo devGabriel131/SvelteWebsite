@@ -7,7 +7,7 @@ This worktree uses the open-source `better-auth` and `@better-auth/drizzle-adapt
 - Students sign in at `/login` using email + PIN through `/api/auth`. Admins sign in only through the `/admin` UI and its `/admin/auth` API, using email + an **8–128-character password**, with no mandatory case/symbol rules. Both entry points use the real Better Auth HTTP handler, not server-API form actions.
 - A PIN is **exactly four ASCII digits, sent as a string**. `"0042"` is valid; `42`, `"042"`, whitespace, letters, and non-ASCII numerals are not. The PIN is passed in Better Auth's `password` field, never coerced to a number or trimmed.
 - Better Auth owns the default salted scrypt hashing and verification. Only its hash goes in `auth_account.password`; there is no PIN field on a student profile or custom hashing implementation.
-- Public signup and credential/profile mutation, recovery, email verification, social login, and account-linking endpoints are disabled. There is no account-provisioning UI/script in this step. The existing roster seed creates **no login accounts**. Tests privately create disposable fixtures with Better Auth's own hashing and adapter; that is not an application login bypass.
+- Public signup and credential/profile mutation, recovery, email verification, social login, and account-linking endpoints are disabled. The existing roster seed creates **no login accounts**. The separate, opt-in `db:seed:admin` command creates a local-development admin with Better Auth's salted hash; it refuses hosted/production database targets. There is no public account-provisioning endpoint.
 - `auth_user.role` is a server-controlled `student`/`admin` value. Both the database and Better Auth default it to `student`; clients cannot set it. Sign-in validates the stored role against the server-selected entry point, not password length, submitted flags, or email naming conventions. Wrong audience, unknown email, and invalid credentials use generic errors.
 - `/admin` shows the login form to anonymous visitors, redirects signed-in students to `/`, and shows the existing console only to verified admins. This page guard is not authorization for future APIs/actions: each future protected operation must enforce its own server-side access check.
 - Clicking the admin logo opens the regular student dashboard at `/` with the **same admin account/session**, not an impersonated student. Only admins see the dedicated **Back to admin** link. Signing out from either view revokes that same database session. English/Spanish forms, errors, labels, and metadata use `src/lib/i18n/translations.ts`; raw library errors are not rendered.
@@ -23,6 +23,7 @@ This worktree uses the open-source `better-auth` and `@better-auth/drizzle-adapt
 | `BETTER_AUTH_SECRET` | Yes | A cryptographically random secret of at least 32 characters, unique per environment. |
 | `BETTER_AUTH_URL` | Yes | Exact canonical application origin, e.g. `http://localhost:5173` locally or `https://your-domain.example`. No trailing slash, path, credentials, query, or fragment. |
 | `BETTER_AUTH_TRUSTED_ORIGINS` | No | Comma-separated exact origins; defaults to `BETTER_AUTH_URL`. No wildcard patterns. Add only origins you control and actually need. |
+| `LOCAL_ADMIN_ENABLED` | No | Set `true` to enable the seeded `admin` username and short password only in Vite development on an exact `localhost`, `127.0.0.1`, or `[::1]` origin. Ignored in production and hosted environments. |
 
 Generate the secret locally (do not commit it):
 
@@ -54,7 +55,25 @@ bun run db:migrate
 
 Do not run Better Auth's standalone migrator or `drizzle-kit push`. Future schema changes must generate an additional versioned Drizzle migration. Account/session rows cascade only with their auth user; no relationship to roster/game data exists yet.
 
-**Account setup remains a separate step:** this migration creates no users, passwords, or admin assignment. Before an admin can log in, a trusted server-side provisioning process must create that identity with `role: 'admin'` and an 8–128-character credential hashed by Better Auth. Do not merely promote a four-digit student account: it must get a suitable credential, and existing sessions must be revoked when changing account privileges. No public provisioning or role-edit endpoint is enabled.
+**Production account setup remains a separate step:** this migration creates no users, passwords, or admin assignment. Before a production admin can log in, a trusted server-side provisioning process must create that identity with `role: 'admin'` and an 8–128-character credential hashed by Better Auth. Do not merely promote a four-digit student account: it must get a suitable credential, and existing sessions must be revoked when changing account privileges. No public provisioning or role-edit endpoint is enabled.
+
+### Local admin login
+
+With the local Compose database running and `DATABASE_URL` configured, run:
+
+```sh
+bun run db:migrate
+bun run db:seed:admin
+```
+
+In your git-ignored `.env.local`, configure a generated `BETTER_AUTH_SECRET` (see above), `BETTER_AUTH_URL=http://localhost:5173`, and `LOCAL_ADMIN_ENABLED=true`. Restart `bun run dev` if Vite has not reloaded the configuration, then open `http://localhost:5173/admin`:
+
+- **Username:** `admin`
+- **Password:** `admin`
+
+The username maps server-side to the dedicated `admin@local.example.test` identity. Only this account gets the short-password exception, and Better Auth still verifies its stored hash and admin role, rate-limits requests, and issues revocable database sessions. Other admins retain the 8–128-character policy, and student sign-in is unchanged. The bilingual form shows the username field and local-only hint only when the server enables this mode.
+
+Seeding is transactional and repeatable without resetting credentials, changing roles, or revoking existing sessions. An incompatible account using the reserved email causes an error rather than an overwrite. The command accepts only the guarded local development/test Compose targets; do not tunnel those ports to hosted databases. Production builds, non-loopback origins, and hosted environments do not enable this login exception. Never copy the local account or auth secret into a production database/configuration.
 
 ## Client and server usage
 
@@ -93,7 +112,7 @@ The hook overwrites `x-auth-client-ip` using SvelteKit's `event.getClientAddress
 Better Auth 1.7.7's optional SvelteKit peer range still advertises `^2.0.0`. Its installed official handler uses standard Request/Response objects and a compatible `RequestEvent` type; this integration uses SvelteKit 3's `$app/env`, `@sveltejs/kit/hooks`, and private environment declarations. No dependency overrides, framework downgrade, or copied handler are used. Recheck the integration on upgrades rather than assuming the upstream peer range promises SvelteKit 3 support.
 
 ```sh
-bun test tests/auth.test.ts tests/auth-hook.test.ts tests/auth-ui.test.ts
+bun test tests/auth.test.ts tests/auth-hook.test.ts tests/database-local-admin.test.ts
 bun run check
 bun run db:check
 bun run build

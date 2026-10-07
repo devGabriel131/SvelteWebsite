@@ -5,6 +5,7 @@ import * as authSchema from '../db/auth-schema';
 import type { Database } from '../db/connection';
 import type { AuthConfig } from './config';
 import { isValidCredential, type AuthAudience } from './credentials';
+import { LOCAL_ADMIN_EMAIL } from './local-admin';
 
 // The server hook must overwrite this header with event.getClientAddress().
 export const AUTH_IP_HEADER = 'x-auth-client-ip';
@@ -61,7 +62,15 @@ export function createAuth(db: Database, config: AuthConfig, audience: AuthAudie
 					throw new APIError('NOT_FOUND');
 				}
 				if (ctx.path === '/sign-in/email') {
-					if (!isValidCredential(audience, ctx.body?.password) || typeof ctx.body?.email !== 'string') {
+					const localAdmin = audience === 'admin' && config.localAdmin === true;
+					const email = typeof ctx.body?.email === 'string' ? ctx.body.email.toLowerCase() : null;
+					if (localAdmin && email === 'admin') {
+						ctx.body.email = LOCAL_ADMIN_EMAIL;
+					}
+					// This exception only permits verification of the seeded local account's hash.
+					const localCredential = localAdmin && (email === 'admin' || email === LOCAL_ADMIN_EMAIL) &&
+						ctx.body?.password === 'admin';
+					if ((!localCredential && !isValidCredential(audience, ctx.body?.password)) || typeof ctx.body?.email !== 'string') {
 						throw APIError.from('UNAUTHORIZED', BASE_ERROR_CODES.INVALID_EMAIL_OR_PASSWORD);
 					}
 					const identity = await ctx.context.adapter.findOne<{ role: AuthAudience }>({

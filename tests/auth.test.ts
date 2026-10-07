@@ -107,6 +107,32 @@ describe('authentication configuration', () => {
 	}
 });
 
+describe('local admin configuration', () => {
+	const localEnvironment: AuthEnvironment = {
+		...configuredEnvironment,
+		BETTER_AUTH_URL: 'http://localhost:5173',
+		LOCAL_ADMIN_ENABLED: 'true',
+		NODE_ENV: 'development'
+	};
+
+	for (const origin of ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://[::1]:5173']) {
+		test(`enables the explicit development opt-in on ${origin}`, () => {
+			expect(readAuthConfig({ ...localEnvironment, BETTER_AUTH_URL: origin })?.localAdmin).toBe(true);
+		});
+	}
+
+	for (const overrides of [
+		{ LOCAL_ADMIN_ENABLED: undefined }, { LOCAL_ADMIN_ENABLED: 'false' }, { LOCAL_ADMIN_ENABLED: 'TRUE' },
+		{ NODE_ENV: undefined }, { NODE_ENV: 'production' }, { NODE_ENV: 'test' },
+		{ BETTER_AUTH_URL: 'https://auth.example.test' },
+		{ RAILWAY_PROJECT_ID: 'project' }, { RAILWAY_ENVIRONMENT_ID: 'environment' }
+	] satisfies AuthEnvironment[]) {
+		test(`does not enable the local login with ${JSON.stringify(overrides)}`, () => {
+			expect(readAuthConfig({ ...localEnvironment, ...overrides })?.localAdmin).not.toBe(true);
+		});
+	}
+});
+
 describe('four-digit PIN validation', () => {
 	for (const pin of ['0000', '0042', '1234', '9999']) {
 		test(`accepts the exact ASCII string ${pin} without removing leading zeroes`, () => {
@@ -136,7 +162,7 @@ describe('audience-specific credential validation', () => {
 		});
 	}
 
-	for (const password of [undefined, null, 12345678, {}, [], '0042', '1234567', 'a'.repeat(129)]) {
+	for (const password of [undefined, null, 12345678, {}, [], '0042', 'admin', '1234567', 'a'.repeat(129)]) {
 		test(`rejects an invalid admin credential: ${JSON.stringify(password)}`, () => {
 			expect(isValidCredential('admin', password)).toBe(false);
 		});
