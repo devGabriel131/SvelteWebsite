@@ -61,7 +61,7 @@ bun run db:migrate
 
 This reads the server-only `DATABASE_URL` and records applied migrations in `drizzle.__drizzle_migrations`. Rerunning it applies only outstanding migrations. It does not seed fictitious roster data, run during app startup/builds, or require a PostgreSQL extension. Run migrations from one controlled process per database, and review the target before using a hosted connection.
 
-The first migrations create `students` and its database-level `updated_at` trigger. Staff-entered names retain accents and compound names. Emails retain their entered casing, but a unique index compares `lower(btrim(email))` across every student, including inactive profiles. Surrounding/embedded whitespace is rejected by a lightweight email-shape constraint; server-side enrollment must trim and validate inputs. Dots and plus-addresses are not collapsed. Date of birth and gender may be null during roster entry; class type is required. Auth linkage, signup, invitation records, and authenticated game-persistence endpoints are not implemented yet.
+The first migrations create `students` and its database-level `updated_at` trigger. Staff-entered names retain accents and compound names. Emails retain their entered casing, but a unique index compares `lower(btrim(email))` across every student, including inactive profiles. Surrounding/embedded whitespace is rejected by a lightweight email-shape constraint; server-side enrollment must trim and validate inputs. Dots and plus-addresses are not collapsed. Date of birth and gender may be null during roster entry; class type is required. Bootcamp registration now has explicit administrator-controlled account-to-roster links; general signup, invitation records, and authenticated game-persistence endpoints are not implemented yet.
 
 Optionally insert three fictitious roster profiles into the local database:
 
@@ -71,7 +71,7 @@ bun run db:seed
 
 The seed uses fixed UUIDs and reserved `@example.test` addresses, contains no auth accounts/PINs, and never overwrites existing records. It is not a login bypass. It refuses production/Railway environments, remote hosts, connection-option overrides, and unknown database/user/port combinations; it also verifies the actual connected database and user. Only this development target and the dedicated test target below are allowed. A non-fixture record using a fixture email causes the atomic insert to fail rather than modifying that record. Do not point these local ports at remote databases through tunnels.
 
-For future schema changes, edit the relevant definition in `src/lib/server/db/schema.ts` (students), `auth-schema.ts` (Better Auth), `game-schema.ts` (game/catalog tables), or `views.ts` (derived progress/rankings), then generate and inspect an additional migration:
+For future schema changes, edit the relevant definition in `src/lib/server/db/schema.ts` (students), `auth-schema.ts` (Better Auth), `game-schema.ts` (game/catalog tables), `bootcamp-schema.ts` (events/registrations/documents/payments), or `views.ts` (derived progress/rankings), then generate and inspect an additional migration:
 
 ```sh
 bun run db:generate --name=describe_the_change
@@ -119,7 +119,13 @@ Open-source Better Auth uses `drizzle/0004_better_auth.sql` and the appended `00
 
 The stored server-controlled role determines which entry point can authenticate the account. `/admin` shows a login form anonymously, redirects signed-in students to `/`, and permits the console for admins. Its logo opens the student dashboard using the same admin session, where an admin-only **Back to admin** link returns to the console. Both views have sign-out; labels, errors, and metadata are English/Spanish.
 
-See [authentication setup and security boundaries](docs/authentication.md) for private variables, migrations, provisioning prerequisites, and tests. **Apply the new migration explicitly; it defaults existing accounts to student and does not create an admin or password.** Account provisioning, invitations, roster linkage, recovery, game persistence, and authorization of future live admin operations remain separate work. Student demo pages stay public; the admin console still uses fictional in-memory data.
+See [authentication setup and security boundaries](docs/authentication.md) for private variables, migrations, provisioning prerequisites, and tests. **Apply the new migration explicitly; it defaults existing accounts to student and does not create an admin or password.** Account provisioning, invitations, recovery, and game persistence remain separate work. Bootcamps have explicit admin-controlled roster linkage and authenticated persistent operations. Student demo pages stay public; the original admin console panels still use fictional in-memory data.
+
+## Bootcamp registration
+
+`/bootcamps` provides the persistent 21+ student flow: three mandatory signed waiver sections, an optional bootcamp employer letter, then a one-time $30 full payment or $15 deposit. Documents are saved before payment and backed up to Drive, independently of downloads. `/admin/bootcamps` manages real events, approved bilingual text, student-account links, document backups, and event-specific reports/CSV—including students who never started and deposit balances.
+
+**Registration stays closed until explicitly configured and activated.** Apply `0006_bootcamp_registration.sql`, provide approved legal wording in both languages, configure Drive/ATH/private worker settings, and complete separate live merchant verification before enabling payments. No live charge or upload is implied by this implementation. See [bootcamp setup and operating guide](docs/bootcamps.md) and [ATH Móvil protocol/recovery notes](docs/ath-bootcamps.md).
 
 ## Project structure
 

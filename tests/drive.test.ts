@@ -292,6 +292,140 @@ describe('safe Drive errors', () => {
 	});
 });
 
+describe('Drive reserved file IDs', () => {
+	const reservedId = 'reserved-file_123';
+	const sha256 = 'a'.repeat(64);
+	const metadata = {
+		id: reservedId, name: 'document.pdf', mimeType: 'application/pdf', parents: ['private-folder'],
+		appProperties: { bootcampDocumentId: 'document-id', sha256 }, trashed: false,
+		size: '7', sha256Checksum: sha256
+	};
+
+	test('generates one Drive file ID and fetches private metadata with the shared token', async () => {
+		const transport = mockFetch((request) => {
+			if (request.url === tokenUrl) return Response.json(token);
+			expect(request.method).toBe('GET');
+			expect(request.redirect).toBe('error');
+			expect(request.cache).toBe('no-store');
+			expect(request.headers.get('Authorization')).toBe(`Bearer ${token.access_token}`);
+			const url = new URL(request.url);
+			if (url.pathname.endsWith('/generateIds')) {
+				expect(Object.fromEntries(url.searchParams)).toEqual({ count: '1', space: 'drive', type: 'files', fields: 'ids' });
+				return Response.json({ ids: [reservedId] });
+			}
+			expect(url.pathname).toBe(`/drive/v3/files/${reservedId}`);
+			expect(url.searchParams.get('supportsAllDrives')).toBe('true');
+			expect(url.searchParams.get('fields')?.split(',')).toEqual([
+				'id', 'name', 'mimeType', 'parents', 'appProperties', 'trashed', 'size', 'sha256Checksum'
+			]);
+			return Response.json(metadata);
+		});
+		const client = createDriveClient(config, { fetch: transport.fetch });
+		expect(await client.generateFileId()).toBe(reservedId);
+		expect(await client.getFile(reservedId)).toEqual(metadata);
+		expect(transport.requests).toHaveLength(3);
+	});
+
+	test('includes the reserved ID and private app properties without altering binary bytes', async () => {
+		const transport = mockFetch(async (request) => {
+			if (request.url === tokenUrl) return Response.json(token);
+			const boundary = request.headers.get('Content-Type')!.split('boundary=')[1];
+			const prefix = new TextEncoder().encode(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({
+				name: file.filename, mimeType: file.mimeType, parents: [file.parentFolderId],
+				id: reservedId, appProperties: metadata.appProperties
+			})}\r\n--${boundary}\r\nContent-Type: application/pdf\r\n\r\n`);
+			const suffix = new TextEncoder().encode(`\r\n--${boundary}--\r\n`);
+			expect(new Uint8Array(await request.arrayBuffer())).toEqual(new Uint8Array([...prefix, ...file.bytes, ...suffix]));
+			return Response.json({ id: reservedId });
+		});
+		expect(await createDriveClient(config, { fetch: transport.fetch }).upload({
+			...file, id: reservedId, appProperties: metadata.appProperties
+		})).toBe(reservedId);
+	});
+
+	test('does not swallow conflicts or retry creates, even with a reserved ID', async () => {
+		const transport = mockFetch((request) => request.url === tokenUrl
+			? Response.json(token) : new Response('private upstream body', { status: 409 }));
+		const error = await driveError(() => createDriveClient(config, { fetch: transport.fetch }).upload({ ...file, id: reservedId }));
+		expect(error.status).toBe(409);
+		expect(transport.requests).toHaveLength(2);
+	});
+
+	test('rejects a create response that did not honor the reserved ID', async () => {
+		const transport = mockFetch((request) => Response.json(request.url === tokenUrl ? token : { id: 'wrong-id' }));
+		expect((await driveError(() => createDriveClient(config, { fetch: transport.fetch })
+			.upload({ ...file, id: reservedId }))).kind).toBe('upstream');
+		expect(transport.requests).toHaveLength(2);
+	});
+
+	test('rejects invalid reservations and private properties before networking', async () => {
+		const transport = mockFetch(() => { throw new Error('Unexpected network request.'); });
+		const client = createDriveClient(config, { fetch: transport.fetch });
+		for (const id of ['', ' ', '../files', '..', 'id?fields=secret', 'id\nheader']) {
+			expect((await driveError(() => client.getFile(id))).kind).toBe('bad_input');
+			expect((await driveError(() => client.upload({ ...file, id }))).kind).toBe('bad_input');
+		}
+		for (const appProperties of [null, [], 'text', { '': 'value' }, { key: 42 }]) {
+			expect((await driveError(() => client.upload({ ...file, appProperties } as unknown as DriveUpload))).kind).toBe('bad_input');
+		}
+		expect(transport.requests).toHaveLength(0);
+	});
+
+	test('rejects missing, malformed, or multiple generated IDs', async () => {
+		for (const response of [{}, { ids: [] }, { ids: [reservedId, 'second'] }, { ids: [' '] }, { ids: [null] }, { ids: ['bad/id'] }]) {
+			const transport = mockFetch((request) => Response.json(request.url === tokenUrl ? token : response));
+			expect((await driveError(() => createDriveClient(config, { fetch: transport.fetch }).generateFileId())).kind).toBe('upstream');
+		}
+	});
+
+	test('validates metadata without inventing missing integrity fields', async () => {
+		const changes = [
+			{ id: 'other' }, { name: 1 }, { mimeType: '' }, { trashed: undefined },
+			{ parents: 'folder' }, { parents: [1] }, { appProperties: [] }, { appProperties: { key: null } },
+			{ size: 7 }, { size: '-1' }, { sha256Checksum: 'invalid' }
+		];
+		for (const change of changes) {
+			const transport = mockFetch((request) => Response.json(request.url === tokenUrl ? token : { ...metadata, ...change }));
+			expect((await driveError(() => createDriveClient(config, { fetch: transport.fetch }).getFile(reservedId))).kind).toBe('upstream');
+		}
+		const transport = mockFetch((request) => Response.json(request.url === tokenUrl ? token : {
+			id: reservedId, name: '', mimeType: 'application/pdf', trashed: true
+		}));
+		expect(await createDriveClient(config, { fetch: transport.fetch }).getFile(reservedId)).toEqual({
+			id: reservedId, name: '', mimeType: 'application/pdf', trashed: true, parents: [], appProperties: {}
+		});
+	});
+
+	for (const operation of ['generateFileId', 'getFile'] as const) {
+		const call = (client: ReturnType<typeof createDriveClient>, signal?: AbortSignal) => operation === 'generateFileId'
+			? client.generateFileId(signal) : client.getFile(reservedId, signal);
+		test(`${operation} honors cancellation and bounds an unresponsive fetch`, async () => {
+			const transport = mockFetch((request) => request.url === tokenUrl ? Response.json(token) : new Promise<Response>(() => {}));
+			const client = createDriveClient(config, { fetch: transport.fetch, timeoutMs: 20 });
+			const controller = new AbortController();
+			controller.abort(sensitive.join(' '));
+			expect((await driveError(() => call(client, controller.signal))).kind).toBe('upstream');
+			expect(transport.requests).toHaveLength(0);
+			expect((await driveError(() => call(client))).message).toContain('timed out');
+			expect(transport.requests).toHaveLength(2);
+		});
+
+		test(`${operation} invalidates rejected tokens without implicit retries`, async () => {
+			let gets = 0;
+			const transport = mockFetch((request) => {
+				if (request.url === tokenUrl) return Response.json(token);
+				gets += 1;
+				return gets === 1 ? new Response(null, { status: 401 }) : Response.json(operation === 'generateFileId' ? { ids: [reservedId] } : metadata);
+			});
+			const client = createDriveClient(config, { fetch: transport.fetch });
+			expect((await driveError(() => call(client))).kind).toBe('auth');
+			expect(gets).toBe(1);
+			await call(client);
+			expect(transport.requests.filter((request) => request.url === tokenUrl)).toHaveLength(2);
+		});
+	}
+});
+
 describe('Drive token cache', () => {
 	test('deduplicates concurrent refreshes across uploads and folders and reuses the token', async () => {
 		const started = deferred<void>();
@@ -391,7 +525,7 @@ describe('Drive token cache', () => {
 		const second = createDriveClient(config, { fetch: transport.fetch });
 		await Promise.all([first.upload(file), second.createFolder(folder)]);
 		expect(transport.requests.filter((request) => request.url === tokenUrl)).toHaveLength(2);
-		expect(Object.keys(first).sort()).toEqual(['createFolder', 'upload']);
+		expect(Object.keys(first).sort()).toEqual(['createFolder', 'generateFileId', 'getFile', 'upload']);
 		for (const secret of sensitive) expect(JSON.stringify(first)).not.toContain(secret);
 	});
 });

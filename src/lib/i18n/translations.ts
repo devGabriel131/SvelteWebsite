@@ -1,3 +1,5 @@
+import { bootcampDocumentMessages } from '../bootcamp/document-messages';
+
 export type Language = 'en' | 'es';
 
 export const defaultLanguage: Language = 'en';
@@ -474,7 +476,212 @@ const spanishDesignPreview: typeof englishDesignPreview = {
 	}
 };
 
+const englishBootcamp = {
+	documents: bootcampDocumentMessages.en as (typeof bootcampDocumentMessages)[Language],
+	registration: { begin: 'Begin registration', draft: 'Registration started. Complete and save your waiver to continue.' },
+	pageTitle: 'Bootcamps | Masterminds ASVAB',
+	description: 'Review bootcamp details, complete your documents, and manage your registration.',
+	title: 'Bootcamps', eyebrow: 'Prepare together', introduction: 'Your event, documents, and payment progress in one place.',
+	empty: 'No bootcamps are available right now.', notLinked: 'Your account is not linked to a student record. Contact an administrator to continue.',
+	backToAdmin: 'Back to administration', backToStudents: 'Student workspace',
+	common: { save: 'Save', saving: 'Saving…', success: 'Saved successfully.', yes: 'Yes', no: 'No', cancel: 'Cancel', unavailable: 'Not available', required: 'All fields are required unless marked optional.', languages: { en: 'English', es: 'Spanish' } },
+	errors: {
+		invalid: 'Check all required fields and try again.',
+		unavailable: 'This service is temporarily unavailable. Please try again later.',
+		closed: 'Registration is closed for this event. No new registration changes can be saved.',
+		ineligible: 'You are not currently eligible to register. Contact an administrator for help.',
+		stale: 'The student record or event details have changed. Reload the page and review the latest information before continuing.',
+		notLinked: 'Your account is not linked to a student record. Contact an administrator.',
+		payment: 'The payment could not be confirmed. Check your payment status before trying again.',
+		storage: 'The document could not be saved. Please try again; do not assume it is complete.',
+				unsupportedText: 'PDFs support English and Spanish Latin characters. Replace tabs and unsupported special characters from pasted text, then review the corrected text before approval.'
+	},
+	event: {
+		venue: 'Venue', startsAt: 'Starts', endsAt: 'Ends', arrivalAt: 'Arrive by', registrationClosesAt: 'Registration deadline',
+		timeZone: 'All event times are in Puerto Rico time.', open: 'Registration open', closed: 'Registration closed',
+		closedNote: 'New registrations are unavailable. Saved documents remain available until the event ends.', ended: 'This event has ended. The document download period has closed.',
+		revision: 'Revision {revision}', documents: 'Saved documents', downloadsUntil: 'Downloads available through {date}.',
+		document: '{kind} · {language}', documentKinds: { waiver: 'Signed waiver', letter: 'Employer letter' }
+	},
+	identity: {
+		title: 'Your information', name: 'Full name', email: 'Email address', dateOfBirth: 'Date of birth', phone: 'Phone number',
+		municipality: 'Municipality of residence', signingCity: 'City where you are signing now',
+		known: 'Your name, email, and any recorded date of birth come from your student record. Contact an administrator if they are incorrect.',
+		signingCityHint: 'Enter the city where you are physically signing, not your residence or the event venue unless you are there now.',
+		resetHint: 'Changing your information, the document language, or the event revision clears all draft signatures. Review and sign again.'
+	},
+	waiver: {
+		title: 'Read and sign', introduction: 'Read each complete section, confirm you have read it, then sign in its signature box. All three signatures are required.',
+		sections: { agreement: 'Participation agreement', liability: 'Liability waiver', media: 'Media authorization' },
+		readRegion: '{section} — complete legal text', scrollHint: 'Scroll to the bottom to unlock the read confirmation. You can focus the text and use the arrow keys, Page Down, or End.',
+		readConfirm: 'I have read this entire section', readReady: 'You have reached the end. Confirm that you have read this section to unlock signing.',
+		signature: 'Signature for {section}', signatureHint: 'Draw your signature with a mouse, finger, or stylus. To sign with a keyboard, press Enter to start, use the arrow keys to draw, then press Enter to finish.',
+		locked: 'Read and confirm this section before signing.', clear: 'Clear signature', signed: 'Signature captured', unsigned: 'Signature required',
+		keyboardDrawing: 'Keyboard drawing is active. Use arrow keys to draw; press Enter to finish.',
+		preview: 'Preview PDF (optional)', previewing: 'Preparing preview…', previewTitle: 'Your waiver PDF preview', openPreview: 'Open PDF preview',
+		previewOptional: 'You may save after completing all three signatures. Previewing the PDF or downloading a copy is optional.',
+		previewHint: 'This preview is not a saved registration. If you save without changes, this is the exact PDF that will be saved. Changes discard this preview; you can save directly or generate another optional preview.',
+		downloadPreview: 'Download preview copy', previewFilename: 'bootcamp-waiver-preview.pdf',
+		submit: 'Save signed waiver', saved: 'Your signed waiver is saved.',
+		completeFirst: 'Complete your information, read all three sections, and sign each one before saving or generating an optional preview.',
+		javascript: 'JavaScript is required to read and sign the waiver. PDF preview is optional.'
+	},
+	letter: {
+		title: 'Employer letter', question: 'Do you need a letter for your employer?', description: 'Your saved student information is reused. A new letter uses the current event details shown above; your signed waiver and earlier documents remain unchanged. Only add your employment details.',
+		employer: 'Employer or company', contact: 'Employer contact', position: 'Your position', workplace: 'Workplace location',
+		submit: 'Save letter choice', declined: 'You chose not to request an employer letter.', saved: 'Your employer letter is saved.'
+	},
+	payment: {
+		title: 'Event payment', description: 'One-time event payment. This is not a subscription.', total: 'Event price', paid: 'Paid through website', remaining: 'Remaining in website records',
+		full: 'Pay in full · {amount}', deposit: 'Pay deposit · {amount}',
+		phone: 'Payer’s ATH Móvil phone number', phoneHint: 'Required. Enter the Puerto Rico or US phone registered with the ATH Móvil account that will pay. It may belong to someone other than the student. Use 10 digits, optionally with +1.',
+		invalidPhone: 'Enter a valid 10-digit Puerto Rico or US phone number, optionally with +1.',
+		unavailable: 'Payments are currently unavailable. Your saved documents are not affected.', complete: 'Paid in full', confirmed: 'Registration confirmed',
+		remainingNotice: 'Remaining in website records: {amount}. Offline collections are not reflected. This checkout does not accept balance payments.',
+				remainingFlag: 'Balance remains in website records',
+				recordsNotice: 'These paid and remaining amounts reflect website payment records only. Money collected offline is not reflected here.',
+				verificationAttention: 'The latest verification needs attention. Previously verified payment remains recorded.',
+		initialOnly: 'Choose one initial payment: a $15 deposit or the full $30. This checkout does not accept later balance payments.',
+		pending: 'Payment submitted. Your balance changes only after the provider confirms payment.', prerequisites: 'Save your waiver and employer letter choice before paying.',
+		check: 'Check payment status', checking: 'Checking payment…', checked: 'Payment status checked.',
+		polling: 'Checking every 10 seconds while this page is visible, for up to 10 minutes.', pollingStopped: 'Automatic checks have stopped. You can still check the payment status manually.',
+		statuses: { creating: 'Creating payment', pending: 'Awaiting payment', uncertain: 'Payment needs verification', completed: 'Payment completed', cancelled: 'Payment cancelled', refunded: 'Payment refunded', not_started: 'No payment attempt', unknown: 'Payment status unavailable' },
+		stateHints: {
+			creating: 'Your payment request is being created. Do not start another payment.',
+			pending: 'Complete the request in the payer’s ATH Móvil app, then check its status. Do not start another payment.',
+			uncertain: 'The payment outcome is not yet verified. Check its status before taking any further action.',
+			completed: 'The provider reports a completed payment. The paid amount below must be confirmed by the server before registration is confirmed.',
+			cancelled: 'The previous attempt was cancelled. If no payment was received and registration is open, you may start a new initial payment.',
+			refunded: 'This payment was refunded. New checkout attempts are blocked; contact an administrator.',
+			unknown: 'Payment status could not be verified. New checkout attempts are blocked; check the status or contact an administrator.'
+		}
+	},
+	admin: {
+		pageTitle: 'Manage bootcamps | Masterminds ASVAB', description: 'Manage bootcamp events, approved legal text, student links, registration reports, and document backups.',
+		title: 'Bootcamp operations', introduction: 'Publish approved events and follow each student’s registration progress.',
+		connections: 'Service readiness', paymentReady: 'Payments configured', paymentMissing: 'Payments not configured', driveReady: 'Document backup configured', driveMissing: 'Document backup not configured',
+		events: 'Events', create: 'Create event', edit: 'Edit event', editing: 'Edit: {title}', titleField: 'Event title', venue: 'Venue',
+		timeZone: 'Enter all dates and times in Puerto Rico local time (America/Puerto_Rico).',
+		editWarning: 'Saving edits closes registration. Review the updated event before reopening it. New documents use the current details; existing documents, including signed waivers, remain unchanged.',
+		legal: 'Canonical legal text', legalHint: 'Provide the approved text for all three sections in both languages. No sample legal clauses are supplied.',
+		legalLabel: '{section} — {language}', legalApproved: 'The legal text in both languages has been reviewed and approved',
+		approved: 'Legal text approved', unapproved: 'Legal approval required', saveEvent: 'Save event',
+		open: 'Open registration', close: 'Close registration', activationGuard: 'Opening requires configured payments, configured document backup, and approved legal text in both languages.',
+		linkTitle: 'Link a student account', linkHint: 'Link an existing roster student to their sign-in account. This is saved on the server.',
+		studentEmail: 'Student email in the roster', accountEmail: 'Sign-in account email', link: 'Save student link',
+		report: 'Registration report', selectEvent: 'Select an event for its report', reportEmpty: 'There are no student rows for this event.',
+		csv: 'Download CSV', retryBackups: 'Retry document backups', reconcile: 'Reconcile payments',
+		name: 'Student', email: 'Email', eligibility: 'Eligibility', status: 'Registration status', paymentStatus: 'Payment status', paid: 'Website paid', remaining: 'Website remaining', documents: 'Documents and backup status', noDocuments: 'No saved documents',
+		eligibilities: { eligible: 'Eligible', underage: 'Underage', unknown: 'Not verified', inactive: 'Inactive' },
+		statuses: { not_started: 'Not started', waiver: 'Waiver step', letter: 'Employer letter step', payment: 'Payment step', confirmed: 'Confirmed' },
+		backup: 'Backup: {status}', backups: { pending: 'Pending', uploading: 'Uploading', saved: 'Saved', failed: 'Failed', unavailable: 'Unavailable', unknown: 'Not verified' }
+	}
+};
+
+const spanishBootcamp: typeof englishBootcamp = {
+	documents: bootcampDocumentMessages.es,
+	registration: { begin: 'Comenzar inscripción', draft: 'Inscripción iniciada. Completa y guarda tu relevo para continuar.' },
+	pageTitle: 'Bootcamps | Masterminds ASVAB',
+	description: 'Consulta los detalles de los bootcamps, completa tus documentos y administra tu inscripción.',
+	title: 'Bootcamps', eyebrow: 'Prepárate en equipo', introduction: 'Tu evento, documentos y progreso de pago en un solo lugar.',
+	empty: 'No hay bootcamps disponibles en este momento.', notLinked: 'Tu cuenta no está vinculada a un expediente estudiantil. Comunícate con un administrador para continuar.',
+	backToAdmin: 'Volver a administración', backToStudents: 'Espacio del estudiante',
+	common: { save: 'Guardar', saving: 'Guardando…', success: 'Se guardó correctamente.', yes: 'Sí', no: 'No', cancel: 'Cancelar', unavailable: 'No disponible', required: 'Todos los campos son obligatorios salvo que se indiquen como opcionales.', languages: { en: 'Inglés', es: 'Español' } },
+	errors: {
+		invalid: 'Revisa todos los campos obligatorios e inténtalo de nuevo.',
+		unavailable: 'Este servicio no está disponible temporalmente. Inténtalo más tarde.',
+		closed: 'La inscripción para este evento está cerrada. No se pueden guardar cambios nuevos en la inscripción.',
+		ineligible: 'Actualmente no cumples los requisitos para inscribirte. Comunícate con un administrador.',
+		stale: 'El expediente estudiantil o los detalles del evento cambiaron. Recarga la página y revisa la información actualizada antes de continuar.',
+		notLinked: 'Tu cuenta no está vinculada a un expediente estudiantil. Comunícate con un administrador.',
+		payment: 'No se pudo confirmar el pago. Verifica su estado antes de intentarlo de nuevo.',
+		storage: 'No se pudo guardar el documento. Inténtalo de nuevo; no lo des por completado.',
+				unsupportedText: 'Los PDF admiten caracteres latinos del español y del inglés. Reemplaza las tabulaciones y los caracteres especiales no admitidos del texto pegado y revisa el texto corregido antes de aprobarlo.'
+	},
+	event: {
+		venue: 'Lugar', startsAt: 'Comienza', endsAt: 'Termina', arrivalAt: 'Hora de llegada', registrationClosesAt: 'Cierre de inscripción',
+		timeZone: 'Todos los horarios del evento corresponden a la hora de Puerto Rico.', open: 'Inscripción abierta', closed: 'Inscripción cerrada',
+		closedNote: 'No se aceptan inscripciones nuevas. Los documentos guardados están disponibles hasta que termine el evento.', ended: 'Este evento terminó. El período de descarga de documentos ha cerrado.',
+		revision: 'Revisión {revision}', documents: 'Documentos guardados', downloadsUntil: 'Descargas disponibles hasta {date}.',
+		document: '{kind} · {language}', documentKinds: { waiver: 'Relevo firmado', letter: 'Carta patronal' }
+	},
+	identity: {
+		title: 'Tu información', name: 'Nombre completo', email: 'Correo electrónico', dateOfBirth: 'Fecha de nacimiento', phone: 'Número de teléfono',
+		municipality: 'Municipio de residencia', signingCity: 'Ciudad donde estás firmando ahora',
+		known: 'Tu nombre, correo y fecha de nacimiento registrada provienen de tu expediente estudiantil. Comunícate con un administrador si son incorrectos.',
+		signingCityHint: 'Indica la ciudad donde estás físicamente al firmar, no tu residencia ni el lugar del evento a menos que estés allí ahora.',
+		resetHint: 'Cambiar tu información, el idioma del documento o la revisión del evento borra todas las firmas en borrador. Revisa y firma de nuevo.'
+	},
+	waiver: {
+		title: 'Lee y firma', introduction: 'Lee cada sección completa, confirma que la leíste y firma en su recuadro. Las tres firmas son obligatorias.',
+		sections: { agreement: 'Acuerdo de participación', liability: 'Relevo de responsabilidad', media: 'Autorización de uso de imagen' },
+		readRegion: '{section} — texto legal completo', scrollHint: 'Desplázate hasta el final para habilitar la confirmación de lectura. Puedes enfocar el texto y usar las flechas, Av Pág o Fin.',
+		readConfirm: 'He leído esta sección completa', readReady: 'Llegaste al final. Confirma que leíste esta sección para habilitar la firma.',
+		signature: 'Firma de {section}', signatureHint: 'Dibuja tu firma con el ratón, el dedo o un lápiz digital. Con el teclado, presiona Enter para comenzar, usa las flechas para dibujar y presiona Enter para terminar.',
+		locked: 'Lee y confirma esta sección antes de firmar.', clear: 'Borrar firma', signed: 'Firma capturada', unsigned: 'Se requiere una firma',
+		keyboardDrawing: 'El dibujo con teclado está activo. Usa las flechas para dibujar; presiona Enter para terminar.',
+		preview: 'Vista previa del PDF (opcional)', previewing: 'Preparando vista previa…', previewTitle: 'Vista previa del PDF de tu relevo', openPreview: 'Abrir vista previa del PDF',
+		previewOptional: 'Puedes guardar después de completar las tres firmas. Ver el PDF o descargar una copia es opcional.',
+		previewHint: 'Esta vista previa no es una inscripción guardada. Si guardas sin cambios, se guardará este mismo PDF. Cualquier cambio descarta esta vista previa; puedes guardar directamente o generar otra vista previa opcional.',
+		downloadPreview: 'Descargar copia de la vista previa', previewFilename: 'vista-previa-relevo-bootcamp.pdf',
+		submit: 'Guardar relevo firmado', saved: 'Tu relevo firmado está guardado.',
+		completeFirst: 'Completa tu información, lee las tres secciones y firma cada una antes de guardar o generar una vista previa opcional.',
+		javascript: 'Se requiere JavaScript para leer y firmar el relevo. La vista previa del PDF es opcional.'
+	},
+	letter: {
+		title: 'Carta patronal', question: '¿Necesitas una carta para tu patrono?', description: 'Se reutilizan tus datos estudiantiles guardados. Una carta nueva usa los detalles actuales del evento que aparecen arriba; tu relevo firmado y los documentos anteriores permanecen sin cambios. Solo añade tus datos de empleo.',
+		employer: 'Patrono o empresa', contact: 'Contacto del patrono', position: 'Tu puesto', workplace: 'Lugar de trabajo',
+		submit: 'Guardar selección de carta', declined: 'Elegiste no solicitar una carta patronal.', saved: 'Tu carta patronal está guardada.'
+	},
+	payment: {
+		title: 'Pago del evento', description: 'Pago único por el evento. No es una suscripción.', total: 'Precio del evento', paid: 'Pagado en el sitio web', remaining: 'Pendiente según el sitio web',
+		full: 'Pagar completo · {amount}', deposit: 'Pagar depósito · {amount}',
+		phone: 'Teléfono de ATH Móvil de quien paga', phoneHint: 'Obligatorio. Ingresa el teléfono de Puerto Rico o Estados Unidos registrado en la cuenta de ATH Móvil que pagará. Puede pertenecer a alguien que no sea el estudiante. Usa 10 dígitos, con +1 opcional.',
+		invalidPhone: 'Ingresa un teléfono válido de Puerto Rico o Estados Unidos de 10 dígitos, con +1 opcional.',
+		unavailable: 'Los pagos no están disponibles actualmente. Tus documentos guardados no se afectan.', complete: 'Pagado en su totalidad', confirmed: 'Inscripción confirmada',
+		remainingNotice: 'Pendiente según el sitio web: {amount}. Los cobros fuera del sitio web no se reflejan. Este proceso no acepta pagos del saldo.',
+				remainingFlag: 'Saldo pendiente según el sitio web',
+				recordsNotice: 'Los montos pagados y pendientes reflejan solo los registros de pago del sitio web. El dinero cobrado fuera del sitio web no se refleja aquí.',
+				verificationAttention: 'La verificación más reciente requiere atención. El pago verificado anteriormente permanece registrado.',
+		initialOnly: 'Elige un solo pago inicial: un depósito de $15 o el total de $30. Este proceso no acepta pagos posteriores del saldo.',
+		pending: 'Pago enviado. Tu saldo cambia solo cuando el proveedor confirma el pago.', prerequisites: 'Guarda tu relevo y tu selección de carta patronal antes de pagar.',
+		check: 'Verificar estado del pago', checking: 'Verificando pago…', checked: 'Estado del pago verificado.',
+		polling: 'Se verifica cada 10 segundos mientras esta página esté visible, durante un máximo de 10 minutos.', pollingStopped: 'Las verificaciones automáticas se detuvieron. Aún puedes verificar el estado del pago manualmente.',
+		statuses: { creating: 'Creando pago', pending: 'Esperando pago', uncertain: 'El pago requiere verificación', completed: 'Pago completado', cancelled: 'Pago cancelado', refunded: 'Pago reembolsado', not_started: 'Sin intento de pago', unknown: 'Estado del pago no disponible' },
+		stateHints: {
+			creating: 'Se está creando tu solicitud de pago. No inicies otro pago.',
+			pending: 'Completa la solicitud en la aplicación ATH Móvil de quien paga y verifica su estado. No inicies otro pago.',
+			uncertain: 'El resultado del pago aún no está verificado. Verifica su estado antes de realizar cualquier otra acción.',
+			completed: 'El proveedor informa que el pago se completó. El servidor debe confirmar el monto pagado antes de confirmar la inscripción.',
+			cancelled: 'El intento anterior fue cancelado. Si no se recibió ningún pago y la inscripción está abierta, puedes iniciar un pago inicial nuevo.',
+			refunded: 'Este pago fue reembolsado. No se permiten nuevos intentos de pago; comunícate con un administrador.',
+			unknown: 'No se pudo verificar el estado del pago. No se permiten nuevos intentos; verifica el estado o comunícate con un administrador.'
+		}
+	},
+	admin: {
+		pageTitle: 'Administrar bootcamps | Masterminds ASVAB', description: 'Administra eventos, textos legales aprobados, vínculos estudiantiles, informes de inscripción y copias de documentos.',
+		title: 'Administración de bootcamps', introduction: 'Publica eventos aprobados y sigue el progreso de inscripción de cada estudiante.',
+		connections: 'Disponibilidad de servicios', paymentReady: 'Pagos configurados', paymentMissing: 'Pagos sin configurar', driveReady: 'Respaldo de documentos configurado', driveMissing: 'Respaldo de documentos sin configurar',
+		events: 'Eventos', create: 'Crear evento', edit: 'Editar evento', editing: 'Editar: {title}', titleField: 'Título del evento', venue: 'Lugar',
+		timeZone: 'Ingresa todas las fechas y horas en la hora local de Puerto Rico (America/Puerto_Rico).',
+		editWarning: 'Guardar cambios cierra la inscripción. Revisa el evento actualizado antes de volver a abrirla. Los documentos nuevos usan los detalles actuales; los documentos existentes, incluidos los relevos firmados, permanecen sin cambios.',
+		legal: 'Texto legal oficial', legalHint: 'Proporciona el texto aprobado de las tres secciones en ambos idiomas. No se incluyen cláusulas legales de ejemplo.',
+		legalLabel: '{section} — {language}', legalApproved: 'El texto legal en ambos idiomas fue revisado y aprobado',
+		approved: 'Texto legal aprobado', unapproved: 'Se requiere aprobación legal', saveEvent: 'Guardar evento',
+		open: 'Abrir inscripción', close: 'Cerrar inscripción', activationGuard: 'Para abrir se requieren pagos y respaldo de documentos configurados, y texto legal aprobado en ambos idiomas.',
+		linkTitle: 'Vincular cuenta estudiantil', linkHint: 'Vincula un estudiante del registro con su cuenta de acceso. El vínculo se guarda en el servidor.',
+		studentEmail: 'Correo del estudiante en el registro', accountEmail: 'Correo de la cuenta de acceso', link: 'Guardar vínculo estudiantil',
+		report: 'Informe de inscripción', selectEvent: 'Selecciona un evento para ver su informe', reportEmpty: 'No hay filas de estudiantes para este evento.',
+		csv: 'Descargar CSV', retryBackups: 'Reintentar respaldo de documentos', reconcile: 'Conciliar pagos',
+		name: 'Estudiante', email: 'Correo', eligibility: 'Elegibilidad', status: 'Estado de inscripción', paymentStatus: 'Estado del pago', paid: 'Pagado en la web', remaining: 'Pendiente en la web', documents: 'Documentos y estado del respaldo', noDocuments: 'Sin documentos guardados',
+		eligibilities: { eligible: 'Elegible', underage: 'Menor de edad', unknown: 'Sin verificar', inactive: 'Inactivo' },
+		statuses: { not_started: 'Sin comenzar', waiver: 'Paso del relevo', letter: 'Paso de carta patronal', payment: 'Paso de pago', confirmed: 'Confirmado' },
+		backup: 'Respaldo: {status}', backups: { pending: 'Pendiente', uploading: 'Subiendo', saved: 'Guardado', failed: 'Falló', unavailable: 'No disponible', unknown: 'Sin verificar' }
+	}
+};
+
 const english = {
+	bootcamp: englishBootcamp,
 	designPreview: englishDesignPreview,
 	admin: englishAdmin,
 	attendance: englishAttendance,
@@ -772,6 +979,7 @@ frequency: {
 export type Messages = typeof english;
 
 const spanish: Messages = {
+	bootcamp: spanishBootcamp,
 	designPreview: spanishDesignPreview,
 	admin: spanishAdmin,
 	attendance: spanishAttendance,

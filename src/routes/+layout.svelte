@@ -33,7 +33,7 @@
 			{@render children()}
 		</StudentShell>
 	</main>
-{:else if page.route.id === '/' || page.route.id === '/design-preview' || page.route.id === '/speed-math' || page.route.id === '/frequency'}
+{:else if page.route.id === '/' || page.route.id === '/design-preview' || page.route.id === '/speed-math' || page.route.id === '/frequency' || page.route.id === '/bootcamps'}
 	<main id="main-content" class="home-main" tabindex="-1">
 		{@render children()}
 	</main>

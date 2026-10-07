@@ -6,6 +6,7 @@ export default defineConfig({
 		'./src/lib/server/db/schema.ts',
 		'./src/lib/server/db/game-schema.ts',
 		'./src/lib/server/db/auth-schema.ts',
+		'./src/lib/server/db/bootcamp-schema.ts',
 		'./src/lib/server/db/views.ts'
 	],
 	out: './drizzle',

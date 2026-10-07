@@ -45,6 +45,26 @@ export const variables = defineEnvVars({
 		schema: (value: string | undefined) => value,
 		description: 'Private destination folder ID for every generated English and Spanish report.'
 	},
+	ATH_PUBLIC_TOKEN: {
+		public: false, static: false, schema: (value: string | undefined) => value,
+		description: 'ATH Business merchant public token; kept server-side for bootcamp REST checkout.'
+	},
+	ATH_PRIVATE_TOKEN: {
+		public: false, static: false, schema: (value: string | undefined) => value,
+		description: 'ATH Business private token for authoritative transaction verification.'
+	},
+	BOOTCAMP_PAYMENT_KEY: {
+		public: false, static: false, schema: (value: string | undefined) => value,
+		description: '64 hexadecimal characters: encryption key for saved ATH payment capabilities. Retain securely.'
+	},
+	BOOTCAMP_PAYMENTS_ENABLED: {
+		public: false, static: false, schema: (value: string | undefined) => value,
+		description: 'Set true only after merchant protocol verification and approved live checkout validation.'
+	},
+	BOOTCAMP_WORKER_SECRET: {
+		public: false, static: false, schema: (value: string | undefined) => value,
+		description: 'At least 32 characters for the private bootcamp queue-drain endpoint.'
+	},
 	BETTER_AUTH_TRUSTED_ORIGINS: {
 		public: false,
 		static: false,

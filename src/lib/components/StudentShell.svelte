@@ -14,7 +14,7 @@
 		preview = false
 	}: {
 		children: Snippet;
-		activePage?: 'home' | 'speed-math' | 'frequency' | 'ist' | 'attendance';
+		activePage?: 'home' | 'speed-math' | 'frequency' | 'ist' | 'attendance' | 'bootcamps';
 		preview?: boolean;
 	} = $props();
 	const language = useLanguage();
@@ -28,7 +28,7 @@
 		{ key: 'ist', page: 'ist', href: resolve('/ist'), icon: Dumbbell, ...messages.tools.ist },
 		{ key: 'attendance', page: 'attendance', href: resolve('/attendance'), icon: FileText, ...messages.tools.attendance }
 	]);
-	const pageTitle = $derived(tools.find((tool) => tool.page === activePage)?.title ?? messages.home);
+	const pageTitle = $derived(activePage === 'bootcamps' ? language.messages.bootcamp.title : tools.find((tool) => tool.page === activePage)?.title ?? messages.home);
 </script>
 
 <div class="student-shell" data-preview={preview ? '' : undefined}>
@@ -52,6 +52,11 @@
 					<tool.icon aria-hidden="true" />{tool.title}
 				</Button>
 			{/each}
+			{#if viewer?.role === 'student'}
+				<Button href={resolve('/bootcamps')} variant="ghost" aria-current={activePage === 'bootcamps' ? 'page' : undefined} class="justify-start gap-3 px-3 text-left">
+					<FileText aria-hidden="true" />{language.messages.bootcamp.title}
+				</Button>
+			{/if}
 		</nav>
 		<div class="sidebar-footer">
 			<span class="brand-mark" aria-hidden="true">M<span> / </span>M</span>

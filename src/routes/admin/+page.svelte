@@ -76,6 +76,7 @@
 					{:else}<span class="nav-index mono" aria-hidden="true">{String(index).padStart(2, '0')}</span>{/if}
 				</Button>
 			{/each}
+			<Button variant="ghost" class="nav-control" href={resolve('/admin/bootcamps')}><AdminIcon name="events" size={18} /><span>{language.messages.bootcamp.title}</span></Button>
 		</nav>
 		<div class="rail-bottom">
 			<Card.Root class="connection-panel mb-4 gap-0 rounded p-4 px-[0.7rem]">

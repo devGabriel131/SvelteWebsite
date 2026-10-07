@@ -1,0 +1,457 @@
+import { describe, expect, test } from 'bun:test';
+import { sectionKeys, type LegalText } from '../src/lib/bootcamp/types';
+import { BootcampError, employerFields, eventFields, field, id, languageField, readForm, revisionField } from '../src/lib/server/bootcamp/validation';
+import { webhookBody, webhookHints } from '../src/lib/server/bootcamp/webhook';
+
+const attemptId = 'a13e4517-2bc9-4abc-8def-0123456789ab';
+const reference = 'b24f5628-3cda-4bcd-9efa-123456789abc';
+const languages = ['en', 'es'] as const;
+const dateKeys = ['startsAt', 'endsAt', 'arrivalAt', 'registrationClosesAt'] as const;
+const legal: LegalText = {
+	en: {
+		agreement: 'APPROVED AGREEMENT  §1: Preserve  these exact words.\nSecond paragraph: café — “approved”.',
+		liability: 'APPROVED LIABILITY: Do not alter punctuation; exceptions (a), (b).',
+		media: 'APPROVED MEDIA: Photos and video.\n\nSeparate paragraph.'
+	},
+	es: {
+		agreement: 'ACUERDO APROBADO  §1: Conservar  estas palabras exactas.\nSegundo párrafo: café — “aprobado”.',
+		liability: 'RELEVO APROBADO: No alterar la puntuación; excepciones (a), (b).',
+		media: 'IMAGEN APROBADA: Fotografías y vídeo.\n\nPárrafo separado.'
+	}
+};
+
+function form(values: Record<string, string | Blob> = {}): FormData {
+	const result = new FormData();
+	for (const [key, value] of Object.entries(values)) result.set(key, value);
+	return result;
+}
+function eventForm(overrides: Record<string, string | Blob> = {}): FormData {
+	const result = form({
+		title: 'Bootcamp de preparación', venue: 'San Juan, Puerto Rico',
+		startsAt: '2026-10-10T08:00', endsAt: '2026-10-10T16:00',
+		arrivalAt: '2026-10-10T07:30', registrationClosesAt: '2026-10-09T23:59:59',
+		legalApproved: 'true'
+	});
+	for (const language of languages) for (const section of sectionKeys) result.set(`legal_${language}_${section}`, legal[language][section]);
+	for (const [key, value] of Object.entries(overrides)) result.set(key, value);
+	return result;
+}
+function expectInvalid(run: () => unknown) {
+	let caught: unknown;
+	try { run(); } catch (error) { caught = error; }
+	expect(caught).toBeInstanceOf(BootcampError);
+	expect(caught).toMatchObject({ name: 'BootcampError', code: 'invalid', message: 'invalid' });
+}
+function request(body: BodyInit | null, contentType: string | null, contentLength?: string): Request {
+	const headers = new Headers();
+	if (contentType !== null) headers.set('content-type', contentType);
+	if (contentLength !== undefined) headers.set('content-length', contentLength);
+	return new Request('https://example.test/bootcamps', { method: 'POST', headers, body });
+}
+function streamed(chunks: Uint8Array[], contentType: string, contentLength?: string) {
+	let index = 0;
+	let cancelled = false;
+	const body = new ReadableStream<Uint8Array>({
+		pull(controller) {
+			if (index === chunks.length) controller.close();
+			else controller.enqueue(chunks[index++]);
+		},
+		cancel() { cancelled = true; }
+	}, { highWaterMark: 0 });
+	return { request: request(body, contentType, contentLength), body, cancelled: () => cancelled, reads: () => index };
+}
+
+test('event publication rejects PDF-unsupported title, venue, and approved legal characters', () => {
+	for (const key of ['title', 'venue', ...languages.flatMap((language) => sectionKeys.map((section) => `legal_${language}_${section}`))]) {
+		for (const value of ['Non\u2011breaking hyphen', 'Internal\ttab', 'Unsupported 🖊']) {
+			expect(() => eventFields(eventForm({ [key]: value }))).toThrow(BootcampError);
+			try { eventFields(eventForm({ [key]: value })); } catch (error) { expect(error).toMatchObject({ code: 'unsupportedText' }); }
+		}
+	}
+});
+
+const invalidUuidValues: unknown[] = [
+	undefined, null, false, 123, {}, [], [attemptId], new String(attemptId),
+	'', 'not-a-uuid', '00000000-0000-0000-0000-000000000000',
+	'a13e4517-2bc9-0abc-8def-0123456789ab', 'a13e4517-2bc9-9abc-8def-0123456789ab',
+	'a13e4517-2bc9-4abc-7def-0123456789ab', 'a13e4517-2bc9-4abc-cdef-0123456789ab',
+	'a13e4517-2bc9-4abc-8def-0123456789ag', attemptId.replaceAll('-', ''),
+	`{${attemptId}}`, `urn:uuid:${attemptId}`, ` ${attemptId}`, `${attemptId} `,
+	`${attemptId}\n`, `${attemptId}\r`, `${attemptId}\r\n`, `${attemptId}\u2028`, `${attemptId}\u2029`
+];
+
+describe('bootcamp scalar and employer fields', () => {
+	test('accepts UUID versions 1–8 and RFC variants without rewriting case', () => {
+		for (const version of '12345678') for (const variant of '89ab') {
+			const value = `a13e4517-2bc9-${version}abc-${variant}def-0123456789ab`;
+			expect(id(value)).toBe(value);
+			expect(id(value.toUpperCase())).toBe(value.toUpperCase());
+		}
+	});
+
+	test.each(invalidUuidValues.map((value) => [value]))('rejects a non-UUID identifier %j', (value) => {
+		expectInvalid(() => id(value));
+	});
+
+	test('trims and NFC-normalizes text without changing case, internal spaces, punctuation, or paragraphs', () => {
+		const raw = ' \tMari\u0301a  Mun\u0303oz — “Sí”.\n\nSecond\tparagraph.\r\nFinal. \n';
+		const values = form({ name: raw });
+		const canonical = 'María  Muñoz — “Sí”.\n\nSecond\tparagraph.\r\nFinal.';
+		expect(field(values, 'name')).toBe(canonical);
+		expect(field(form({ name: canonical }), 'name')).toBe(canonical);
+		expect(values.get('name')).toBe(raw);
+	});
+
+	test('rejects absent, blank, File, and forbidden control-character text values', () => {
+		expectInvalid(() => field(form(), 'name'));
+		for (const value of ['', ' \t\r\n\u00a0', new File(['María'], 'María.txt')]) {
+			expectInvalid(() => field(form({ name: value }), 'name'));
+		}
+		for (const code of [...Array.from({ length: 32 }, (_, index) => index).filter((code) => ![9, 10, 13].includes(code)), 127]) {
+			for (const value of [`${String.fromCharCode(code)}María`, `Ma${String.fromCharCode(code)}ría`, `María${String.fromCharCode(code)}`]) {
+				expectInvalid(() => field(form({ name: value }), 'name'));
+			}
+		}
+	});
+
+	test('enforces default and explicit text bounds before trimming or normalization, without truncation', () => {
+		expect(field(form({ name: 'x'.repeat(200) }), 'name')).toBe('x'.repeat(200));
+		expectInvalid(() => field(form({ name: 'x'.repeat(201) }), 'name'));
+		expect(field(form({ name: 'café' }), 'name', 4)).toBe('café');
+		for (const value of [' café', 'cafe\u0301', 'cafés']) expectInvalid(() => field(form({ name: value }), 'name', 4));
+	});
+
+	test('requires exact en/es language choices, including when given uploaded files', () => {
+		for (const value of languages) expect(languageField(form({ language: value }))).toBe(value);
+		expectInvalid(() => languageField(form()));
+		for (const value of ['', 'EN', 'ES', 'es-PR', 'en-US', ' en', 'es\n', 'fr', new File(['en'], 'en')]) {
+			expectInvalid(() => languageField(form({ language: value })));
+		}
+	});
+
+	test('accepts positive safe integer revisions and rejects missing, fractional, unsafe, or File revisions', () => {
+		for (const value of [1, 2, 42, Number.MAX_SAFE_INTEGER]) expect(revisionField(form({ revision: String(value) }))).toBe(value);
+		expectInvalid(() => revisionField(form()));
+		for (const value of ['', ' ', '0', '-1', '1.5', 'NaN', 'Infinity', '-Infinity', '9007199254740992', '1e100', '1abc', new File(['1'], '1')]) {
+			expectInvalid(() => revisionField(form({ revision: value })));
+		}
+	});
+
+	test('returns only the four canonical employer fields', () => {
+		expect(employerFields(form({
+			employer: '  Compan\u0303i\u0301a del Caribe ', contact: ' Mari\u0301a Rivera ',
+			position: '  Supervisora  de personal ', workplace: '  Oficina de San Juan ',
+			status: 'confirmed', studentId: attemptId
+		}))).toEqual({ employer: 'Compañía del Caribe', contact: 'María Rivera', position: 'Supervisora  de personal', workplace: 'Oficina de San Juan' });
+	});
+
+	for (const key of ['employer', 'contact', 'position', 'workplace']) {
+		test(`employer ${key} is required, bounded, and cannot be supplied as a File`, () => {
+			const values = form({ employer: 'Company', contact: 'María', position: 'Supervisor', workplace: 'San Juan' });
+			values.delete(key);
+			expectInvalid(() => employerFields(values));
+			values.set(key, 'x'.repeat(200));
+			expect(employerFields(values)).toHaveProperty(key, 'x'.repeat(200));
+			for (const value of ['', ' ', 'x'.repeat(201), new File(['valid'], 'valid.txt')]) {
+				values.set(key, value);
+				expectInvalid(() => employerFields(values));
+			}
+		});
+	}
+});
+
+describe('event timestamps, legal text, and approval', () => {
+	test('interprets minute/second local inputs in Puerto Rico and returns canonical UTC dates', () => {
+		expect(eventFields(eventForm())).toEqual({
+			title: 'Bootcamp de preparación', venue: 'San Juan, Puerto Rico',
+			startsAt: new Date('2026-10-10T12:00:00.000Z'), endsAt: new Date('2026-10-10T20:00:00.000Z'),
+			arrivalAt: new Date('2026-10-10T11:30:00.000Z'), registrationClosesAt: new Date('2026-10-10T03:59:59.000Z'),
+			legal, legalApproved: true
+		});
+	});
+
+	for (const day of ['2000-02-29', '2024-02-29', '2026-01-10', '2026-07-10']) {
+		test(`accepts real date ${day} without applying mainland daylight saving rules`, () => {
+			const result = eventFields(eventForm({
+				startsAt: `${day}T08:00:01`, endsAt: `${day}T16:00:02`,
+				arrivalAt: `${day}T07:30:03`, registrationClosesAt: `${day}T06:00:04`
+			}));
+			expect(result.startsAt.toISOString()).toBe(`${day}T12:00:01.000Z`);
+			expect(result.endsAt.toISOString()).toBe(`${day}T20:00:02.000Z`);
+			expect(result.arrivalAt.toISOString()).toBe(`${day}T11:30:03.000Z`);
+			expect(result.registrationClosesAt.toISOString()).toBe(`${day}T10:00:04.000Z`);
+		});
+	}
+
+	for (const key of dateKeys) {
+		test(`${key} rejects missing, File, noncanonical, and impossible calendar/time values`, () => {
+			const missing = eventForm();
+			missing.delete(key);
+			expectInvalid(() => eventFields(missing));
+			// Keep chronology valid even if a broken parser silently rolls an impossible date forward.
+			const bounds = {
+				startsAt: key === 'arrivalAt' || key === 'registrationClosesAt' ? '2100-01-01T00:00' : '1899-01-01T00:00',
+				endsAt: '2101-01-01T00:00', arrivalAt: '1898-01-01T00:00', registrationClosesAt: '1898-01-01T00:00'
+			};
+			for (const value of [
+				'', '2026-10-10', '2026-1-10T08:00', '2026-10-1T08:00', '2026-10-10T8:00', '2026-10-10T08:0',
+				'2026-10-10 08:00', '2026-10-10t08:00', '2026/10/10T08:00', '10/10/2026 08:00',
+				'2026-10-10T08:00Z', '2026-10-10T08:00-04:00', '2026-10-10T08:00:00.001',
+				'1900-02-29T08:00', '2026-02-29T08:00', '2024-02-30T08:00', '2026-04-31T08:00',
+				'2026-00-10T08:00', '2026-13-10T08:00', '2026-10-00T08:00', '2026-10-32T08:00',
+				'2026-10-10T24:00', '2026-10-10T23:60', '2026-10-10T23:59:60', new File(['2026-10-10T08:00'], 'date.txt')
+			]) expectInvalid(() => eventFields(eventForm({ ...bounds, [key]: value })));
+		});
+	}
+
+	test('permits arrival and registration closure at the start, but requires the end strictly later', () => {
+		const equal = eventFields(eventForm({ arrivalAt: '2026-10-10T08:00', registrationClosesAt: '2026-10-10T08:00' }));
+		expect(equal.arrivalAt).toEqual(equal.startsAt);
+		expect(equal.registrationClosesAt).toEqual(equal.startsAt);
+		expect(eventFields(eventForm({ endsAt: '2026-10-10T08:00:01' })).endsAt.toISOString()).toBe('2026-10-10T12:00:01.000Z');
+		for (const [key, value] of [
+			['endsAt', '2026-10-10T08:00'], ['endsAt', '2026-10-10T07:59:59'],
+			['arrivalAt', '2026-10-10T08:00:01'], ['registrationClosesAt', '2026-10-10T08:00:01']
+		]) expectInvalid(() => eventFields(eventForm({ [key]: value })));
+	});
+
+	test('preserves all six canonical legal texts exactly and never conflates translations or sections', () => {
+		expect(sectionKeys).toEqual(['agreement', 'liability', 'media']);
+		const input = eventForm({ title: '  Preparacio\u0301n ', venue: '  An\u0303asco ' });
+		const rawValues = [...input.entries()];
+		const saved = eventFields(input);
+		expect(saved.title).toBe('Preparación');
+		expect(saved.venue).toBe('Añasco');
+		expect(saved.legal).toEqual(legal);
+		expect(saved.legal).not.toBe(legal);
+		expect([...input.entries()]).toEqual(rawValues);
+		input.set('legal_en_agreement', 'Changed later');
+		expect(saved.legal.en.agreement).toBe(legal.en.agreement);
+	});
+
+	test('trims/NFC-normalizes legal input once; resaving canonical displayed/PDF text is lossless', () => {
+		const input = eventForm();
+		for (const language of languages) for (const section of sectionKeys) {
+			input.set(`legal_${language}_${section}`, ` \n${legal[language][section].normalize('NFD')}\n\t `);
+		}
+		const saved = eventFields(input);
+		expect(saved.legal).toEqual(legal);
+		const resubmitted = eventForm();
+		for (const language of languages) for (const section of sectionKeys) {
+			resubmitted.set(`legal_${language}_${section}`, saved.legal[language][section]);
+		}
+		expect(eventFields(resubmitted).legal).toEqual(saved.legal);
+	});
+
+	for (const language of languages) for (const section of sectionKeys) {
+		const key = `legal_${language}_${section}`;
+		test(`${key} is mandatory text with an inclusive 30,000-character bound`, () => {
+			const missing = eventForm();
+			missing.delete(key);
+			expectInvalid(() => eventFields(missing));
+			expect(eventFields(eventForm({ [key]: 'x'.repeat(30000) })).legal[language][section]).toBe('x'.repeat(30000));
+			for (const value of ['', ' \r\n\t', 'x'.repeat(30001), 'Invalid\0legal', new File(['Approved'], 'legal.txt')]) {
+				expectInvalid(() => eventFields(eventForm({ [key]: value })));
+			}
+		});
+	}
+
+	for (const [key, limit] of [['title', 200], ['venue', 300]] as const) {
+		test(`${key} is required and bounded, and rejects uploaded files`, () => {
+			const missing = eventForm();
+			missing.delete(key);
+			expectInvalid(() => eventFields(missing));
+			expect(eventFields(eventForm({ [key]: 'x'.repeat(limit) }))[key]).toBe('x'.repeat(limit));
+			for (const value of ['', ' ', 'x'.repeat(limit + 1), new File(['valid'], 'valid.txt')]) {
+				expectInvalid(() => eventFields(eventForm({ [key]: value })));
+			}
+		});
+	}
+
+	test('only the literal true checkbox approves legal text, never truthy strings or files', () => {
+		const missing = eventForm();
+		missing.delete('legalApproved');
+		expect(eventFields(missing).legalApproved).toBe(false);
+		expect(eventFields(eventForm({ legalApproved: 'true' })).legalApproved).toBe(true);
+		for (const value of ['', 'false', 'on', '1', 'TRUE', ' true ', new File(['true'], 'true')]) {
+			expect(eventFields(eventForm({ legalApproved: value })).legalApproved).toBe(false);
+		}
+	});
+});
+
+describe('bounded form request parsing', () => {
+	const contentType = 'application/x-www-form-urlencoded';
+
+	test('accepts exact actual-byte limits regardless of absent or dishonest Content-Length', async () => {
+		const bytes = Buffer.from('name=María&revision=2');
+		for (const length of [undefined, '0', '1', String(bytes.length), '999999999']) {
+			const input = streamed([bytes.subarray(0, 8), bytes.subarray(8)], contentType, length);
+			const parsed = await readForm(input.request, bytes.length);
+			expect(parsed.get('name')).toBe('María');
+			expect(revisionField(parsed)).toBe(2);
+			expect(input.body.locked).toBe(false);
+			expect(input.cancelled()).toBe(false);
+		}
+	});
+
+	test('counts accumulated UTF-8 bytes, cancels overflow, and never reads the remaining body', async () => {
+		const bytes = Buffer.from('name=éééé');
+		expect(bytes.length).toBeGreaterThan('name=éééé'.length);
+		for (const length of [undefined, '0', '1', String(bytes.length - 1)]) {
+			const input = streamed([bytes.subarray(0, 5), bytes.subarray(5), Buffer.from('&unread=true')], contentType, length);
+			await expect(readForm(input.request, bytes.length - 1)).rejects.toMatchObject({ name: 'BootcampError', code: 'invalid' });
+			expect(input.cancelled()).toBe(true);
+			expect(input.reads()).toBe(2);
+			expect(input.body.locked).toBe(false);
+		}
+	});
+
+	test('enforces the default 2,300,000-byte bound rather than trusting a small header', async () => {
+		const exact = Buffer.from(`name=${'x'.repeat(2_300_000 - 5)}`);
+		expect((await readForm(request(exact, contentType, '1'))).get('name')).toBe('x'.repeat(2_300_000 - 5));
+		await expect(readForm(request(Buffer.concat([exact, Buffer.from('x')]), contentType, '1'))).rejects.toMatchObject({ code: 'invalid' });
+	});
+
+	test('parses real multipart forms, preserves File values, and rejects them in scalar validation', async () => {
+		const input = form({ name: 'Mari\u0301a', revision: new File(['1'], '1'), language: new File(['en'], 'en'), eventId: new File([attemptId], 'event.txt') });
+		const original = new Request('https://example.test/bootcamps', { method: 'POST', body: input });
+		const type = original.headers.get('content-type')!;
+		const bytes = new Uint8Array(await original.arrayBuffer());
+		const parsed = await readForm(request(bytes, type, '1'), bytes.length);
+		expect(field(parsed, 'name')).toBe('María');
+		for (const key of ['revision', 'language', 'eventId']) expect(parsed.get(key)).toBeInstanceOf(File);
+		expectInvalid(() => field(parsed, 'revision'));
+		expectInvalid(() => revisionField(parsed));
+		expectInvalid(() => languageField(parsed));
+		expectInvalid(() => id(parsed.get('eventId')));
+		await expect(readForm(request(bytes, type, '1'), bytes.length - 1)).rejects.toMatchObject({ code: 'invalid' });
+	});
+
+	test('accepts supported content types with charset parameters and preserves repeated fields', async () => {
+		const parsed = await readForm(request('name=Ana&name=Mar%C3%ADa', `${contentType}; charset=UTF-8`));
+		expect(parsed.getAll('name')).toEqual(['Ana', 'María']);
+	});
+
+	test('rejects unsupported/missing types, absent bodies, and malformed multipart data with safe errors', async () => {
+		for (const type of [null, 'text/plain', 'application/json', 'application/x-www-form-urlencoded-extra']) {
+			await expect(readForm(request(Buffer.from('name=Ana'), type))).rejects.toMatchObject({ name: 'BootcampError', code: 'invalid', message: 'invalid' });
+		}
+		await expect(readForm(request(null, contentType))).rejects.toMatchObject({ code: 'invalid' });
+		for (const type of ['multipart/form-data', 'multipart/form-data; boundary=missing']) {
+			await expect(readForm(request('not a multipart body', type))).rejects.toMatchObject({ name: 'BootcampError', code: 'invalid', message: 'invalid' });
+		}
+	});
+
+	test('sanitizes stream failures and releases the reader lock', async () => {
+		const body = new ReadableStream<Uint8Array>({ pull(controller) { controller.error(new Error('private transport detail')); } });
+		await expect(readForm(request(body, contentType))).rejects.toMatchObject({ name: 'BootcampError', code: 'invalid', message: 'invalid' });
+		expect(body.locked).toBe(false);
+	});
+});
+
+describe('untrusted webhook lookup hints', () => {
+	test('returns only valid attempt/reference UUIDs, independently and together', () => {
+		expect(webhookHints({ transactionType: 'ECOMMERCE', metadata1: attemptId })).toEqual({ attemptId, reference: undefined });
+		expect(webhookHints({ transactionType: 'ECOMMERCE', ecommerceId: reference })).toEqual({ attemptId: undefined, reference });
+		expect(webhookHints({ transactionType: 'ecommerce', metadata1: attemptId, ecommerceId: reference })).toEqual({ attemptId, reference });
+		expect(webhookHints({ transactionType: 'Ecommerce', metadata1: attemptId.toUpperCase() })).toEqual({ attemptId: attemptId.toUpperCase(), reference: undefined });
+	});
+
+	test('ignores simulated, refund, and other transaction types even with completed status and valid IDs', () => {
+		for (const transactionType of [undefined, null, true, 1, {}, [], '', 'SIMULATED', 'ECOMMERCE_SIMULATED', 'REFUND', 'ECOMMERCE_REFUND', 'PAYMENT', ' ECOMMERCE', 'ECOMMERCE\n']) {
+			expect(webhookHints({ transactionType, metadata1: attemptId, ecommerceId: reference, status: 'COMPLETED', total: 30 })).toBeNull();
+		}
+	});
+
+	test.each(invalidUuidValues.map((value) => [value]))('never returns a malformed UUID hint %j', (value) => {
+		expect(webhookHints({ transactionType: 'ECOMMERCE', metadata1: value, ecommerceId: value })).toBeNull();
+		expect(webhookHints({ transactionType: 'ECOMMERCE', metadata1: value, ecommerceId: reference })).toEqual({ attemptId: undefined, reference });
+		expect(webhookHints({ transactionType: 'ECOMMERCE', metadata1: attemptId, ecommerceId: value })).toEqual({ attemptId, reference: undefined });
+	});
+
+	test('does not trust, return, or mutate claimed status, amounts, payer identity, or other metadata', () => {
+		for (const status of [undefined, 'COMPLETED', 'CONFIRM', 'CANCEL', 'REFUNDED', true, { completed: true }]) {
+			const input = Object.freeze({
+				transactionType: 'ECOMMERCE', metadata1: attemptId, ecommerceId: reference,
+				status, ecommerceStatus: status, paid: true, total: 30, totalRefundedAmount: 30,
+				metadata2: 'untrusted-registration', referenceNumber: 'untrusted-receipt',
+				name: 'Untrusted payer', phoneNumber: '7875550100', auth_token: 'untrusted-token'
+			});
+			expect(webhookHints(input)).toEqual({ attemptId, reference });
+			expect(input.status).toEqual(status);
+		}
+	});
+
+	test('rejects nonobjects, nested wrappers, and alternate IDs rather than treating them as receipts', () => {
+		for (const value of [null, undefined, false, 30, 'COMPLETED', [], [{ transactionType: 'ECOMMERCE', metadata1: attemptId }],
+			{ data: { transactionType: 'ECOMMERCE', metadata1: attemptId } },
+			{ transactionType: 'ECOMMERCE', attemptId, reference, metadata2: attemptId, referenceNumber: reference, status: 'COMPLETED' }]) {
+			expect(webhookHints(value)).toBeNull();
+		}
+	});
+});
+
+describe('bounded webhook JSON parsing', () => {
+	const contentType = 'application/json';
+
+	test('parses streamed JSON including split UTF-8 characters; the result still yields only lookup hints', async () => {
+		const value = { transactionType: 'ECOMMERCE', metadata1: attemptId, ecommerceId: reference, status: 'COMPLETED', name: 'María' };
+		const bytes = Buffer.from(JSON.stringify(value));
+		const split = bytes.indexOf(Buffer.from('í')) + 1;
+		const input = streamed([bytes.subarray(0, split), bytes.subarray(split)], 'Application/JSON; charset=utf-8', '1');
+		const parsed = await webhookBody(input.request);
+		expect(parsed).toEqual(value);
+		expect(webhookHints(parsed)).toEqual({ attemptId, reference });
+		expect(input.body.locked).toBe(false);
+	});
+
+	test('accepts exactly 32,768 actual bytes regardless of the declared length', async () => {
+		const json = JSON.stringify({ padding: 'x'.repeat(32_768 - Buffer.byteLength(JSON.stringify({ padding: '' }))) });
+		expect(Buffer.byteLength(json)).toBe(32_768);
+		for (const length of [undefined, '0', '1', '32768', '999999999']) {
+			expect(await webhookBody(request(json, contentType, length))).toEqual(JSON.parse(json));
+		}
+	});
+
+	test('rejects 32,769 actual bytes despite short or missing Content-Length, cancelling unread chunks', async () => {
+		const bytes = Buffer.from(JSON.stringify({ padding: 'x'.repeat(32_769 - Buffer.byteLength(JSON.stringify({ padding: '' }))) }));
+		for (const length of [undefined, '0', '1', '32768']) {
+			const input = streamed([bytes.subarray(0, 16_384), bytes.subarray(16_384), Buffer.from('unread')], contentType, length);
+			expect(await webhookBody(input.request)).toBeNull();
+			expect(input.cancelled()).toBe(true);
+			expect(input.reads()).toBe(2);
+			expect(input.body.locked).toBe(false);
+		}
+	});
+
+	test('counts UTF-8 bytes, not JavaScript character count', async () => {
+		const json = JSON.stringify({ padding: 'é'.repeat(16_384) });
+		expect(json.length).toBeLessThan(32_768);
+		expect(Buffer.byteLength(json)).toBeGreaterThan(32_768);
+		expect(await webhookBody(request(json, contentType, String(json.length)))).toBeNull();
+	});
+
+	test('ignores missing/wrong content types, missing bodies, and malformed JSON', async () => {
+		for (const type of [null, 'text/plain', 'application/x-www-form-urlencoded', 'application/jsonp', 'application/json-extra']) {
+			expect(await webhookBody(request(Buffer.from('{"transactionType":"ECOMMERCE"}'), type))).toBeNull();
+		}
+		expect(await webhookBody(request(null, contentType))).toBeNull();
+		for (const json of ['', ' ', '{', '{"status":"COMPLETED",}', '{"metadata1":', 'undefined', '{"a":1}{"b":2}', '{"a":NaN}']) {
+			expect(await webhookBody(request(json, contentType))).toBeNull();
+		}
+	});
+
+	test('valid JSON primitives/arrays are parsed but cannot turn into actionable hints', async () => {
+		for (const value of [null, true, 123, 'COMPLETED', [], [{ transactionType: 'ECOMMERCE', metadata1: attemptId }]]) {
+			const parsed = await webhookBody(request(JSON.stringify(value), contentType));
+			expect(parsed).toEqual(value);
+			expect(webhookHints(parsed)).toBeNull();
+		}
+	});
+
+	test('ignores stream errors and releases the reader without exposing transport details', async () => {
+		const body = new ReadableStream<Uint8Array>({ pull(controller) { controller.error(new Error('private transport detail')); } });
+		expect(await webhookBody(request(body, contentType))).toBeNull();
+		expect(body.locked).toBe(false);
+	});
+});

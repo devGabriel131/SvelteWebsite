@@ -3,9 +3,10 @@ import postgres from 'postgres';
 import * as studentSchema from './schema';
 import * as gameSchema from './game-schema';
 import * as authSchema from './auth-schema';
+import * as bootcampSchema from './bootcamp-schema';
 import * as views from './views';
 
-const schema = { ...studentSchema, ...gameSchema, ...authSchema, ...views };
+const schema = { ...studentSchema, ...gameSchema, ...authSchema, ...bootcampSchema, ...views };
 
 export function requireDatabaseUrl(value: string | undefined): string {
 	if (!value?.trim()) throw new Error('Set the server-only DATABASE_URL before using the database.');

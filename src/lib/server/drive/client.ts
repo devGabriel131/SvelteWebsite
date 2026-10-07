@@ -19,6 +19,20 @@ export type DriveUpload = {
 	filename: string;
 	mimeType?: string;
 	parentFolderId: string;
+	/** An ID from generateFileId(), persisted by the caller before sending the upload. */
+	id?: string;
+	appProperties?: Record<string, string>;
+};
+
+export type DriveFile = {
+	id: string;
+	name: string;
+	mimeType: string;
+	parents: string[];
+	appProperties: Record<string, string>;
+	trashed: boolean;
+	size?: string;
+	sha256Checksum?: string;
 };
 
 export type DriveFolder = {
@@ -34,7 +48,12 @@ export type DriveClientOptions = {
 export type DriveClient = {
 	upload(file: DriveUpload, signal?: AbortSignal): Promise<string>;
 	createFolder(folder: DriveFolder, signal?: AbortSignal): Promise<string>;
+	// Optional so existing upload-only adapters remain compatible.
+	generateFileId?(signal?: AbortSignal): Promise<string>;
+	getFile?(id: string, signal?: AbortSignal): Promise<DriveFile>;
 };
+
+export type DriveClientWithFileIds = DriveClient & Required<Pick<DriveClient, 'generateFileId' | 'getFile'>>;
 
 type AccessToken = { value: string; expiresAt: number };
 type TokenRefresh = {
@@ -46,6 +65,8 @@ type TokenRefresh = {
 const tokenUrl = 'https://oauth2.googleapis.com/token';
 const uploadUrl = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id&supportsAllDrives=true';
 const filesUrl = 'https://www.googleapis.com/drive/v3/files?fields=id&supportsAllDrives=true';
+const generateIdsUrl = 'https://www.googleapis.com/drive/v3/files/generateIds?count=1&space=drive&type=files&fields=ids';
+const fileFields = 'id,name,mimeType,parents,appProperties,trashed,size,sha256Checksum';
 const defaultTimeoutMs = 30_000;
 const tokenExpiryBufferMs = 60_000;
 
@@ -55,6 +76,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isNonblank(value: unknown): value is string {
 	return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isFileId(value: unknown): value is string {
+	return typeof value === 'string' && /^[A-Za-z0-9_-]+$/.test(value);
+}
+
+function isProperties(value: unknown): value is Record<string, string> {
+	return isRecord(value) && Object.entries(value).every(([key, item]) => isNonblank(key) && typeof item === 'string');
 }
 
 function cancelled(): DriveError {
@@ -88,7 +117,7 @@ function responseError(status: number, oauthError?: unknown): DriveError {
 	return new DriveError(kind, 'Google Drive request was rejected.', status);
 }
 
-export function createDriveClient(config: DriveConfig, options: DriveClientOptions = {}): DriveClient {
+export function createDriveClient(config: DriveConfig, options: DriveClientOptions = {}): DriveClientWithFileIds {
 	if (![config.clientId, config.clientSecret, config.refreshToken, config.reportsFolderId].every(isNonblank)) {
 		throw new DriveError('configuration', 'Drive client configuration requires nonblank credentials and reportsFolderId.');
 	}
@@ -210,6 +239,20 @@ export function createDriveClient(config: DriveConfig, options: DriveClientOptio
 		}
 	}
 
+	async function get(url: string, signal?: AbortSignal) {
+		const token = await accessToken(signal);
+		try {
+			return await requestJson(url, {
+				method: 'GET', headers: { Authorization: `Bearer ${token}` }, cache: 'no-store'
+			}, signal);
+		} catch (error) {
+			if (error instanceof DriveError && error.kind === 'auth' && cachedToken?.value === token) {
+				cachedToken = undefined;
+			}
+			throw error;
+		}
+	}
+
 	async function create(url: string, contentType: string, body: BodyInit, signal?: AbortSignal): Promise<string> {
 		const token = await accessToken(signal);
 		try {
@@ -232,6 +275,32 @@ export function createDriveClient(config: DriveConfig, options: DriveClientOptio
 	}
 
 	return {
+		async generateFileId(signal) {
+			const { data, status } = await get(generateIdsUrl, signal);
+			if (!isRecord(data) || !Array.isArray(data.ids) || data.ids.length !== 1 || !isFileId(data.ids[0])) {
+				throw new DriveError('upstream', 'Google Drive returned invalid generated IDs.', status);
+			}
+			return data.ids[0];
+		},
+		async getFile(id, signal) {
+			if (!isFileId(id)) throw new DriveError('bad_input', 'Drive file ID is invalid.');
+			const { data, status } = await get(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?fields=${fileFields}&supportsAllDrives=true`, signal);
+			if (!isRecord(data) || data.id !== id || typeof data.name !== 'string' || !isNonblank(data.mimeType) ||
+				typeof data.trashed !== 'boolean' ||
+				(data.parents !== undefined && (!Array.isArray(data.parents) || !data.parents.every(isNonblank))) ||
+				(data.appProperties !== undefined && !isProperties(data.appProperties)) ||
+				(data.size !== undefined && (typeof data.size !== 'string' || !/^\d+$/.test(data.size))) ||
+				(data.sha256Checksum !== undefined && (typeof data.sha256Checksum !== 'string' || !/^[a-f\d]{64}$/i.test(data.sha256Checksum)))) {
+				throw new DriveError('upstream', 'Google Drive returned invalid file metadata.', status);
+			}
+			return {
+				id, name: data.name, mimeType: data.mimeType, trashed: data.trashed,
+				parents: (data.parents ?? []) as string[],
+				appProperties: (data.appProperties ?? {}) as Record<string, string>,
+				...(data.size === undefined ? {} : { size: data.size as string }),
+				...(data.sha256Checksum === undefined ? {} : { sha256Checksum: data.sha256Checksum as string })
+			};
+		},
 		async upload(file, signal) {
 			if (!isNonblank(file.filename) || !isNonblank(file.parentFolderId)) {
 				throw new DriveError('bad_input', 'Drive filename and parentFolderId must not be blank.');
@@ -243,18 +312,32 @@ export function createDriveClient(config: DriveConfig, options: DriveClientOptio
 			if (!isNonblank(mimeType) || /[^\x20-\x7e]/.test(mimeType)) {
 				throw new DriveError('bad_input', 'Drive mimeType must be nonblank and contain only printable ASCII.');
 			}
+			if (file.id !== undefined && !isFileId(file.id)) {
+				throw new DriveError('bad_input', 'Drive reserved file ID is invalid.');
+			}
+			if (file.appProperties !== undefined && !isProperties(file.appProperties)) {
+				throw new DriveError('bad_input', 'Drive appProperties must contain string values and nonblank keys.');
+			}
 			if (signal?.aborted) throw cancelled();
 
 			const boundary = `drive_${globalThis.crypto.randomUUID()}`;
 			const encoder = new TextEncoder();
-			const metadata = { name: file.filename, mimeType, parents: [file.parentFolderId] };
+			const metadata = {
+				name: file.filename, mimeType, parents: [file.parentFolderId],
+				...(file.id === undefined ? {} : { id: file.id }),
+				...(file.appProperties === undefined ? {} : { appProperties: file.appProperties })
+			};
 			const prefix = encoder.encode(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: ${mimeType}\r\n\r\n`);
 			const suffix = encoder.encode(`\r\n--${boundary}--\r\n`);
 			const body = new Uint8Array(prefix.byteLength + file.bytes.byteLength + suffix.byteLength);
 			body.set(prefix);
 			body.set(file.bytes, prefix.byteLength);
 			body.set(suffix, prefix.byteLength + file.bytes.byteLength);
-			return create(uploadUrl, `multipart/related; boundary=${boundary}`, body, signal);
+			const id = await create(uploadUrl, `multipart/related; boundary=${boundary}`, body, signal);
+			if (file.id !== undefined && id !== file.id) {
+				throw new DriveError('upstream', 'Google Drive returned a different file ID.');
+			}
+			return id;
 		},
 		async createFolder(folder, signal) {
 			if (!isNonblank(folder.name) || !isNonblank(folder.parentFolderId)) {
