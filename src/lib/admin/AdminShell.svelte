@@ -41,11 +41,7 @@
 					aria-current={isAdminRoot && section === item ? 'page' : undefined}
 				>
 					<AdminIcon name={item} size={18} /><span>{messages.sections[item]}</span>
-					{#if item === 'events'}
-						<span class="pending-dot" aria-hidden="true"></span>
-					{:else}
-						<span class="nav-index mono" aria-hidden="true">{String(index).padStart(2, '0')}</span>
-					{/if}
+					<span class="nav-index mono" aria-hidden="true">{String(index).padStart(2, '0')}</span>
 				</Button>
 			{/each}
 			<Button variant="ghost" class="nav-control" href={resolve('/admin/bootcamps')} aria-current={isBootcamp ? 'page' : undefined}>
@@ -114,7 +110,7 @@
 	nav { display: grid; gap: 0.4rem; min-width: 0; }
 	nav :global(.nav-control) { position: relative; display: flex; justify-content: flex-start; gap: 0.8rem; width: 100%; min-height: 2.95rem; padding: 0.7rem 0.85rem; text-align: left; font-size: 0.78rem; }
 	.nav-index { margin-left: auto; color: #7b8985; font-size: 0.61rem; }
-	.pending-dot { width: 5px; height: 5px; margin-left: auto; border-radius: 50%; background: var(--warning); }
+
 	.rail-bottom { margin-top: auto; padding-top: 3rem; }
 	.rail-bottom .eyebrow { margin-bottom: 1.1rem; font-size: 0.54rem; }
 	.connection-row { display: flex; align-items: center; gap: 0.5rem; margin: 0.7rem 0; color: var(--muted-foreground); font-size: 0.65rem; }
@@ -159,7 +155,7 @@
 		.console-footer :global(.mobile-workspace-link) { display: inline-flex; }
 		nav { display: flex; gap: 0.4rem; overflow-x: auto; padding-bottom: 0.3rem; }
 		nav :global(.nav-control) { flex-shrink: 0; width: auto; min-height: 2.75rem; padding: 0.6rem 0.85rem; }
-		.nav-index, .pending-dot { display: none; }
+		.nav-index { display: none; }
 		.console-header { min-height: 4.5rem; padding: 0.8rem 1.25rem; }
 	}
 	@media (max-width: 35rem) {

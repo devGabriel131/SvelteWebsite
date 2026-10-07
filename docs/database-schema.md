@@ -22,6 +22,14 @@ See [README database commands](../README.md#local-postgresql) for setup, generat
 
 The admin page reads all students with a left join, only after checking verified admin identity. Missing scores display as unavailable, never zero. The bilingual UI identifies fictional scores. The guarded `bun run db:seed:subject-scores` command requires all 100 exact `fake.student.001..100@example.test` addresses with `Test`/`(Test)` surname markers, inserts arbitrary fictional values, and preserves existing students and scores. It does not seed other students or create login accounts.
 
+## Admin student editing and lifecycle
+
+`drizzle/0008_black_virginia_dare.sql` introduces `students.status`: `active`, `inactive`, or `invited`. Existing `is_active` values are backfilled without changing IDs or activity. The compatibility flag remains for existing bootcamp queries and legacy writers; a trigger and consistency constraint ensure it always equals `status = 'active'`. Changing only the legacy flag transitions to active/inactive; changing status takes precedence. Invited is preparatory lifecycle metadata, not proof of an invitation being delivered. No emails, invitations, accounts, or auth linkage are created.
+
+The admin roster editor persists first/last names, normalized email (trimmed and lowercased; no dot/plus rewriting), nullable birth date and gender, class type, lifecycle status, and all four integer demo scores. All four blank scores remove the optional score row; partial score sets are rejected. Profile and score updates share a transaction. Every action verifies the current session's admin role and same-origin request; errors expose validation/duplicate-email/missing-record/storage messages rather than SQL details. Profile IDs, FK IDs, timestamps, and fixture flags cannot be changed through the form. Updates retain score creation time and fixture marker; the existing profile update trigger refreshes `updated_at`.
+
+Roster email edits do not change Better Auth login addresses: student-auth linkage is still absent. Status continues to support existing bootcamp eligibility through the compatibility flag; it does not implement a new global login/access policy. The roster remains inside the shared admin layout and navigation. `tests/admin-student.test.ts` covers validation and authorization, and `tests/database-admin-student.test.ts` covers persistence, lifecycle compatibility, uniqueness rollback, and score row integrity on the guarded isolated database.
+
 ## Implemented game-history migration scope
 
 `src/lib/server/db/game-schema.ts` defines the additional tables in `drizzle/0002_game_history.sql`. `src/lib/server/db/views.ts` defines derived PostgreSQL views; they are not independently editable counters or caches.

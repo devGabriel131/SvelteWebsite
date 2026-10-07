@@ -48,13 +48,14 @@ const englishAdmin = {
 	pageTitle: 'Admin command center | Masterminds ASVAB',
 	description: 'Masterminds administration workspace with a database-backed student roster and fictional subject scores.',
 		roster: {
+			edit: { title: 'Edit student', save: 'Save changes', saving: 'Saving…', success: 'Changes saved.', firstName: 'First name', lastName: 'Last name', email: 'Email', dateOfBirth: 'Date of birth', gender: 'Gender', genders: { none: 'Not recorded', male: 'Male', female: 'Female' }, readonly: 'Read-only system fields', id: 'Student ID', createdAt: 'Created', updatedAt: 'Updated', fixture: 'Fixture marker', scores: 'Demo subject scores', scoreHelp: 'Enter four integers from 0 to 100, or leave all four blank to remove the demo scores.', invitedNote: 'Invited is a lifecycle state only. No invitation or email is sent.', errors: { invalid: 'Check required names, email, birth date (not in the future), options, and all four integer scores (0–100).', duplicate: 'Another student already uses this email.', missing: 'This student no longer exists. Refresh the roster.', storage: 'Changes could not be saved. Please try again.' } },
 			title: 'Student roster', total: 'Total students', student: 'Student', classType: 'Class type', status: 'Status', connected: 'Connected',
-			readOnly: 'Loaded from PostgreSQL. Read-only; adding and editing students are not available here yet.',
+			readOnly: 'Loaded from PostgreSQL. Profile and demo-score edits are saved to the database.',
 			workspaceNote: 'The roster is connected to PostgreSQL. Subject scores are fictional fixtures. Payment, invitation, and report tools remain previews.',
 			fixtureNote: 'AR, PC, WK, and MK values are made-up local fixtures on a 0–100 display range. They are not validated ASVAB scores or official percentiles.',
 			searchLabel: 'Search students', search: 'Search name, email, ID, or class type', filterLabel: 'Filter by student status',
 			count: '{count} students', empty: 'No students match your search.', noScore: 'No subject score recorded',
-			statuses: { all: 'All statuses', active: 'Active', paused: 'Inactive' }, classes: { basic: 'Basic', regular: 'Regular' },
+			statuses: { all: 'All statuses', active: 'Active', inactive: 'Inactive', invited: 'Invited' }, classes: { basic: 'Basic', regular: 'Regular' },
 			abbreviations: { ar: 'AR', pc: 'PC', wk: 'WK', mk: 'MK' },
 			subjects: { ar: 'Arithmetic Reasoning', pc: 'Paragraph Comprehension', wk: 'Word Knowledge', mk: 'Mathematics Knowledge' }
 		},
@@ -154,13 +155,14 @@ const spanishAdmin: typeof englishAdmin = {
 	pageTitle: 'Centro de mando administrativo | Masterminds ASVAB',
 	description: 'Espacio administrativo de Masterminds con registro estudiantil conectado a la base de datos y puntuaciones ficticias por materia.',
 		roster: {
+			edit: { title: 'Editar estudiante', save: 'Guardar cambios', saving: 'Guardando…', success: 'Cambios guardados.', firstName: 'Nombre', lastName: 'Apellido', email: 'Correo electrónico', dateOfBirth: 'Fecha de nacimiento', gender: 'Género', genders: { none: 'Sin registrar', male: 'Masculino', female: 'Femenino' }, readonly: 'Campos del sistema de solo lectura', id: 'ID del estudiante', createdAt: 'Creado', updatedAt: 'Actualizado', fixture: 'Indicador de datos ficticios', scores: 'Puntuaciones ficticias por materia', scoreHelp: 'Introduce cuatro enteros de 0 a 100, o deja los cuatro vacíos para eliminar las puntuaciones ficticias.', invitedNote: 'Invitado es solo un estado del estudiante. No se envía ninguna invitación ni correo.', errors: { invalid: 'Revisa los nombres obligatorios, correo, fecha de nacimiento (no futura), opciones y las cuatro puntuaciones enteras (0–100).', duplicate: 'Otro estudiante ya usa este correo.', missing: 'Este estudiante ya no existe. Actualiza el registro.', storage: 'No se pudieron guardar los cambios. Inténtalo de nuevo.' } },
 			title: 'Registro estudiantil', total: 'Total de estudiantes', student: 'Estudiante', classType: 'Tipo de clase', status: 'Estado', connected: 'Conectado',
-			readOnly: 'Datos de PostgreSQL. Solo lectura; añadir y editar estudiantes aún no está disponible aquí.',
+			readOnly: 'Datos de PostgreSQL. Los cambios del perfil y las puntuaciones ficticias se guardan en la base de datos.',
 			workspaceNote: 'El registro está conectado a PostgreSQL. Las puntuaciones por materia son ficticias. Las herramientas de pagos, invitaciones e informes siguen siendo vistas previas.',
 			fixtureNote: 'Los valores de AR, PC, WK y MK son datos ficticios locales en un rango visual de 0–100. No son puntuaciones ASVAB validadas ni percentiles oficiales.',
 			searchLabel: 'Buscar estudiantes', search: 'Busca nombre, correo, ID o tipo de clase', filterLabel: 'Filtrar por estado del estudiante',
 			count: '{count} estudiantes', empty: 'Ningún estudiante coincide con tu búsqueda.', noScore: 'Sin puntuación registrada para la materia',
-			statuses: { all: 'Todos los estados', active: 'Activo', paused: 'Inactivo' }, classes: { basic: 'Básico', regular: 'Regular' },
+			statuses: { all: 'Todos los estados', active: 'Activo', inactive: 'Inactivo', invited: 'Invitado' }, classes: { basic: 'Básico', regular: 'Regular' },
 			abbreviations: { ar: 'AR', pc: 'PC', wk: 'WK', mk: 'MK' },
 			subjects: { ar: 'Razonamiento aritmético', pc: 'Comprensión de párrafos', wk: 'Conocimiento de palabras', mk: 'Conocimiento matemático' }
 		},
@@ -610,6 +612,12 @@ const englishBootcamp = {
 		editPageTitle: 'Edit: {title} | Masterminds ASVAB', editDescription: 'Update this bootcamp’s details and review its Spanish agreements.',
 		reportPageTitle: 'Registration report: {title} | Masterminds ASVAB', reportDescription: 'Review registrations, website payment balances, and saved documents for this bootcamp.',
 		backToEvents: 'Back to bootcamps',
+				classType: 'Class', classTypes: { basic: 'Basic', regular: 'Regular' },
+				coverage: 'Registration coverage', coverageFor: '{classType} registration coverage', started: 'Started', confirmed: 'Confirmed',
+				collected: 'Website payments', outstanding: 'Confirmed balances',
+				search: 'Search students', searchPlaceholder: 'Name or email', classFilters: 'Filter by class', allClasses: 'All classes',
+				registrationFilters: 'Filter registrations', allStudents: 'All students', notStarted: 'Not started', noMatches: 'No students match these filters.',
+				actions: 'Actions', legalStatus: 'Legal review', tools: 'Report tools',
 		title: 'Bootcamp operations', introduction: 'Publish approved events and follow each student’s registration progress.',
 		connections: 'Service readiness', paymentReady: 'Payments configured', paymentMissing: 'Payments not configured', driveReady: 'Document backup configured', driveMissing: 'Document backup not configured',
 		events: 'Events', create: 'Activate bootcamp', edit: 'Edit event', editing: 'Edit: {title}', titleField: 'Event title', venue: 'Venue',
@@ -628,7 +636,7 @@ const englishBootcamp = {
 		open: 'Open registration', close: 'Close registration', activationGuard: 'Opening requires configured payments, configured document backup, and approved Spanish legal text.',
 		report: 'Registration report', selectEvent: 'Select an event for its report', reportEmpty: 'There are no student rows for this event.',
 		reports: 'Reports', viewReport: 'View report', viewReportFor: 'View report for {title}', noReports: 'Reports will appear here once a bootcamp has been saved.',
-		csv: 'Download CSV', retryBackups: 'Retry document backups', reconcile: 'Reconcile payments',
+		csvAll: 'Download full CSV', csv: 'Download CSV', retryBackups: 'Retry document backups', reconcile: 'Reconcile payments',
 		name: 'Student', email: 'Email', eligibility: 'Eligibility', status: 'Registration status', paymentStatus: 'Payment status', paid: 'Website paid', remaining: 'Website remaining', documents: 'Documents and backup status', noDocuments: 'No saved documents',
 		eligibilities: { eligible: 'Eligible', underage: 'Underage', unknown: 'Not verified', inactive: 'Inactive' },
 		statuses: { not_started: 'Not started', waiver: 'Waiver step', letter: 'Employer letter step', payment: 'Payment step', confirmed: 'Confirmed' },
@@ -724,6 +732,12 @@ const spanishBootcamp: typeof englishBootcamp = {
 		editPageTitle: 'Editar: {title} | Masterminds ASVAB', editDescription: 'Actualiza los detalles de este bootcamp y revisa sus acuerdos en español.',
 		reportPageTitle: 'Informe de inscripción: {title} | Masterminds ASVAB', reportDescription: 'Consulta las inscripciones, los saldos según los pagos en la web y los documentos guardados de este bootcamp.',
 		backToEvents: 'Volver a bootcamps',
+				classType: 'Clase', classTypes: { basic: 'Básico', regular: 'Regular' },
+				coverage: 'Cobertura de inscripciones', coverageFor: 'Cobertura de inscripciones de {classType}', started: 'Iniciadas', confirmed: 'Confirmadas',
+				collected: 'Pagos en la web', outstanding: 'Saldos de inscripciones confirmadas',
+				search: 'Buscar estudiantes', searchPlaceholder: 'Nombre o correo', classFilters: 'Filtrar por clase', allClasses: 'Todas las clases',
+				registrationFilters: 'Filtrar inscripciones', allStudents: 'Todos los estudiantes', notStarted: 'Sin iniciar', noMatches: 'Ningún estudiante coincide con estos filtros.',
+				actions: 'Acciones', legalStatus: 'Revisión legal', tools: 'Herramientas del informe',
 		title: 'Administración de bootcamps', introduction: 'Publica eventos aprobados y sigue el progreso de inscripción de cada estudiante.',
 		connections: 'Disponibilidad de servicios', paymentReady: 'Pagos configurados', paymentMissing: 'Pagos sin configurar', driveReady: 'Respaldo de documentos configurado', driveMissing: 'Respaldo de documentos sin configurar',
 		events: 'Eventos', create: 'Activar bootcamp', edit: 'Editar evento', editing: 'Editar: {title}', titleField: 'Título del evento', venue: 'Lugar',
@@ -742,7 +756,7 @@ const spanishBootcamp: typeof englishBootcamp = {
 		open: 'Abrir inscripción', close: 'Cerrar inscripción', activationGuard: 'Para abrir se requieren pagos y respaldo de documentos configurados, y texto legal en español aprobado.',
 		report: 'Informe de inscripción', selectEvent: 'Selecciona un evento para ver su informe', reportEmpty: 'No hay filas de estudiantes para este evento.',
 		reports: 'Informes', viewReport: 'Ver informe', viewReportFor: 'Ver informe de {title}', noReports: 'Los informes aparecerán aquí una vez que se guarde un bootcamp.',
-		csv: 'Descargar CSV', retryBackups: 'Reintentar respaldo de documentos', reconcile: 'Conciliar pagos',
+		csvAll: 'Descargar CSV completo', csv: 'Descargar CSV', retryBackups: 'Reintentar respaldo de documentos', reconcile: 'Conciliar pagos',
 		name: 'Estudiante', email: 'Correo', eligibility: 'Elegibilidad', status: 'Estado de inscripción', paymentStatus: 'Estado del pago', paid: 'Pagado en la web', remaining: 'Pendiente en la web', documents: 'Documentos y estado del respaldo', noDocuments: 'Sin documentos guardados',
 		eligibilities: { eligible: 'Elegible', underage: 'Menor de edad', unknown: 'Sin verificar', inactive: 'Inactivo' },
 		statuses: { not_started: 'Sin comenzar', waiver: 'Paso del relevo', letter: 'Paso de carta patronal', payment: 'Paso de pago', confirmed: 'Confirmado' },
@@ -750,7 +764,45 @@ const spanishBootcamp: typeof englishBootcamp = {
 	}
 };
 
+const englishBootcampMockups = {
+	pageTitle: 'Bootcamp design previews | Masterminds ASVAB', description: 'Three interactive previews of the admin bootcamp workflow.',
+	title: 'Bootcamp workspace', eyebrow: 'Design collection', demo: 'Demo', notice: 'Real roster · Fictional registrations and balances · Changes reset on refresh. No charges, documents, or signatures.',
+	back: 'Live bootcamps', designs: 'Choose a layout', editorial: 'Event desk', editorialHint: 'Spacious, event-first planning', board: 'Operations board', boardHint: 'A guided workflow with a persistent brief', ledger: 'Compact ledger', ledgerHint: 'Dense, table-first administration',
+	flow: 'Preview workflow', list: 'Events', activate: 'Activate', edit: 'Edit', report: 'Report',
+	listTitle: 'Your next bootcamp', activateTitle: 'Prepare the event', editTitle: 'Refine the details', reportTitle: 'Registration overview',
+	eventTitle: 'ASVAB intensive · November', venue: 'Centro de Convenciones, San Juan', event: 'Event', date: 'Date', location: 'Venue', start: 'Start time', end: 'End time', timezone: 'Puerto Rico time · AST',
+	classType: 'Class', classFilters: 'Filter by class', allClasses: 'All classes', basic: 'Basic', regular: 'Regular', classCoverage: '{classType} registration coverage',
+		registered: 'Registered', roster: 'Student roster', collected: 'Demo collected', balance: 'Demo balance', open: 'Registration open', closed: 'Registration closed',
+	create: 'Activate preview', save: 'Save preview', cancel: 'Cancel', viewReport: 'View report', editEvent: 'Edit event', openRegistration: 'Open preview registration', closeRegistration: 'Close preview registration',
+	brief: 'Event brief', fee: 'Event fee', deposit: 'Deposit', arrival: 'Check-in · 1 hour before start', deadline: 'Registration closes · 12 hours before start',
+		scheduleInvalid: 'Enter a valid date and an end time later than the start time on the same day.',
+	legal: 'Legal review', legalNote: 'Agreement, liability release, and media consent require review in the live workflow. This preview does not create legal documents.', approved: 'Mark reviewed in preview', reviewPending: 'Review pending', reviewDone: 'Preview review complete',
+	saved: 'Preview updated. No server changes.', activated: 'Preview activated. Continue with the editor or report.',
+	search: 'Search students', searchPlaceholder: 'Name or email', filters: 'Filter registrations', all: 'All students', unregistered: 'Not registered', student: 'Student', status: 'Registration', paid: 'Demo paid', remaining: 'Demo remaining', documents: 'Documents', noDocuments: 'Not generated', empty: 'No students match.', emptyRoster: 'No students in the roster.',
+	rosterNote: '{registered} of {total} students assigned a fictional registration.', count: '{count} students', progress: 'Registration coverage', reset: 'Reset preview', tools: 'Live report tools', toolsNote: 'CSV export, payment reconciliation, and document backups are available only in the live workflow.',
+	confirm: 'Confirmed · demo', payment: 'Deposit · demo', revision: 'Preview revision {revision}'
+};
+const spanishBootcampMockups: typeof englishBootcampMockups = {
+	pageTitle: 'Propuestas de diseño de bootcamp | Masterminds ASVAB', description: 'Tres vistas interactivas del flujo administrativo de bootcamps.',
+	title: 'Espacio de bootcamps', eyebrow: 'Colección de diseños', demo: 'Demo', notice: 'Lista real · Inscripciones y balances ficticios · Los cambios se reinician al recargar. Sin cobros, documentos ni firmas.',
+	back: 'Bootcamps reales', designs: 'Elige un diseño', editorial: 'Mesa de eventos', editorialHint: 'Planificación amplia centrada en el evento', board: 'Panel de operaciones', boardHint: 'Flujo guiado con resumen permanente', ledger: 'Registro compacto', ledgerHint: 'Administración concisa centrada en tablas',
+	flow: 'Flujo de muestra', list: 'Eventos', activate: 'Activar', edit: 'Editar', report: 'Informe',
+	listTitle: 'Tu próximo bootcamp', activateTitle: 'Prepara el evento', editTitle: 'Ajusta los detalles', reportTitle: 'Resumen de inscripciones',
+	eventTitle: 'Intensivo ASVAB · Noviembre', venue: 'Centro de Convenciones, San Juan', event: 'Evento', date: 'Fecha', location: 'Lugar', start: 'Hora de inicio', end: 'Hora de fin', timezone: 'Hora de Puerto Rico · AST',
+	classType: 'Clase', classFilters: 'Filtrar por clase', allClasses: 'Todas las clases', basic: 'Básico', regular: 'Regular', classCoverage: 'Cobertura de inscripciones de {classType}',
+		registered: 'Inscritos', roster: 'Lista de estudiantes', collected: 'Recaudación demo', balance: 'Balance demo', open: 'Inscripciones abiertas', closed: 'Inscripciones cerradas',
+	create: 'Activar muestra', save: 'Guardar muestra', cancel: 'Cancelar', viewReport: 'Ver informe', editEvent: 'Editar evento', openRegistration: 'Abrir inscripciones de muestra', closeRegistration: 'Cerrar inscripciones de muestra',
+	brief: 'Resumen del evento', fee: 'Costo del evento', deposit: 'Depósito', arrival: 'Llegada · 1 hora antes del inicio', deadline: 'Inscripciones cierran · 12 horas antes del inicio',
+		scheduleInvalid: 'Ingresa una fecha válida y una hora de fin posterior al inicio en el mismo día.',
+	legal: 'Revisión legal', legalNote: 'El acuerdo, relevo de responsabilidad y consentimiento de medios requieren revisión en el flujo real. Esta muestra no crea documentos legales.', approved: 'Marcar revisado en la muestra', reviewPending: 'Revisión pendiente', reviewDone: 'Revisión de muestra completa',
+	saved: 'Muestra actualizada. Sin cambios en el servidor.', activated: 'Muestra activada. Continúa al editor o al informe.',
+	search: 'Buscar estudiantes', searchPlaceholder: 'Nombre o correo', filters: 'Filtrar inscripciones', all: 'Todos los estudiantes', unregistered: 'Sin inscripción', student: 'Estudiante', status: 'Inscripción', paid: 'Pago demo', remaining: 'Balance demo', documents: 'Documentos', noDocuments: 'No generados', empty: 'Ningún estudiante coincide.', emptyRoster: 'No hay estudiantes en la lista.',
+	rosterNote: '{registered} de {total} estudiantes con inscripción ficticia.', count: '{count} estudiantes', progress: 'Cobertura de inscripciones', reset: 'Reiniciar muestra', tools: 'Herramientas del informe real', toolsNote: 'La exportación CSV, conciliación de pagos y respaldos de documentos solo están disponibles en el flujo real.',
+	confirm: 'Confirmado · demo', payment: 'Depósito · demo', revision: 'Revisión de muestra {revision}'
+};
+
 const english = {
+	bootcampMockups: englishBootcampMockups,
 	bootcamp: englishBootcamp,
 	designPreview: englishDesignPreview,
 		coursesPreview: englishCoursesPreview,
@@ -1052,6 +1104,7 @@ frequency: {
 export type Messages = typeof english;
 
 const spanish: Messages = {
+	bootcampMockups: spanishBootcampMockups,
 	bootcamp: spanishBootcamp,
 	designPreview: spanishDesignPreview,
 		coursesPreview: spanishCoursesPreview,

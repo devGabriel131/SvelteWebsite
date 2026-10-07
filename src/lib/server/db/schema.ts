@@ -14,7 +14,9 @@ export const students = pgTable(
 		dateOfBirth: date('date_of_birth', { mode: 'string' }),
 		gender: text('gender', { enum: studentGenders }),
 		classType: text('class_type', { enum: studentClassTypes }).notNull(),
-		isActive: boolean('is_active').default(true).notNull(),
+		// Compatibility projection maintained by the student lifecycle trigger.
+				isActive: boolean('is_active').default(true).notNull(),
+				status: text('status', { enum: ['active', 'inactive', 'invited'] }).default('active').notNull(),
 		createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull()
 	},
@@ -28,7 +30,9 @@ export const students = pgTable(
 			sql`${table.dateOfBirth} IS NULL OR (isfinite(${table.dateOfBirth}) AND ${table.dateOfBirth} <= CURRENT_DATE)`
 		),
 		check('students_gender_valid', sql`${table.gender} IN ('male', 'female')`),
-		check('students_class_type_valid', sql`${table.classType} IN ('basic', 'regular')`)
+		check('students_class_type_valid', sql`${table.classType} IN ('basic', 'regular')`),
+				check('students_status_valid', sql`${table.status} IN ('active', 'inactive', 'invited')`),
+				check('students_status_active_consistent', sql`${table.isActive} = (${table.status} = 'active')`)
 	]
 );
 

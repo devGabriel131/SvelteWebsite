@@ -57,6 +57,7 @@ export type StudentBootcampPage = {
 };
 export type ReportRow = {
 	studentId: string;
+	classType: 'basic' | 'regular';
 	name: string;
 	email: string;
 	eligibility: 'eligible' | 'underage' | 'unknown' | 'inactive';

@@ -6,6 +6,7 @@ import type { Database } from '../src/lib/server/db/connection';
 
 const student: AdminStudent = {
 	id: '00000000-0000-4000-8000-000000000001', name: 'Alicia Rivera (Test)',
+	firstName: 'Alicia', lastName: 'Rivera (Test)', dateOfBirth: null, gender: null, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
 	email: 'fake.student.001@example.test', classType: 'basic', status: 'active',
 	subjectScores: { ar: 0, pc: 100, wk: 42, mk: 61, isFixture: true }
 };
@@ -15,7 +16,7 @@ describe('database-backed admin roster', () => {
 		for (const query of ['  ALICIA  ', 'FAKE.STUDENT.001', student.id, 'basic']) {
 			expect(filterStudents([student], query, 'all')).toEqual([student]);
 		}
-		expect(filterStudents([student], '', 'paused')).toEqual([]);
+		expect(filterStudents([student], '', 'inactive')).toEqual([]);
 		expect(filterStudents([student], 'unknown', 'all')).toEqual([]);
 		expect(filterStudents([], '', 'all')).toEqual([]);
 		expect(filterStudents([student], '', 'active')[0]).toBe(student);
@@ -26,8 +27,8 @@ describe('database-backed admin roster', () => {
 		const db = drizzle(async (sql) => {
 			queries.push(sql);
 			return { rows: [
-				[student.id, 'Alicia', 'Rivera (Test)', student.email, 'basic', true, student.id, 0, 100, 42, 61, true, '2026-01-01T00:00:00Z'],
-				['00000000-0000-4000-8000-000000000002', 'Mateo', 'Test', 'ungraded@example.test', 'regular', false, null, null, null, null, null, null, null]
+				[student.id, 'Alicia', 'Rivera (Test)', student.email, 'basic', 'active', null, null, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', student.id, 0, 100, 42, 61, true, '2026-01-01T00:00:00Z'],
+				['00000000-0000-4000-8000-000000000002', 'Mateo', 'Test', 'ungraded@example.test', 'regular', 'inactive', null, null, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', null, null, null, null, null, null, null]
 			] };
 		}) as unknown as Database;
 		const roster = await readAdminRoster(db);
@@ -36,7 +37,7 @@ describe('database-backed admin roster', () => {
 		expect(queries[0]).toContain('order by');
 		expect(roster[0]).toEqual(student);
 		expect(roster[1].subjectScores).toBeNull();
-		expect(roster[1].status).toBe('paused');
+		expect(roster[1].status).toBe('inactive');
 		expect(roster[0]).not.toHaveProperty('score');
 		expect(roster[0]).not.toHaveProperty('progress');
 		expect(subjects).toEqual(['ar', 'pc', 'wk', 'mk']);

@@ -2,7 +2,7 @@
 	import { untrack } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import * as Card from '#lib/components/ui/card/index.js';
+
 	import { useLanguage } from '#lib/i18n/language.svelte.ts';
 	import { formatMessage } from '#lib/i18n/translations.ts';
 	import ActionForm from './ActionForm.svelte';
@@ -57,7 +57,7 @@
 	}
 </script>
 
-<Card.Root class="bc-card">
+<section class="bc-ledger-editor">
 	<p class="bc-hint">{messages.common.required}</p>
 	{#if event}<p class="bc-notice">{messages.admin.editWarning}</p>{/if}
 	<ActionForm action="?/saveEvent">
@@ -67,26 +67,41 @@
 					<input type="hidden" name="id" value={event.id} /><input type="hidden" name="revision" value={event.revision} />
 					<input type="hidden" name="legalSource" value={legalSource} />
 				{/if}
-				<div class="bc-fields">
-					<label class="bc-field"><span>{messages.admin.titleField}</span><input name="title" bind:value={details.title} oninput={() => legalApproved = false} maxlength="200" required /></label>
-					<label class="bc-field"><span>{messages.admin.venue}</span><input name="venue" bind:value={details.venue} oninput={() => legalApproved = false} maxlength="300" required /></label>
-				</div>
-				<label class="bc-field"><span>{messages.admin.eventDate}</span><input type="date" name="eventDate" bind:value={details.eventDate} oninput={() => legalApproved = false} required /></label>
-				<div class="bc-fields">
-					{#each timeFields as field (field)}
-						<label class="bc-field"><span>{messages.admin[field]}</span><input type="text" name={field} bind:value={details[field]} pattern={eventTimePattern} maxlength="5" placeholder={messages.admin.timePlaceholder} aria-describedby="bootcamp-schedule-hint" autocomplete="off" oninput={() => legalApproved = false} required /></label>
-					{/each}
+				<div class="bc-table-scroll">
+					<table class="bc-ledger-form-table">
+						<caption class="sr-only">{event ? messages.admin.edit : messages.admin.create}</caption>
+						<tbody>
+							<tr>
+								<th scope="row"><label for="bootcamp-title">{messages.admin.titleField}</label></th>
+								<td><input id="bootcamp-title" name="title" bind:value={details.title} oninput={() => legalApproved = false} maxlength="200" required /></td>
+							</tr>
+							<tr>
+								<th scope="row"><label for="bootcamp-venue">{messages.admin.venue}</label></th>
+								<td><input id="bootcamp-venue" name="venue" bind:value={details.venue} oninput={() => legalApproved = false} maxlength="300" required /></td>
+							</tr>
+							<tr>
+								<th scope="row"><label for="bootcamp-event-date">{messages.admin.eventDate}</label></th>
+								<td><input id="bootcamp-event-date" type="date" name="eventDate" bind:value={details.eventDate} oninput={() => legalApproved = false} required /></td>
+							</tr>
+							{#each timeFields as field (field)}
+								<tr>
+									<th scope="row"><label for={`bootcamp-${field}`}>{messages.admin[field]}</label></th>
+									<td><input id={`bootcamp-${field}`} type="text" name={field} bind:value={details[field]} pattern={eventTimePattern} maxlength="5" placeholder={messages.admin.timePlaceholder} aria-describedby="bootcamp-schedule-hint" autocomplete="off" oninput={() => legalApproved = false} required /></td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
 				</div>
 				<p class="bc-hint" id="bootcamp-schedule-hint">{messages.admin.scheduleHint} {messages.admin.timeZone}</p>
 				<p class="bc-hint">{messages.admin.scheduleAutomatic}</p>
 				{#if schedule}
-					<dl class="bc-details">
+					<dl class="bc-details bc-ledger-schedule" aria-live="polite">
 						<div><dt>{messages.event.arrivalAt}</dt><dd>{formatDate(schedule.arrivalAt)}</dd></div>
 						<div><dt>{messages.event.registrationClosesAt}</dt><dd>{formatDate(schedule.registrationClosesAt)}</dd></div>
 					</dl>
 				{/if}
 				{#if event}
-					<section class="bc-section">
+					<section class="bc-section bc-ledger-legal">
 						<h2>{messages.admin.legal}</h2>
 						<p class="bc-hint">{messages.admin.legalHint}</p>
 						<p class="bc-notice">{messages.admin.legalReview}</p>
@@ -122,4 +137,4 @@
 			</fieldset>
 		{/snippet}
 	</ActionForm>
-</Card.Root>
+</section>

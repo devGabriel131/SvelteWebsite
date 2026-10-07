@@ -1,5 +1,7 @@
 <script lang="ts">
-	import { filterStudents, subjects, type AdminStudent, type StudentStatus } from './roster';
+	import { page } from '$app/state';
+		import StudentEditor from './StudentEditor.svelte';
+		import { filterStudents, subjects, type AdminStudent, type StudentStatus } from './roster';
 	import { useLanguage } from '#lib/i18n/language.svelte.ts';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
@@ -24,13 +26,14 @@
 		<div class="filters">
 			<div class="search"><Label for={`${id}-search`}>{messages.searchLabel}</Label><Input id={`${id}-search`} type="search" bind:value={query} placeholder={messages.search} /></div>
 			<div role="group" aria-label={messages.filterLabel} class="choices">
-				{#each ['all', 'active', 'paused'] as option}
+				{#each ['all', 'active', 'inactive', 'invited'] as option}
 					<Button variant="outline" type="button" aria-pressed={status === option} onclick={() => status = option as typeof status}>{messages.statuses[option as keyof typeof messages.statuses]}</Button>
 				{/each}
 			</div>
 			<p role="status">{messages.count.replace('{count}', numbers.format(visible.length))}</p>
 		</div>
-		<p class="fixture-note" id={`${id}-fixture`}>{messages.fixtureNote}</p>
+		{#if page.form?.studentEdit?.success}<p role="status" class="fixture-note">{messages.edit.success}</p>{/if}
+				<p class="fixture-note" id={`${id}-fixture`}>{messages.fixtureNote}</p>
 		<Table.Root class="min-w-[760px] text-left" containerProps={{ role: 'region', 'aria-labelledby': `${id}-title`, tabindex: 0, class: 'overflow-x-auto focus-visible:outline-2 focus-visible:outline-primary' }}>
 			<Table.Caption class="sr-only">{messages.title} — {messages.fixtureNote}</Table.Caption>
 			<Table.Header><Table.Row>
@@ -47,6 +50,7 @@
 						<Table.Cell>{messages.statuses[student.status]}</Table.Cell>
 						{#each subjects as subject}<Table.Cell class="text-right font-mono" aria-describedby={student.subjectScores?.isFixture ? `${id}-fixture` : undefined}>{#if student.subjectScores}{numbers.format(student.subjectScores[subject])}{:else}<span aria-label={messages.noScore}>{language.messages.admin.common.notAvailable}</span>{/if}</Table.Cell>{/each}
 					</Table.Row>
+					<Table.Row><Table.Cell colspan={7}><StudentEditor {student} /></Table.Cell></Table.Row>
 				{:else}<Table.Row><Table.Cell colspan={7}>{messages.empty}</Table.Cell></Table.Row>{/each}
 			</Table.Body>
 		</Table.Root>

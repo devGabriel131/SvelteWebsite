@@ -22,7 +22,7 @@ export async function eventReport(db: Database, eventId: string, now = new Date(
 		const registration = registered.find((r) => r.studentId === student.id);
 		const ownPayments = attempts.filter((p) => p.registrationId === registration?.id);
 		const paidCents = ownPayments.filter((p) => p.status === 'completed').reduce((sum, p) => sum + p.amountCents, 0);
-		return { studentId: student.id, name: registration?.waiver?.student.name ?? `${student.firstName} ${student.lastName}`, email: registration?.waiver?.student.email ?? student.email,
+		return { studentId: student.id, classType: student.classType, name: registration?.waiver?.student.name ?? `${student.firstName} ${student.lastName}`, email: registration?.waiver?.student.email ?? student.email,
 			eligibility: !student.isActive ? 'inactive' : !student.dateOfBirth ? 'unknown' : isAdult(student.dateOfBirth, asOf) ? 'eligible' : 'underage',
 			status: registrationStatus(!!registration, !!registration?.waiver, registration?.letterChoice ?? null, paidCents),
 			paidCents, remainingCents: balance(paidCents), paymentStatus: ownPayments[0]?.status, paymentUncertain: !!ownPayments[0]?.lastError,
@@ -80,8 +80,8 @@ export async function toggleEvent(db: Database, form: FormData, ready: boolean) 
 
 export function reportCsv(rows: ReportRow[], language: Language): string {
 	const m = translations[language].bootcamp;
-	const headers = [m.admin.name, m.admin.email, m.admin.eligibility, m.admin.status, m.admin.paymentStatus, m.payment.verificationAttention, m.payment.paid, m.payment.remaining, m.event.documentKinds.waiver, m.event.documentKinds.letter];
-	const lines = rows.map((row) => [row.name, row.email, m.admin.eligibilities[row.eligibility], m.admin.statuses[row.status],
+	const headers = [m.admin.name, m.admin.email, m.admin.classType, m.admin.eligibility, m.admin.status, m.admin.paymentStatus, m.payment.verificationAttention, m.payment.paid, m.payment.remaining, m.event.documentKinds.waiver, m.event.documentKinds.letter];
+	const lines = rows.map((row) => [row.name, row.email, m.admin.classTypes[row.classType], m.admin.eligibilities[row.eligibility], m.admin.statuses[row.status],
 		row.paymentStatus ? m.payment.statuses[row.paymentStatus as keyof typeof m.payment.statuses] ?? row.paymentStatus : m.payment.statuses.not_started,
 		row.paymentUncertain ? m.common.yes : m.common.no,
 		(row.paidCents / 100).toFixed(2), (row.remainingCents / 100).toFixed(2),

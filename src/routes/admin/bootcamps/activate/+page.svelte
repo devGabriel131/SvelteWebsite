@@ -18,11 +18,16 @@
 	<meta name="robots" content="noindex" />
 </svelte:head>
 
-<div class="bootcamp bc-admin" lang={language.current}>
-	<header class="bc-heading">
-		<div><Button variant="outline" href={resolve('/admin/bootcamps')}>{messages.admin.backToEvents}</Button></div>
-		<h1>{messages.admin.create}</h1>
-	</header>
-	<FormFeedback result={form} />
-	<EventEditor />
+<div class="bootcamp bc-admin bc-ledger" lang={language.current}>
+	<nav class="bc-ledger-nav" aria-label={messages.admin.title}>
+		<Button variant="ghost" href={resolve('/admin/bootcamps')}>{messages.admin.events}</Button>
+		<Button variant="secondary" href={resolve('/admin/bootcamps/activate')} aria-current="page">{messages.admin.create}</Button>
+	</nav>
+	<div class="bc-ledger-main">
+		<header class="bc-ledger-heading">
+			<h1>{messages.admin.create}</h1>
+		</header>
+		<FormFeedback result={form} />
+		<EventEditor />
+	</div>
 </div>

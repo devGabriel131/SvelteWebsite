@@ -19,16 +19,19 @@
 	<meta name="robots" content="noindex" />
 </svelte:head>
 
-<div class="bootcamp bc-admin" lang={language.current}>
-	<header class="bc-heading">
-		<div class="bc-actions">
-			<Button variant="outline" href={resolve('/admin/bootcamps')}>{messages.admin.backToEvents}</Button>
-			<Button variant="outline" href={resolve('/admin/bootcamps/[eventId]/report', { eventId: data.event.id })}>{messages.admin.report}</Button>
-		</div>
-		<h1>{formatMessage(messages.admin.editing, { title: data.event.title })}</h1>
-	</header>
-	<FormFeedback result={form} />
-	{#key `${data.event.id}:${data.event.revision}`}
-		<EventEditor event={data.event} />
-	{/key}
+<div class="bootcamp bc-admin bc-ledger" lang={language.current}>
+	<nav class="bc-ledger-nav" aria-label={messages.admin.title}>
+		<Button variant="ghost" href={resolve('/admin/bootcamps')}>{messages.admin.events}</Button>
+		<Button variant="secondary" href={resolve('/admin/bootcamps/[eventId]/edit', { eventId: data.event.id })} aria-current="page">{messages.admin.edit}</Button>
+		<Button variant="ghost" href={resolve('/admin/bootcamps/[eventId]/report', { eventId: data.event.id })}>{messages.admin.report}</Button>
+	</nav>
+	<div class="bc-ledger-main">
+		<header class="bc-ledger-heading">
+			<h1>{formatMessage(messages.admin.editing, { title: data.event.title })}</h1>
+		</header>
+		<FormFeedback result={form} />
+		{#key `${data.event.id}:${data.event.revision}`}
+			<EventEditor event={data.event} />
+		{/key}
+	</div>
 </div>

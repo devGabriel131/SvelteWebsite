@@ -19,13 +19,17 @@ export async function loadAdminRoster(
 export async function readAdminRoster(db: Database): Promise<AdminStudent[]> {
 	const rows = await db.select({
 		id: students.id, firstName: students.firstName, lastName: students.lastName,
-		email: students.email, classType: students.classType, isActive: students.isActive,
+		email: students.email, classType: students.classType, status: students.status,
+				dateOfBirth: students.dateOfBirth, gender: students.gender,
+				createdAt: students.createdAt, updatedAt: students.updatedAt,
 		scores: studentSubjectScores
 	}).from(students).leftJoin(studentSubjectScores, eq(students.id, studentSubjectScores.studentId))
 		.orderBy(asc(students.lastName), asc(students.firstName), asc(students.id));
 	return rows.map((row) => ({
 		id: row.id, name: `${row.firstName} ${row.lastName}`, email: row.email,
-		classType: row.classType, status: row.isActive ? 'active' : 'paused',
+		firstName: row.firstName, lastName: row.lastName, dateOfBirth: row.dateOfBirth,
+				gender: row.gender, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString(),
+				classType: row.classType, status: row.status,
 		subjectScores: row.scores ? {
 			ar: row.scores.ar, pc: row.scores.pc, wk: row.scores.wk, mk: row.scores.mk,
 			isFixture: row.scores.isFixture

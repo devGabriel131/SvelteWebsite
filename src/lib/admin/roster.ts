@@ -1,8 +1,14 @@
-export type StudentStatus = 'active' | 'paused';
+export type StudentStatus = 'active' | 'inactive' | 'invited';
 export const subjects = ['ar', 'pc', 'wk', 'mk'] as const;
 export interface AdminStudent {
 	id: string;
 	name: string;
+		firstName: string;
+		lastName: string;
+		dateOfBirth: string | null;
+		gender: 'male' | 'female' | null;
+		createdAt: string;
+		updatedAt: string;
 	email: string;
 	classType: 'basic' | 'regular';
 	status: StudentStatus;

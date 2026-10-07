@@ -28,7 +28,9 @@ Registration activation requires configured backup, explicitly enabled/configure
 | `/admin/bootcamps/activate` | Event details-only setup |
 | `/admin/bootcamps/[eventId]/edit` | Edit an existing event and review/approve its Spanish agreements |
 | `/admin/bootcamps/[eventId]/report` | That event's registration report, private document links, backup retries, and payment reconciliation |
-| `/admin/bootcamps/report?event=…&language=…` | Existing CSV download endpoint (unchanged) |
+| `/admin/bootcamps/report?event=…&language=…` | Full-event CSV download, including each student's current Basic/Regular class |
+
+The real routes use the Compact ledger layout: a single event table, a compact details editor, and a registration ledger. Activate is available for a new bootcamp; existing events expose Edit and Report instead, with editable dates/times. The report shows started versus confirmed counts, website payment totals, confirmed outstanding balances, and separate Basic/Regular coverage. Coverage measures started registrations against each class's report roster, not completed payment. Search, class buttons, and registration buttons filter only the displayed table; CSV exports the full event report. Document retry and payment reconciliation remain under Report tools.
 
 Every page inherits the shared admin layout/sidebar/header, including direct visits and refreshes. Navigation uses real links, so browser back/forward does not depend on an in-memory editor selection. The activation and event-list loads do not fetch student reports. A malformed or missing event ID produces a localized 404 instead of falling back to another event. Old `/admin/bootcamps?event=…` report links redirect to the event-specific report.
 
@@ -101,6 +103,14 @@ Reports derive amounts from verified website transactions; no mutable paid count
 The report includes **current active roster records even when they never started**, plus all students who started this event even if now inactive. DOB-unknown and under-21 students are marked separately from eligible students. Non-starter roster membership is not frozen historically; archive a CSV if a fixed historical roster denominator is needed. Eligibility uses the report date capped at the registration deadline. All document/payment joins and balances are event-specific.
 
 CSV includes a UTF-8 BOM for Excel and escapes spreadsheet-formula values. It includes registration status, payment status/verification attention, website amount/remaining balance, and saved-document indicators. Admin document links and backup status remain on the event page.
+
+## Local sample and design previews
+
+Visit `/admin/bootcamps/mockups` (or **Choose a layout** on the event list) to compare three interactive designs: Event desk, Operations board, and Compact ledger. Each previews the list → activation → edit → report flow inside the shared admin shell. They read the student roster, mark `floor(roster.length / 2)` students as fictionally registered, and show illustrative full/deposit balances. Preview controls never mutate the database or call payment/document services; refreshing resets the preview.
+
+Run `bun run db:seed:bootcamp` to create a persistent, closed `[DEMO] ASVAB intensive · November` event and started registrations for half of the fictional local roster. It uses the existing guarded local Compose target, requires the local admin and only `@example.test` students, and leaves existing roster records untouched. Reruns skip existing event/registration rows and refuse an opened/approved or renamed demo event. The report is `/admin/bootcamps/00000000-0000-4000-8000-00000000bc01/report`.
+
+The seeded report deliberately has no signed waivers, documents, legal approval, or verified payments. Payment balances in the three mockups are demo-only—not transaction evidence. Production routes and their safeguards remain unchanged.
 
 ## Validation
 

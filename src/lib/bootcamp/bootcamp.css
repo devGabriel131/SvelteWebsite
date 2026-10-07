@@ -59,7 +59,67 @@
 .bootcamp .bc-documents { display: grid; gap: 0.75rem; }
 .bootcamp .bc-documents a { text-decoration: underline; text-underline-offset: 0.2em; }
 .bootcamp .bc-document-status { display: block; color: var(--muted-foreground); font-size: 0.75rem; }
+/* The admin ledger stays inside the shared workspace shell. */
+.bootcamp.bc-ledger { display: grid; grid-template-columns: 11rem minmax(0, 1fr); border: 1px solid var(--border); border-radius: 0.75rem; background: var(--card); overflow: hidden; font-size: 0.85rem; }
+.bootcamp .bc-ledger-nav { display: flex; flex-direction: column; gap: 0.25rem; padding: 1rem 0.65rem; border-right: 1px solid var(--border); background: var(--muted); }
+.bootcamp .bc-ledger-nav > a { justify-content: flex-start; height: auto; min-height: 2.25rem; white-space: normal; text-align: left; font-size: 0.75rem; }
+.bootcamp .bc-ledger-nav > [aria-current=page] { background: var(--card); color: var(--foreground); box-shadow: 0 1px 3px color-mix(in srgb, var(--foreground) 6%, transparent); }
+.bootcamp .bc-ledger-main { min-width: 0; padding: clamp(1rem, 2.5vw, 1.75rem); }
+.bootcamp .bc-ledger-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.25rem; }
+.bootcamp .bc-ledger-heading h1 { font-family: inherit; font-size: clamp(1.35rem, 2.5vw, 1.75rem); font-weight: 650; letter-spacing: -0.03em; }
+.bootcamp .bc-ledger-heading > div { display: grid; gap: 0.35rem; }
+.bootcamp .bc-ledger-table :is(th, td) { padding: 0.65rem 0.75rem; vertical-align: middle; }
+.bootcamp .bc-ledger-table thead th { font-size: 0.7rem; color: var(--muted-foreground); white-space: nowrap; }
+.bootcamp .bc-ledger-table tbody th { background: transparent; font-size: 0.8rem; font-weight: 600; min-width: 12rem; }
+.bootcamp .bc-ledger-table td { font-size: 0.8rem; min-width: 6rem; }
+.bootcamp .bc-ledger-table tbody tr:last-child > * { border-bottom: 0; }
+.bootcamp .bc-ledger-table .bc-actions { gap: 0.4rem; min-width: 18rem; }
+.bootcamp .bc-ledger-table .bc-document-status { font-weight: 400; }
+.bootcamp .bc-ledger-event-link:hover { text-decoration: underline; text-underline-offset: 0.2em; }
+.bootcamp .bc-ledger-money { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bootcamp .bc-ledger-footer { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem; margin-top: 1rem; }
+.bootcamp .bc-ledger .bc-status { border-radius: 0.3rem; padding: 0.2rem 0.45rem; font-size: 0.68rem; }
+.bootcamp .bc-ledger .bc-actions { gap: 0.4rem; }
+.bootcamp .bc-ledger-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-block: 1px solid var(--border); margin: 1rem 0; padding: 1rem 0; }
+.bootcamp .bc-ledger-stats > div { padding-inline: 1rem; border-right: 1px solid var(--border); }
+.bootcamp .bc-ledger-stats > div:first-child { padding-left: 0; }
+.bootcamp .bc-ledger-stats > div:last-child { border: 0; }
+.bootcamp .bc-ledger-stats dt { font-size: 0.7rem; color: var(--muted-foreground); }
+.bootcamp .bc-ledger-stats dd { font-size: 1.35rem; font-weight: 650; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.bootcamp .bc-ledger-stats small { font-size: 0.8rem; color: var(--muted-foreground); font-weight: 400; }
+.bootcamp .bc-ledger-coverage { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; margin-bottom: 1rem; }
+.bootcamp .bc-ledger-coverage > div { padding: 0.85rem; border: 1px solid var(--border); border-radius: 0.5rem; }
+.bootcamp .bc-ledger-coverage h2 { font-size: 0.85rem; }
+.bootcamp .bc-ledger-coverage progress { display: block; width: 100%; height: 0.4rem; margin-block: 0.65rem; accent-color: var(--primary); }
+.bootcamp .bc-ledger-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-top: 1rem; }
+.bootcamp .bc-ledger-search { flex: 1 1 14rem; max-width: 26rem; }
+.bootcamp .bc-ledger input:not([type=hidden]):not([type=checkbox]) { min-height: 2.25rem; padding: 0.45rem 0.65rem; font-size: 0.8rem; }
+.bootcamp .bc-ledger-filters { margin-block: 0.65rem; }
+.bootcamp .bc-ledger-tools { border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 1rem; }
+.bootcamp .bc-ledger-tools summary { cursor: pointer; color: var(--muted-foreground); font-size: 0.75rem; }
+.bootcamp .bc-ledger-tools .bc-actions { margin-top: 0.75rem; }
+.bootcamp .bc-ledger-editor { display: grid; gap: 0.75rem; }
+.bootcamp .bc-ledger-editor .bc-stack { gap: 0.85rem; }
+.bootcamp .bc-ledger-form-table th { width: 28%; padding: 0.65rem 0.85rem; vertical-align: middle; }
+.bootcamp .bc-ledger-form-table td { padding: 0.6rem 0.85rem; vertical-align: middle; min-width: 0; }
+.bootcamp .bc-ledger-form-table tr:last-child > * { border-bottom: 0; }
+.bootcamp .bc-ledger-schedule { padding: 0.85rem; border: 1px solid var(--border); border-radius: 0.5rem; }
+.bootcamp .bc-ledger-legal { background: var(--muted); border: 1px solid var(--border); border-radius: 0.5rem; padding: 1rem; gap: 0.85rem; }
+.bootcamp .bc-ledger-legal h2 { font-size: 1rem; }
+.bootcamp .bc-ledger-legal summary { cursor: pointer; font-weight: 600; }
+.bootcamp .bc-ledger-legal .bc-legal-text { margin-top: 0.65rem; }
+.bootcamp .bc-ledger :is(a, summary, button):focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
+@media (max-width: 64rem) {
+	.bootcamp.bc-ledger { grid-template-columns: minmax(0, 1fr); }
+	.bootcamp .bc-ledger-nav { flex-direction: row; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--border); padding: 0.65rem; }
+	.bootcamp .bc-ledger-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem 0; }
+	.bootcamp .bc-ledger-stats > div:nth-child(2) { border-right: 0; }
+	.bootcamp .bc-ledger-stats > div:nth-child(3) { padding-left: 0; }
+}
 @media (max-width: 40rem) {
+	.bootcamp .bc-ledger-coverage { grid-template-columns: minmax(0, 1fr); }
+	.bootcamp .bc-ledger-form-table th { width: 35%; }
+	.bootcamp .bc-ledger-table .bc-actions > [data-slot=button] { flex: 0 0 auto; }
 	.bootcamp .bc-fields { grid-template-columns: minmax(0, 1fr); }
 	.bootcamp .bc-preview iframe { height: 24rem; }
 	.bootcamp .bc-actions > [data-slot=button] { flex: 1 1 auto; }
