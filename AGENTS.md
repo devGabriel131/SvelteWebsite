@@ -35,6 +35,8 @@
 - Prefer straightforward code over clever abstractions. Introduce abstractions when they clarify a real shared concept, not speculative future needs.
 - Fix nearby duplication when it is directly related to the work, without expanding into an unrelated refactor.
 - Keep changes focused and consistent with existing conventions. Months later, the code should read as though one mind wrote it.
+- Do not add extra chatter and flush to the pages of making references to the chat we have had into the page it self.
+- The UI should tell the story of where to go and how to interact with the page, not added text the mayority of the time, instructions are acceptable.
 
 ## Execution and validation
 

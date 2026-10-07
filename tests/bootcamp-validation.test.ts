@@ -6,7 +6,8 @@ import { webhookBody, webhookHints } from '../src/lib/server/bootcamp/webhook';
 const attemptId = 'a13e4517-2bc9-4abc-8def-0123456789ab';
 const reference = 'b24f5628-3cda-4bcd-9efa-123456789abc';
 const languages = ['en', 'es'] as const;
-const dateKeys = ['startsAt', 'endsAt', 'arrivalAt', 'registrationClosesAt'] as const;
+const scheduleKeys = ['eventDate', 'startTime', 'endTime'] as const;
+const derivedDateKeys = ['startsAt', 'endsAt', 'arrivalAt', 'registrationClosesAt'] as const;
 const spanishLegal = {
 	agreement: 'ACUERDO APROBADO  §1: Conservar  estas palabras exactas.\nSegundo párrafo: café — “aprobado”.',
 	liability: 'RELEVO APROBADO: No alterar la puntuación; excepciones (a), (b).',
@@ -22,8 +23,7 @@ function form(values: Record<string, string | Blob> = {}): FormData {
 function eventForm(overrides: Record<string, string | Blob> = {}): FormData {
 	const result = form({
 		title: 'Bootcamp de preparación', venue: 'San Juan, Puerto Rico',
-		startsAt: '2026-10-10T08:00', endsAt: '2026-10-10T16:00',
-		arrivalAt: '2026-10-10T07:30', registrationClosesAt: '2026-10-09T23:59:59',
+		eventDate: '2026-10-10', startTime: '08:00', endTime: '16:00',
 		legalApproved: 'true'
 	});
 	if (overrides.legalSource !== 'standard') for (const section of sectionKeys) result.set(`legal_es_${section}`, legal.es[section]);
@@ -154,60 +154,90 @@ describe('bootcamp scalar and employer fields', () => {
 	}
 });
 
-describe('event timestamps, legal text, and approval', () => {
-	test('interprets minute/second local inputs in Puerto Rico and returns canonical UTC dates', () => {
+describe('one-day event schedules, legal text, and approval', () => {
+	test('derives the four canonical UTC dates solely from the Puerto Rico date and minute-precision times', () => {
 		expect(eventFields(eventForm())).toEqual({
 			title: 'Bootcamp de preparación', venue: 'San Juan, Puerto Rico',
 			startsAt: new Date('2026-10-10T12:00:00.000Z'), endsAt: new Date('2026-10-10T20:00:00.000Z'),
-			arrivalAt: new Date('2026-10-10T11:30:00.000Z'), registrationClosesAt: new Date('2026-10-10T03:59:59.000Z'),
+			arrivalAt: new Date('2026-10-10T11:00:00.000Z'), registrationClosesAt: new Date('2026-10-10T00:00:00.000Z'),
 			legal, legalApproved: true
 		});
 	});
 
-	for (const day of ['2000-02-29', '2024-02-29', '2026-01-10', '2026-07-10']) {
-		test(`accepts real date ${day} without applying mainland daylight saving rules`, () => {
-			const result = eventFields(eventForm({
-				startsAt: `${day}T08:00:01`, endsAt: `${day}T16:00:02`,
-				arrivalAt: `${day}T07:30:03`, registrationClosesAt: `${day}T06:00:04`
-			}));
-			expect(result.startsAt.toISOString()).toBe(`${day}T12:00:01.000Z`);
-			expect(result.endsAt.toISOString()).toBe(`${day}T20:00:02.000Z`);
-			expect(result.arrivalAt.toISOString()).toBe(`${day}T11:30:03.000Z`);
-			expect(result.registrationClosesAt.toISOString()).toBe(`${day}T10:00:04.000Z`);
+	test.each([
+		['2027-01-01', '2026-12-31'], ['2026-03-01', '2026-02-28'], ['2024-03-01', '2024-02-29']
+	])('derives prior-day check-in and registration closure for %s without calendar truncation', (eventDate, previousDate) => {
+		expect(eventFields(eventForm({ eventDate, startTime: '00:30', endTime: '08:00' }))).toMatchObject({
+			startsAt: new Date(`${eventDate}T00:30:00-04:00`), endsAt: new Date(`${eventDate}T08:00:00-04:00`),
+			arrivalAt: new Date(`${previousDate}T23:30:00-04:00`), registrationClosesAt: new Date(`${previousDate}T12:30:00-04:00`)
 		});
-	}
+	});
 
-	for (const key of dateKeys) {
-		test(`${key} rejects missing, File, noncanonical, and impossible calendar/time values`, () => {
+	for (const key of scheduleKeys) {
+		test(`${key} is required canonical text, never a missing, blank or uploaded value`, () => {
 			const missing = eventForm();
 			missing.delete(key);
 			expectInvalid(() => eventFields(missing));
-			// Keep chronology valid even if a broken parser silently rolls an impossible date forward.
-			const bounds = {
-				startsAt: key === 'arrivalAt' || key === 'registrationClosesAt' ? '2100-01-01T00:00' : '1899-01-01T00:00',
-				endsAt: '2101-01-01T00:00', arrivalAt: '1898-01-01T00:00', registrationClosesAt: '1898-01-01T00:00'
-			};
-			for (const value of [
-				'', '2026-10-10', '2026-1-10T08:00', '2026-10-1T08:00', '2026-10-10T8:00', '2026-10-10T08:0',
-				'2026-10-10 08:00', '2026-10-10t08:00', '2026/10/10T08:00', '10/10/2026 08:00',
-				'2026-10-10T08:00Z', '2026-10-10T08:00-04:00', '2026-10-10T08:00:00.001',
-				'1900-02-29T08:00', '2026-02-29T08:00', '2024-02-30T08:00', '2026-04-31T08:00',
-				'2026-00-10T08:00', '2026-13-10T08:00', '2026-10-00T08:00', '2026-10-32T08:00',
-				'2026-10-10T24:00', '2026-10-10T23:60', '2026-10-10T23:59:60', new File(['2026-10-10T08:00'], 'date.txt')
-			]) expectInvalid(() => eventFields(eventForm({ ...bounds, [key]: value })));
+			const valid = String(eventForm().get(key));
+			for (const value of ['', ' ', ` ${valid}`, `${valid} `, `${valid}\n`, `${valid}\0`, new File([valid], 'schedule.txt')]) {
+				expectInvalid(() => eventFields(eventForm({ [key]: value })));
+			}
 		});
 	}
 
-	test('permits arrival and registration closure at the start, but requires the end strictly later', () => {
-		const equal = eventFields(eventForm({ arrivalAt: '2026-10-10T08:00', registrationClosesAt: '2026-10-10T08:00' }));
-		expect(equal.arrivalAt).toEqual(equal.startsAt);
-		expect(equal.registrationClosesAt).toEqual(equal.startsAt);
-		expect(eventFields(eventForm({ endsAt: '2026-10-10T08:00:01' })).endsAt.toISOString()).toBe('2026-10-10T12:00:01.000Z');
-		for (const [key, value] of [
-			['endsAt', '2026-10-10T08:00'], ['endsAt', '2026-10-10T07:59:59'],
-			['arrivalAt', '2026-10-10T08:00:01'], ['registrationClosesAt', '2026-10-10T08:00:01']
-		]) expectInvalid(() => eventFields(eventForm({ [key]: value })));
+	test.each([
+		'1900-02-29', '2026-02-29', '2024-02-30', '2026-04-31', '2026-00-10', '2026-13-10',
+		'2026-10-00', '2026-10-32', '2026-1-10', '2026-10-1', '2026/10/10', '10/10/2026',
+		'2026-10-10T08:00', '2026-10-10Z'
+	])('rejects noncanonical or impossible event date %j', (eventDate) => {
+		expectInvalid(() => eventFields(eventForm({ eventDate })));
 	});
+
+	test.each([
+		'8:00', '08:0', '24:00', '12:60', '08:00 AM', '08:00:00', '08:00:01', '08:00:00.001',
+		'08:00Z', '08:00-04:00', '2026-10-10T08:00'
+	])('rejects invalid minute-precision time %j in either field', (value) => {
+		for (const key of ['startTime', 'endTime']) {
+			expectInvalid(() => eventFields(eventForm({ startTime: '00:00', endTime: '23:59', [key]: value })));
+		}
+	});
+
+	test('requires a strictly later end on the same Puerto Rico date, not an overnight rollover', () => {
+		expect(eventFields(eventForm({ endTime: '08:01' })).endsAt.toISOString()).toBe('2026-10-10T12:01:00.000Z');
+		for (const [startTime, endTime] of [['08:00', '08:00'], ['08:00', '07:59'], ['23:00', '01:00'], ['23:59', '00:00']]) {
+			expectInvalid(() => eventFields(eventForm({ startTime, endTime })));
+		}
+	});
+
+	for (const legalSource of ['standard', 'custom']) {
+		test(`${legalSource} ignores all forged derived fields, including a multi-day end and invalid uploads`, () => {
+			const expected = eventFields(eventForm({ legalSource }));
+			const forged = eventForm({ legalSource, startsAt: '2030-01-01T08:00', endsAt: '2030-01-03T16:00',
+				arrivalAt: '2030-01-01T08:00', registrationClosesAt: '2030-01-01T08:00' });
+			const before = [...forged.entries()];
+			expect(eventFields(forged)).toEqual(expected);
+			expect([...forged.entries()]).toEqual(before);
+			for (const value of ['', 'not a date', 'invalid\0', 'x'.repeat(30001), new File(['forged'], 'date.txt')]) {
+				for (const key of derivedDateKeys) forged.set(key, value);
+				expect(eventFields(forged)).toEqual(expected);
+			}
+		});
+
+		test(`${legalSource} never falls back to the old four-timestamp contract`, () => {
+			const input = eventForm({ legalSource, startsAt: '2026-10-10T08:00', endsAt: '2026-10-10T16:00',
+				arrivalAt: '2026-10-10T07:00', registrationClosesAt: '2026-10-09T20:00' });
+			for (const key of scheduleKeys) {
+				const value = input.get(key)!;
+				input.delete(key);
+				expectInvalid(() => eventFields(input));
+				input.set(key, 'invalid');
+				expectInvalid(() => eventFields(input));
+				input.set(key, value);
+			}
+			for (const key of scheduleKeys) input.delete(key);
+			expectInvalid(() => eventFields(input));
+		});
+	}
 
 	test('preserves the three Spanish custom sections exactly in both compatibility language slots', () => {
 		expect(sectionKeys).toEqual(['agreement', 'liability', 'media']);
@@ -269,18 +299,30 @@ describe('event timestamps, legal text, and approval', () => {
 	});
 
 	test('standard source needs no manual legal fields and generates Spanish from canonical event fields', () => {
-		const input = eventForm({ legalSource: 'standard', venue: '  An\u0303asco ', startsAt: '2027-02-11T22:03:04',
-			endsAt: '2027-02-11T23:30:00', arrivalAt: '2027-02-11T21:30:05' });
+		const input = eventForm({ legalSource: 'standard', venue: '  An\u0303asco ',
+			eventDate: '2027-02-11', startTime: '22:03', endTime: '23:30' });
 		expect([...input.keys()].some((key) => key.startsWith('legal_'))).toBe(false);
 		const before = [...input.entries()];
 		const saved = eventFields(input);
 		expect(saved.legal.en).toEqual(saved.legal.es);
 		expect(saved.legalApproved).toBe(true);
-		for (const value of ['Añasco', '11 de febrero de 2027', '21:30:05', '22:03:04', '$30.00', '$15.00']) {
+		for (const value of ['Añasco', '11 de febrero de 2027', '21:03:00', '22:03:00', '$30.00', '$15.00']) {
 			expect(saved.legal.es.agreement).toContain(value);
 		}
 		expect(Object.values(saved.legal.es).join('\n')).not.toMatch(/\{\w+\}/);
 		expect([...input.entries()]).toEqual(before);
+	});
+
+	test.each([
+		['2027-01-01', '1 de enero de 2027', '31 de diciembre de 2026'],
+		['2024-03-01', '1 de marzo de 2024', '29 de febrero de 2024']
+	])('standard legal text for %s includes the actual previous-date check-in, not the registration deadline', (eventDate, eventLabel, arrivalLabel) => {
+		const saved = eventFields(eventForm({ legalSource: 'standard', eventDate, startTime: '00:30', endTime: '08:00' }));
+		expect(saved.legal.es.agreement).toContain(`Fecha del Evento\n${eventLabel}, en`);
+		expect(saved.legal.es.agreement).toContain(`El registro comienza a las 23:30:00 (${arrivalLabel}).`);
+		expect(saved.legal.es.agreement).toContain('No se aceptarán estudiantes después de las 00:30:00.');
+		expect(saved.legal.es.agreement).not.toContain('12:30:00');
+		expect(saved.legal.en).toEqual(saved.legal.es);
 	});
 
 	test('standard source ignores tampered submitted clauses rather than validating or storing them', () => {
@@ -296,12 +338,13 @@ describe('event timestamps, legal text, and approval', () => {
 		const original = eventFields(eventForm({ legalSource: 'standard' }));
 		const before = structuredClone(original);
 		const input = eventForm({ legalSource: 'standard', venue: 'Cancha Nueva de Ponce',
-			startsAt: '2027-02-12T13:15:16', endsAt: '2027-02-13T18:00:00', arrivalAt: '2027-02-12T12:10:11' });
+			eventDate: '2027-02-12', startTime: '13:15', endTime: '18:00' });
 		for (const section of sectionKeys) input.set(`legal_es_${section}`, original.legal.es[section]);
 		const saved = eventFields(input);
 		expect(saved.legal.en).toEqual(saved.legal.es);
-		expect(saved.legal.es.agreement).toMatch(/12.*13 de febrero de 2027/s);
-		for (const value of ['Cancha Nueva de Ponce', '12:10:11', '13:15:16']) expect(saved.legal.es.agreement).toContain(value);
+		expect(saved.legal.es.agreement).toContain('Fecha del Evento\n12 de febrero de 2027, en');
+		for (const value of ['Cancha Nueva de Ponce', 'El registro comienza a las 12:15:00.',
+			'No se aceptarán estudiantes después de las 13:15:00.']) expect(saved.legal.es.agreement).toContain(value);
 		for (const section of ['agreement', 'liability'] as const) {
 			expect(saved.legal.es[section]).not.toContain('San Juan, Puerto Rico');
 			expect(saved.legal.es[section]).not.toContain('10 de octubre de 2026');
@@ -311,7 +354,7 @@ describe('event timestamps, legal text, and approval', () => {
 
 	test('custom edits keep manual dates, placeholders, spaces and punctuation instead of regenerating clauses', () => {
 		const input = eventForm({ legalSource: 'custom', venue: 'Cancha Nueva de Ponce',
-			startsAt: '2027-02-12T13:15:16', endsAt: '2027-02-13T18:00:00', arrivalAt: '2027-02-12T12:10:11',
+			eventDate: '2027-02-12', startTime: '13:15', endTime: '18:00',
 			legal_es_agreement: 'Acuerdo  especial: 1 de agosto de 2026, {venue}.\nSin sustituciones.' });
 		const saved = eventFields(input);
 		expect(saved.legal.es.agreement).toBe(input.get('legal_es_agreement') as string);
@@ -321,13 +364,13 @@ describe('event timestamps, legal text, and approval', () => {
 	});
 
 	test('standard mode still enforces chronology, required fields, approval and PDF-safe dynamic venue', () => {
-		for (const key of ['title', 'venue', ...dateKeys]) {
+		for (const key of ['title', 'venue', ...scheduleKeys]) {
 			const input = eventForm({ legalSource: 'standard' });
 			input.delete(key);
 			expectInvalid(() => eventFields(input));
 		}
-		for (const [key, value] of [['endsAt', '2026-10-10T08:00'], ['arrivalAt', '2026-10-10T08:00:01'],
-			['registrationClosesAt', '2026-10-10T08:00:01'], ['startsAt', '2026-02-30T08:00']]) {
+		for (const [key, value] of [['endTime', '08:00'], ['endTime', '07:59'], ['startTime', '23:00'],
+			['startTime', '08:00:01'], ['endTime', '16:00:00'], ['eventDate', '2026-02-30']]) {
 			expectInvalid(() => eventFields(eventForm({ legalSource: 'standard', [key]: value })));
 		}
 		for (const key of ['title', 'venue']) for (const value of ['Cancha 🖊', 'Cancha\u2011Nueva', 'Cancha\tNueva']) {

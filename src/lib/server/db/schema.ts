@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { boolean, check, date, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { boolean, check, date, integer, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 
 export const studentGenders = ['male', 'female'] as const;
 export const studentClassTypes = ['basic', 'regular'] as const;
@@ -31,6 +31,22 @@ export const students = pgTable(
 		check('students_class_type_valid', sql`${table.classType} IN ('basic', 'regular')`)
 	]
 );
+
+// Local demonstration values only; not an exam grading or percentile contract.
+export const studentSubjectScores = pgTable('student_subject_scores', {
+	studentId: uuid('student_id').primaryKey().references(() => students.id, { onDelete: 'cascade' }),
+	ar: integer('ar').notNull(),
+	pc: integer('pc').notNull(),
+	wk: integer('wk').notNull(),
+	mk: integer('mk').notNull(),
+	isFixture: boolean('is_fixture').default(true).notNull(),
+	createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull()
+}, (table) => [
+	check('student_subject_scores_fixture_only', sql`${table.isFixture} = true`),
+	...(['ar', 'pc', 'wk', 'mk'] as const).map((subject) =>
+		check(`student_subject_scores_${subject}_range`, sql`${table[subject]} BETWEEN 0 AND 100`)
+	)
+]);
 
 export type Student = typeof students.$inferSelect;
 export type NewStudent = typeof students.$inferInsert;

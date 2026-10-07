@@ -15,15 +15,14 @@
 	import * as Alert from '#lib/components/ui/alert/index.js';
 	import type { PageProps } from './$types';
 	import { useLanguage } from '#lib/i18n/language.svelte.ts';
-	import { sampleStudents, type AdminSection, type AdminStudent } from '#lib/admin/demo.ts';
+	import { type AdminSection } from '#lib/admin/demo.ts';
 	import '#lib/admin/admin.css';
 
 	let { data }: PageProps = $props();
 	const language = useLanguage();
 	const messages = $derived(language.messages.admin);
 	const section = $derived(resolveAdminSection(page.url.searchParams.get('section')));
-	let students = $state<AdminStudent[]>(sampleStudents.map((student) => ({ ...student })));
-	let openAdd = $state(false);
+	const students = $derived(data.students);
 	let title = $state<HTMLHeadingElement>();
 	const intro = $derived(messages.intro[section]);
 
@@ -60,12 +59,11 @@
 	</div>
 {:else}
 	<div class="admin-overview">
-		<Alert.Root role="note" class="preview-banner border-warning/30 bg-warning/10 text-muted-foreground"><span class="preview-light" aria-hidden="true"></span><strong class="mono shrink-0 text-[0.59rem] font-medium uppercase tracking-[0.05em] text-warning">{messages.prototype}</strong><span class="preview-copy">{messages.prototypeNote}</span></Alert.Root>
+		<Alert.Root role="note" class="preview-banner border-warning/30 bg-warning/10 text-muted-foreground"><span class="preview-light" aria-hidden="true"></span><strong class="mono shrink-0 text-[0.59rem] font-medium uppercase tracking-[0.05em] text-warning">{messages.prototype}</strong><span class="preview-copy">{messages.roster.workspaceNote}</span></Alert.Root>
 
 		<section class="page-intro" aria-labelledby="console-title">
 			<div class="intro-copy"><p class="eyebrow">{intro.eyebrow}</p><h1 id="console-title" tabindex="-1" bind:this={title}>{intro.title}<span aria-hidden="true">.</span></h1><p class="intro-description">{intro.description}</p></div>
 			<div class="intro-instrument" aria-hidden="true"><svg viewBox="0 0 160 120" fill="none"><circle cx="80" cy="60" r="44" /><circle cx="80" cy="60" r="28" /><path class="instrument-guides" d="M80 0v120M0 60h160M7 16h20M17 6v20M133 104h20M143 94v20" /><path class="jet" d="M80 17l5 31 34 25v8L85 69l-1 24 10 9v4l-14-5-14 5v-4l10-9-1-24-34 12v-8l34-25z" /></svg></div>
-			{#if section === 'overview'}<Button class="hero-action z-10 shrink-0 text-[0.76rem] font-bold" type="button" onclick={() => openAdd = true}><AdminIcon name="plus" size={17} />{messages.overview.addStudent}</Button>{/if}
 		</section>
 
 		{#if section === 'overview'}
@@ -73,8 +71,8 @@
 		{/if}
 
 		<div id="console-view">
-			{#if section === 'overview'}<AdminOverview bind:students bind:openAdd onNavigate={navigate} />
-			{:else if section === 'students'}<AdminStudents bind:students bind:openAdd />{/if}
+			{#if section === 'overview'}<AdminOverview {students} />
+			{:else if section === 'students'}<AdminStudents {students} />{/if}
 			<AdminOperations {section} {students} />
 		</div>
 	</div>

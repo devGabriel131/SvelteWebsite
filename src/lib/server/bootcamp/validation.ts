@@ -1,6 +1,6 @@
 import { sectionKeys, type EmployerDetails, type LegalText } from '../../bootcamp/types';
 import { defaultLegalText } from '../../bootcamp/legal';
-import { parseEventLocalDate } from '../../bootcamp/rules';
+import { parseEventSchedule } from '../../bootcamp/rules';
 import type { Language } from '../../i18n/translations';
 import { isSupportedPdfText } from '../../bootcamp/pdf-text';
 
@@ -28,17 +28,10 @@ export function revisionField(form: FormData): number {
 	if (!Number.isSafeInteger(value) || value < 1) throw new BootcampError('invalid');
 	return value;
 }
-function localDate(form: FormData, key: string): Date {
-	const result = parseEventLocalDate(field(form, key, 19));
-	if (!result) throw new BootcampError('invalid');
-	return result;
-}
 export function eventFields(form: FormData) {
-	const startsAt = localDate(form, 'startsAt');
-	const endsAt = localDate(form, 'endsAt');
-	const arrivalAt = localDate(form, 'arrivalAt');
-	const registrationClosesAt = localDate(form, 'registrationClosesAt');
-	if (endsAt <= startsAt || arrivalAt > startsAt || registrationClosesAt > startsAt) throw new BootcampError('invalid');
+	const schedule = parseEventSchedule(field(form, 'eventDate', 10), field(form, 'startTime', 5), field(form, 'endTime', 5));
+	if (!schedule) throw new BootcampError('invalid');
+	const { startsAt, endsAt, arrivalAt, registrationClosesAt } = schedule;
 	const title = field(form, 'title');
 	const venue = field(form, 'venue', 300);
 	const source = form.get('legalSource');

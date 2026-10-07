@@ -14,6 +14,7 @@ import { rateLimit, session, user } from '../src/lib/server/db/auth-schema';
 import { createDatabase, type DatabaseConnection } from '../src/lib/server/db/connection';
 import { load as loadRootLayout } from '../src/routes/+layout.server';
 import { load as loadAdminPage } from '../src/routes/admin/+page.server';
+import { loadAdminRoster, readAdminRoster } from '../src/lib/server/admin-roster';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const describeDatabase = databaseUrl ? describe : describe.skip;
@@ -258,7 +259,7 @@ describeDatabase('auth hook with real Better Auth and isolated PostgreSQL fixtur
 			return Response.json(await loadAdminPage({ locals } as Parameters<typeof loadAdminPage>[0]));
 		});
 		expect(response.status).toBe(200);
-		expect(await response.json()).toEqual({ isAdmin: false, localAdmin: false });
+		expect(await response.json()).toEqual({ isAdmin: false, localAdmin: false, students: [] });
 		expect(audiences).toEqual([]);
 		expect(addressCalls).toBe(0);
 	});
@@ -310,7 +311,9 @@ describeDatabase('auth hook with real Better Auth and isolated PostgreSQL fixtur
 				expect(layoutHeaders.get('cache-control')).toBe('private, no-store');
 				expect(getAdminPageState(locals)).toEqual({ isAdmin: true });
 				if (path === '/admin') {
-					expect(await loadAdminPage({ locals } as Parameters<typeof loadAdminPage>[0])).toEqual({ isAdmin: true, localAdmin: false });
+					expect(await loadAdminRoster(locals, () => connection.db)).toEqual({
+											isAdmin: true, localAdmin: false, students: await readAdminRoster(connection.db)
+										});
 				}
 				expect(locals.session?.id).toBe(storedSession.id);
 			}, path);

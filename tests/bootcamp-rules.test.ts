@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { balance, csvCell, isAdult, registrationAvailable, registrationStatus, signingDate, validBirthDate } from '../src/lib/bootcamp/rules';
+import { balance, csvCell, isAdult, parseEventSchedule, registrationAvailable, registrationStatus, signingDate, validBirthDate } from '../src/lib/bootcamp/rules';
 import { depositCents, eventTimeZone, priceCents, type BootcampEvent } from '../src/lib/bootcamp/types';
 
 const now = new Date('2026-10-06T04:00:00.000Z');
@@ -17,6 +17,84 @@ function event(overrides: Partial<BootcampEvent> = {}): BootcampEvent {
 		...overrides
 	};
 }
+
+describe('one-day Puerto Rico admin schedules', () => {
+	test.each(['2026-01-10', '2026-07-10', '2000-02-29', '2024-02-29'])(
+		'uses the fixed UTC-04:00 offset on %s and derives check-in and registration closure', (eventDate) => {
+			const schedule = parseEventSchedule(eventDate, '13:15', '18:00');
+			expect(schedule).toEqual({
+				startsAt: new Date(`${eventDate}T17:15:00.000Z`), endsAt: new Date(`${eventDate}T22:00:00.000Z`),
+				arrivalAt: new Date(`${eventDate}T16:15:00.000Z`), registrationClosesAt: new Date(`${eventDate}T05:15:00.000Z`)
+			});
+			expect(schedule!.startsAt.getTime() - schedule!.arrivalAt.getTime()).toBe(3_600_000);
+			expect(schedule!.startsAt.getTime() - schedule!.registrationClosesAt.getTime()).toBe(43_200_000);
+		}
+	);
+
+	test.each(['2026-03-08', '2026-11-01'])(
+		'does not skip or repeat Puerto Rico hours on mainland DST transition %s', (eventDate) => {
+			expect(parseEventSchedule(eventDate, '01:30', '03:30')).toMatchObject({
+				startsAt: new Date(`${eventDate}T05:30:00.000Z`), endsAt: new Date(`${eventDate}T07:30:00.000Z`),
+				arrivalAt: new Date(`${eventDate}T04:30:00.000Z`)
+			});
+			expect(parseEventSchedule(eventDate, '02:30', '03:30')?.startsAt.toISOString()).toBe(`${eventDate}T06:30:00.000Z`);
+		}
+	);
+
+	test.each([
+		['2027-01-01', '2026-12-31'], ['2026-03-01', '2026-02-28'],
+		['2024-03-01', '2024-02-29'], ['2024-02-29', '2024-02-28'], ['2026-10-10', '2026-10-09']
+	])('derives prior-day check-in and closure for %s across calendar boundaries', (eventDate, previousDate) => {
+		const schedule = parseEventSchedule(eventDate, '00:30', '08:00');
+		expect(schedule).toEqual({
+			startsAt: new Date(`${eventDate}T04:30:00.000Z`), endsAt: new Date(`${eventDate}T12:00:00.000Z`),
+			arrivalAt: new Date(`${previousDate}T23:30:00-04:00`), registrationClosesAt: new Date(`${previousDate}T12:30:00-04:00`)
+		});
+		expect(signingDate(schedule!.arrivalAt)).toBe(previousDate);
+		expect(signingDate(schedule!.registrationClosesAt)).toBe(previousDate);
+	});
+
+	test('a single Puerto Rico date can cross midnight and New Year in UTC', () => {
+		expect(parseEventSchedule('2026-12-31', '19:30', '23:59')).toEqual({
+			startsAt: new Date('2026-12-31T23:30:00.000Z'), endsAt: new Date('2027-01-01T03:59:00.000Z'),
+			arrivalAt: new Date('2026-12-31T22:30:00.000Z'), registrationClosesAt: new Date('2026-12-31T11:30:00.000Z')
+		});
+	});
+
+	test('accepts minute precision from 00:00 through 23:59 and a one-minute event', () => {
+		expect(parseEventSchedule('2026-10-10', '00:00', '23:59')).toEqual({
+			startsAt: new Date('2026-10-10T04:00:00.000Z'), endsAt: new Date('2026-10-11T03:59:00.000Z'),
+			arrivalAt: new Date('2026-10-10T03:00:00.000Z'), registrationClosesAt: new Date('2026-10-09T16:00:00.000Z')
+		});
+		const schedule = parseEventSchedule('2026-10-10', '08:00', '08:01');
+		expect(schedule).not.toBeNull();
+		expect(schedule!.endsAt.getTime() - schedule!.startsAt.getTime()).toBe(60_000);
+	});
+
+	test.each([
+		'', ' ', '1900-02-29', '2100-02-29', '2026-02-29', '2024-02-30', '2026-04-31',
+		'2026-00-10', '2026-13-10', '2026-10-00', '2026-10-32', '2026-1-10', '2026-10-1',
+		'26-10-10', '10000-10-10', '2026/10/10', '10/10/2026', '2026-10-10T08:00',
+		'2026-10-10Z', ' 2026-10-10', '2026-10-10 ', '2026-10-10\n', '2026-10-10\0'
+	])('rejects noncanonical or impossible event date %j instead of rolling it forward', (eventDate) => {
+		expect(parseEventSchedule(eventDate, '08:00', '16:00')).toBeNull();
+	});
+
+	test.each([
+		'', ' ', '8:00', '08:0', '008:00', '0800', '8 AM', '08:00 AM', '08.00',
+		'24:00', '25:00', '12:60', '-01:00', '08:00:00', '08:00:01', '08:00:00.001',
+		'08:00Z', '08:00-04:00', '2026-10-10T08:00', ' 08:00', '08:00 ', '08:00\n', '08:00\0'
+	])('rejects noncanonical or impossible time %j in either field, including seconds', (time) => {
+		expect(parseEventSchedule('2026-10-10', time, '23:59')).toBeNull();
+		expect(parseEventSchedule('2026-10-10', '00:00', time)).toBeNull();
+	});
+
+	test.each([['08:00', '08:00'], ['08:00', '07:59'], ['23:00', '01:00'], ['23:59', '00:00']])(
+		'rejects equal, reversed or overnight range %s–%s instead of moving the end to tomorrow', (startTime, endTime) => {
+			expect(parseEventSchedule('2026-10-10', startTime, endTime)).toBeNull();
+		}
+	);
+});
 
 describe('Puerto Rico signing dates and the 21-year eligibility boundary', () => {
 	test('uses Puerto Rico, not UTC or a US timezone with daylight saving time', () => {

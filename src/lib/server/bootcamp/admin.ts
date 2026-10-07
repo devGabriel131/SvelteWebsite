@@ -1,13 +1,12 @@
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { Database } from '../db/connection';
-import { user } from '../db/auth-schema';
 import { students } from '../db/schema';
-import { bootcampAccounts as accounts, bootcampDocuments as documents, bootcampEvents as events, bootcampPayments as payments, bootcampRegistrations as registrations } from '../db/bootcamp-schema';
+import { bootcampDocuments as documents, bootcampEvents as events, bootcampPayments as payments, bootcampRegistrations as registrations } from '../db/bootcamp-schema';
 import { balance, csvCell, isAdult, registrationStatus } from '../../bootcamp/rules';
-import type { AdminBootcampPage, ReportRow } from '../../bootcamp/types';
+import type { ReportRow } from '../../bootcamp/types';
 import { translations, type Language } from '../../i18n/translations';
 import { eventView } from './registration';
-import { BootcampError, eventFields, field, id, revisionField } from './validation';
+import { BootcampError, eventFields, id, revisionField, uuidPattern } from './validation';
 
 export async function eventReport(db: Database, eventId: string, now = new Date()): Promise<ReportRow[]> {
 	id(eventId);
@@ -31,13 +30,30 @@ export async function eventReport(db: Database, eventId: string, now = new Date(
 	});
 }
 
-export async function adminPage(db: Database, eventId: string | null, paymentEnabled: boolean, driveEnabled: boolean): Promise<AdminBootcampPage> {
-	const all = await db.select().from(events).orderBy(desc(events.startsAt));
-	const selected = eventId ? all.find((e) => e.id === eventId) : all[0];
-	return { events: all.map(eventView), selectedEventId: selected?.id ?? null, report: selected ? await eventReport(db, selected.id) : [], paymentEnabled, driveEnabled };
+export async function listEvents(db: Database) {
+	return (await db.select().from(events).orderBy(desc(events.startsAt))).map(eventView);
 }
 
-export async function saveEvent(db: Database, adminId: string, form: FormData) {
+export async function getEvent(db: Database, eventId: unknown) {
+	if (typeof eventId !== 'string' || eventId.length !== 36 || !uuidPattern.test(eventId)) return null;
+	const [event] = await db.select().from(events).where(eq(events.id, eventId));
+	return event ? eventView(event) : null;
+}
+
+export async function activateEvent(db: Database, adminId: string, form: FormData) {
+	// Creation accepts event details only, never an existing ID or browser-supplied approval/legal text.
+	const details = new FormData();
+	for (const key of ['title', 'venue', 'eventDate', 'startTime', 'endTime']) {
+		const value = form.get(key);
+		if (value !== null) details.set(key, value);
+	}
+	details.set('legalSource', 'standard');
+	details.set('legalApproved', 'false');
+	return saveEvent(db, adminId, details);
+}
+
+export async function saveEvent(db: Database, adminId: string, form: FormData, expectedEventId?: string) {
+	if (expectedEventId !== undefined && id(form.get('id')) !== id(expectedEventId)) throw new BootcampError('invalid');
 	const values = eventFields(form);
 	const approvedBy = values.legalApproved ? adminId : null;
 	const eventId = form.get('id');
@@ -59,20 +75,6 @@ export async function toggleEvent(db: Database, form: FormData, ready: boolean) 
 		if (!event || event.revision !== revisionField(form)) throw new BootcampError('stale');
 		if (open === 'true' && (!ready || !event.legalApproved || event.registrationClosesAt <= new Date())) throw new BootcampError('unavailable');
 		await tx.update(events).set({ registrationOpen: open === 'true', updatedAt: new Date() }).where(eq(events.id, eventId));
-	});
-}
-export async function linkStudent(db: Database, adminId: string, form: FormData) {
-	const studentEmail = field(form, 'studentEmail', 254).toLowerCase();
-	const accountEmail = field(form, 'accountEmail', 254).toLowerCase();
-	await db.transaction(async (tx) => {
-		const [student] = await tx.select().from(students).where(sql`lower(btrim(${students.email})) = ${studentEmail}`).for('update');
-		const [account] = await tx.select().from(user).where(and(sql`lower(btrim(${user.email})) = ${accountEmail}`, eq(user.role, 'student'))).for('update');
-		if (!student || !account) throw new BootcampError('invalid');
-		const [existing] = await tx.select().from(accounts).where(eq(accounts.userId, account.id));
-		if (existing) { if (existing.studentId === student.id) return; throw new BootcampError('invalid'); }
-		const [used] = await tx.select().from(accounts).where(eq(accounts.studentId, student.id));
-		if (used) throw new BootcampError('invalid');
-		await tx.insert(accounts).values({ userId: account.id, studentId: student.id, linkedBy: adminId });
 	});
 }
 

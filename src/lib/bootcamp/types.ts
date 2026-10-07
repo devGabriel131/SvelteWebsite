@@ -67,13 +67,7 @@ export type ReportRow = {
 	paymentUncertain?: boolean;
 	documents: { id: string; kind: DocumentKind; backupStatus: string }[];
 };
-export type AdminBootcampPage = {
-	events: BootcampEvent[];
-	selectedEventId: string | null;
-	report: ReportRow[];
-	paymentEnabled: boolean;
-	driveEnabled: boolean;
-};
+
 export const priceCents = 3000;
 export const depositCents = 1500;
 export const eventTimeZone = 'America/Puerto_Rico';

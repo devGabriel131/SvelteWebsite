@@ -31,13 +31,13 @@ export const variables = defineEnvVars({
 		public: false,
 		static: false,
 		schema: (value: string | undefined) => value,
-		description: 'Google OAuth client ID; required when Drive report archiving is enabled.'
+		description: 'Google OAuth client ID shared by Drive report archiving and Gmail sending.'
 	},
 	GOOGLE_OAUTH_CLIENT_SECRET: {
 		public: false,
 		static: false,
 		schema: (value: string | undefined) => value,
-		description: 'Server-only Google OAuth client secret for Drive report archiving.'
+		description: 'Server-only Google OAuth client secret shared by Drive report archiving and Gmail sending.'
 	},
 	DRIVE_OAUTH_REFRESH_TOKEN: {
 		public: false,
@@ -50,6 +50,24 @@ export const variables = defineEnvVars({
 		static: false,
 		schema: (value: string | undefined) => value,
 		description: 'Private destination folder ID for every generated English and Spanish report.'
+	},
+	GOOGLE_OAUTH_REFRESH_TOKEN: {
+		public: false,
+		static: false,
+		schema: (value: string | undefined) => value,
+		description: 'Server-only Gmail OAuth refresh token with gmail.send scope; legacy name, separate from DRIVE_OAUTH_REFRESH_TOKEN.'
+	},
+	GMAIL_SENDER_ADDRESS: {
+		public: false,
+		static: false,
+		schema: (value: string | undefined) => value,
+		description: 'Gmail sender mailbox for the authenticated Google user or a verified send-as address; required only when sending.'
+	},
+	EMAIL_TEST_MODE: {
+		public: false,
+		static: false,
+		schema: (value: string | undefined) => value,
+		description: 'Gmail test mode: 1/true/yes/on sends real email only to the sender; 0/false/no/off/blank defaults to normal sending.'
 	},
 	ATH_PUBLIC_TOKEN: {
 		public: false, static: false, schema: (value: string | undefined) => value,

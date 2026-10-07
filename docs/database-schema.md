@@ -12,9 +12,15 @@
 - Drizzle ORM with postgres.js provides typed server queries; Drizzle Kit generates committed SQL/snapshots/journal, and the standard migrator applies them explicitly through `bun run db:migrate`. No extension or PIN storage is introduced.
 - `bun run db:seed` explicitly inserts three fictitious profiles with stable IDs and reserved addresses into known local targets only, without overwriting existing records or creating auth accounts. The seed refuses production/hosted execution and checks both the URL and actual database identity.
 - `compose.test.yaml` supplies a separate disposable PostgreSQL 18 test database on port 5434. `bun run db:test` opts into integration tests; normal tests skip them without `TEST_DATABASE_URL`. The persistent local database on port 5433 is not modified by tests.
-- No route or browser feature imports the database. `DATABASE_URL` is private, runtime-read, and optional until a database operation is requested, so normal development does not gain a database or mock-identity requirement. Active-state enforcement on protected requests belongs to the later auth integration; this migration does not protect today's preview pages.
+- The authenticated admin server load now reads the student roster; browser components never import the database. `DATABASE_URL` is private, runtime-read, and optional until a database operation is requested, so normal development does not gain a database or mock-identity requirement. Active-state enforcement on protected requests belongs to the later auth integration; this migration does not protect today's preview pages.
 
 See [README database commands](../README.md#local-postgresql) for setup, generation, migrations, seeds, and test teardown.
+
+## Admin subject-score fixtures
+
+`drizzle/0007_student_subject_scores.sql` adds one optional score row per student. `student_id` is both the primary key and a foreign key to `students.id` (`ON DELETE CASCADE`). AR, PC, WK, and MK are required integers constrained to 0–100. `is_fixture` is required and constrained to true: this is deliberately demonstration storage, not a validated ASVAB grading or percentile contract. There is no overall score or roster progress calculation.
+
+The admin page reads all students with a left join, only after checking verified admin identity. Missing scores display as unavailable, never zero. The bilingual UI identifies fictional scores. The guarded `bun run db:seed:subject-scores` command requires all 100 exact `fake.student.001..100@example.test` addresses with `Test`/`(Test)` surname markers, inserts arbitrary fictional values, and preserves existing students and scores. It does not seed other students or create login accounts.
 
 ## Implemented game-history migration scope
 

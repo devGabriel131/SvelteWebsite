@@ -1,6 +1,7 @@
 <script lang="ts">
 	import AdminIcon from '#lib/admin/AdminIcon.svelte';
-	import { previewLink, type AdminSection, type AdminStudent } from '#lib/admin/demo.ts';
+	import { previewLink, type AdminSection } from '#lib/admin/demo.ts';
+	import type { AdminStudent } from '#lib/admin/roster.ts';
 	import { useLanguage } from '#lib/i18n/language.svelte.ts';
 	import * as Alert from '#lib/components/ui/alert/index.js';
 	import { Badge } from '#lib/components/ui/badge/index.js';

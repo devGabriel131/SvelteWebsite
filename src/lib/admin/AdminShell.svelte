@@ -60,10 +60,10 @@
 						<div class="connection-row">
 							<span class="connection-light" aria-hidden="true"></span>
 							<span>{messages.overview[connection]}</span>
-							<span class="connection-dash" title={messages.overview.awaiting} aria-label={messages.overview.awaiting}>{messages.common.notAvailable}</span>
+							<span class="connection-dash" title={connection === 'database' ? messages.roster.connected : messages.overview.awaiting} aria-label={connection === 'database' ? messages.roster.connected : messages.overview.awaiting}>{connection === 'database' ? messages.roster.connected : messages.common.notAvailable}</span>
 						</div>
 					{/each}
-					<p class="connection-note">{messages.overview.awaiting}</p>
+					<p class="connection-note">{messages.roster.workspaceNote}</p>
 				</Card.Root>
 			{/if}
 			<Button variant="ghost" class="workspace-link" href={resolve('/')}><AdminIcon name="logout" size={17} />{messages.backToStudents}<AdminIcon name="arrow" size={14} /></Button>
@@ -95,7 +95,7 @@
 				<span><span class="footer-cross" aria-hidden="true">+</span>{messages.footer}</span>
 				<Button variant="ghost" class="mobile-workspace-link" href={resolve('/')}><AdminIcon name="logout" size={14} />{messages.backToStudents}</Button>
 				{#if isAdminRoot}
-					<span>{messages.common.localOnly}<span class="footer-cross" aria-hidden="true">+</span></span>
+					<span>{section === 'overview' || section === 'students' ? messages.roster.connected : messages.common.localOnly}<span class="footer-cross" aria-hidden="true">+</span></span>
 				{/if}
 			</footer>
 		</main>

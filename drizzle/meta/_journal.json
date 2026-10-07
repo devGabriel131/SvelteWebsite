@@ -50,6 +50,13 @@
       "when": 1791318434630,
       "tag": "0006_bootcamp_registration",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791406520632,
+      "tag": "0007_student_subject_scores",
+      "breakpoints": true
     }
   ]
 }

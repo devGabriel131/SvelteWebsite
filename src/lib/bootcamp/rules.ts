@@ -8,6 +8,21 @@ export function parseEventLocalDate(raw: string): Date | null {
 	return result;
 }
 
+export const eventTimePattern = '([01][0-9]|2[0-3]):[0-5][0-9]';
+const eventTimeRegex = new RegExp(`^${eventTimePattern}$`);
+
+export function parseEventSchedule(eventDate: string, startTime: string, endTime: string) {
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(eventDate) || !eventTimeRegex.test(startTime) || !eventTimeRegex.test(endTime)) return null;
+	const startsAt = parseEventLocalDate(`${eventDate}T${startTime}`);
+	const endsAt = parseEventLocalDate(`${eventDate}T${endTime}`);
+	if (!startsAt || !endsAt || endsAt <= startsAt) return null;
+	return {
+		startsAt, endsAt,
+		arrivalAt: new Date(startsAt.getTime() - 3600000),
+		registrationClosesAt: new Date(startsAt.getTime() - 12 * 3600000)
+	};
+}
+
 export function signingDate(now: Date): string {
 	const parts = new Intl.DateTimeFormat('en-US', { timeZone: eventTimeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now);
 	const part = (key: string) => parts.find((p) => p.type === key)!.value;

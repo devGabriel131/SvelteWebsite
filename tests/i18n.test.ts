@@ -90,6 +90,18 @@ describe('translations', () => {
 		}
 	});
 
+	test('provides bootcamp report navigation and event-specific accessible labels in both languages', () => {
+		for (const { code } of languages) {
+			const messages = translations[code].bootcamp.admin;
+			for (const key of ['reports', 'viewReport', 'noReports'] as const) {
+				expect(messages[key].trim().length).toBeGreaterThan(0);
+			}
+			const label = formatMessage(messages.viewReportFor, { title: 'Bootcamp de octubre' });
+			expect(label).toContain('Bootcamp de octubre');
+			expect(label).not.toContain('{title}');
+		}
+	});
+
 	test('keeps the product name unchanged in both languages', () => {
 		for (const { code } of languages) {
 			expect(translations[code].header.brand).toBe('Masterminds');
