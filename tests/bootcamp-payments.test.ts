@@ -173,7 +173,7 @@ function prerequisites(
 			const fields = query.fields as { checkedAt: SQL };
 			expect(dialect.sqlToQuery(fields.checkedAt).sql).toBe('clock_timestamp()::text');
 			const compiled = where(query);
-			for (const column of ['registration_open', 'legal_approved', 'approved_by', 'registration_closes_at', 'starts_at']) expect(compiled.sql).toContain(column);
+			for (const column of ['registration_open', 'registration_closes_at', 'starts_at']) expect(compiled.sql).toContain(column);
 			expect(compiled.sql).toContain('> clock_timestamp()');
 			expect(compiled.params).toContain(true);
 		}),

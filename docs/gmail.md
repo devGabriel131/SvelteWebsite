@@ -1,6 +1,6 @@
 # Gmail backend
 
-The server-only TypeScript Gmail port sends messages through the Gmail API using the shared Google OAuth transport. It supports plain text, HTML, and in-memory attachments. It is a backend primitive only: **there is no new endpoint, UI, queue, or integration with IST reports, attendance certificates, bootcamps, or other workflows.** Configuring Gmail does not send anything by itself or change the existing Drive archive.
+The server-only TypeScript Gmail port sends messages through the Gmail API using the shared Google OAuth transport. It supports plain text, HTML, and in-memory attachments. The admin [student import and invitation workflow](student-import.md) now uses this port for individually addressed invitation emails. There is no automatic sending from configuration alone, and this does not change the existing Drive archive or add Gmail sending to IST reports, attendance certificates, or bootcamps.
 
 ## Private configuration
 

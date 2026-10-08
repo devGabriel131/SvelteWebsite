@@ -1,5 +1,7 @@
 <script lang="ts">
 	import AdminIcon from '#lib/admin/AdminIcon.svelte';
+	import StudentInvitations from '#lib/admin/StudentInvitations.svelte';
+	import type { StudentInvitation } from '#lib/student-invitations.ts';
 	import { previewLink, type AdminSection } from '#lib/admin/demo.ts';
 	import type { AdminStudent } from '#lib/admin/roster.ts';
 	import { useLanguage } from '#lib/i18n/language.svelte.ts';
@@ -12,7 +14,13 @@
 	import { Label } from '#lib/components/ui/label/index.js';
 	import * as NativeSelect from '#lib/components/ui/native-select/index.js';
 
-	let { section, students }: { section: AdminSection; students: AdminStudent[] } = $props();
+	let { section, students, invitations, invitationPage, hasMoreInvitations }: {
+		section: AdminSection;
+		students: AdminStudent[];
+		invitations: StudentInvitation[];
+		invitationPage: number;
+		hasMoreInvitations: boolean;
+	} = $props();
 	const language = useLanguage();
 	const id = $props.id();
 	const messages = $derived(language.messages.admin);
@@ -40,12 +48,6 @@
 	let refundOpen = $state(false);
 	let refundTrigger: HTMLElement | null = null;
 
-	interface InvitationPreview { id: number; name: string; email: string; cohort: string; expires: number; url: string }
-	let inviteName = $state('');
-	let inviteEmail = $state('');
-	let inviteCohort = $state('Alpha 01');
-	let inviteExpiry = $state(7);
-	let invitationLinks = $state<InvitationPreview[]>([{ id: 1, name: 'Emma Wilson', email: 'emma.wilson@example.com', cohort: 'Bravo 02', expires: 7, url: previewLink('invitation', 1) }]);
 
 	let stagedFile = $state<{ name: string; size: number } | null>(null);
 	let fileInput = $state<HTMLInputElement>();
@@ -92,13 +94,6 @@
 		notify('created');
 	}
 
-	function createInvitation(event: SubmitEvent) {
-		event.preventDefault();
-		if (!inviteName.trim() || !inviteEmail.trim() || !inviteCohort.trim()) { notify('required'); return; }
-		const nextId = invitationLinks.length + 1;
-		invitationLinks = [{ id: nextId, name: inviteName.trim(), email: inviteEmail.trim(), cohort: inviteCohort.trim(), expires: inviteExpiry, url: previewLink('invitation', nextId) }, ...invitationLinks];
-		notify('created');
-	}
 
 	async function copyLink(url: string) {
 		const source = section;
@@ -245,74 +240,7 @@
 				</Dialog.Content>
 			</Dialog.Root>
 		{:else if section === 'invitations'}
-			<div class="operations-grid invitations-grid">
-				<section aria-labelledby={`${id}-invite-title`}>
-					<Card.Root class="gap-0 p-0 min-w-0">
-						<div class="panel-heading">
-							<div><p class="eyebrow module-code" aria-hidden="true">REC / 03</p><h2 class="panel-title" id={`${id}-invite-title`}>{messages.invitations.createTitle}</h2><p class="panel-subtitle">{messages.invitations.createDescription}</p></div>
-							<AdminIcon name="invitations" size={24} />
-						</div>
-						<form class="operation-form" onsubmit={createInvitation}>
-							<div class="form-grid">
-								<div class="operation-field">
-									<Label class="text-muted-foreground text-[0.74rem]" for={`${id}-invite-name`}>{messages.invitations.name}</Label>
-									<Input id={`${id}-invite-name`} bind:value={inviteName} maxlength={100} placeholder={messages.students.namePlaceholder} required />
-								</div>
-								<div class="operation-field">
-									<Label class="text-muted-foreground text-[0.74rem]" for={`${id}-invite-email`}>{messages.invitations.email}</Label>
-									<Input id={`${id}-invite-email`} type="email" bind:value={inviteEmail} maxlength={200} placeholder={messages.students.emailPlaceholder} required />
-								</div>
-								<div class="operation-field">
-									<Label class="text-muted-foreground text-[0.74rem]" for={`${id}-invite-cohort`}>{messages.invitations.cohort}</Label>
-									<Input id={`${id}-invite-cohort`} bind:value={inviteCohort} maxlength={100} placeholder={messages.students.cohortPlaceholder} required />
-								</div>
-								<div class="operation-field">
-									<Label class="text-muted-foreground text-[0.74rem]" id={`${id}-invite-expiry`}>{messages.invitations.expires}</Label>
-									<div class="operation-choices" role="group" aria-labelledby={`${id}-invite-expiry`}>
-										<Button type="button" size="sm" variant={inviteExpiry === 7 ? 'default' : 'outline'} aria-pressed={inviteExpiry === 7} onclick={() => inviteExpiry = 7}>{messages.invitations.sevenDays}</Button>
-										<Button type="button" size="sm" variant={inviteExpiry === 30 ? 'default' : 'outline'} aria-pressed={inviteExpiry === 30} onclick={() => inviteExpiry = 30}>{messages.invitations.thirtyDays}</Button>
-									</div>
-								</div>
-							</div>
-							<div class="form-footer">
-								<span class="local-label"><AdminIcon name="shield" size={14} />{common.localOnly}</span>
-								<Button size="sm" class="max-[40rem]:w-full" type="submit">{messages.invitations.generate}<AdminIcon name="arrow" size={16} /></Button>
-							</div>
-						</form>
-					</Card.Root>
-				</section>
-				<div class="invitation-instrument">
-					<Card.Root class="gap-0 h-full w-full items-center justify-center px-8 py-6">
-						<div class="invitation-radar" aria-hidden="true"><span class="orbit orbit-one"></span><span class="orbit orbit-two"></span><span class="orbit orbit-three"></span><span class="radar-axis"></span><div class="radar-center"><AdminIcon name="invitations" size={38} /></div><span class="radar-point point-one"></span><span class="radar-point point-two"></span><span class="radar-point point-three"></span></div>
-						<p class="eyebrow">{messages.sections.invitations}</p><h2>{messages.invitations.linksDescription}</h2><p>{messages.invitations.createDescription}</p>
-						<Badge variant="outline" class="h-auto whitespace-normal font-mono text-[0.59rem] text-secondary bg-secondary/10 border-secondary/30">{common.notConnected}</Badge>
-					</Card.Root>
-				</div>
-			</div>
-			<section aria-labelledby={`${id}-invite-links`}>
-				<Card.Root class="gap-0 p-0 min-w-0">
-					<div class="panel-heading">
-						<div><h2 class="panel-title" id={`${id}-invite-links`}>{messages.invitations.linksTitle}</h2><p class="panel-subtitle">{messages.invitations.linksDescription}</p></div>
-						<Badge variant="outline" class="font-mono text-primary text-[0.7rem]">{invitationLinks.length.toString().padStart(2, '0')}</Badge>
-					</div>
-					<ul class="preview-list">
-						{#each invitationLinks as link (link.id)}
-							<li>
-								<span class="list-icon"><AdminIcon name="invitations" size={20} /></span>
-								<div class="link-info">
-									<h3>{link.name}</h3><p>{link.email}<span aria-hidden="true"> · </span>{link.cohort}<span aria-hidden="true"> · </span>{messages.invitations.expiresIn.replace('{count}', String(link.expires))}</p>
-									<Label class="sr-only" for={`${id}-invite-link-${link.id}`}>{common.demoLink}</Label>
-									<Input id={`${id}-invite-link-${link.id}`} class="font-mono text-[0.62rem] text-primary text-ellipsis" readonly value={link.url} onclick={(event) => event.currentTarget.select()} />
-								</div>
-								<div class="link-actions">
-									<Badge variant="outline" class="h-auto whitespace-normal font-mono text-[0.59rem] text-secondary bg-secondary/10 border-secondary/30">{messages.invitations.queued}</Badge>
-									<Button variant="outline" size="sm" type="button" onclick={() => copyLink(link.url)}><AdminIcon name="copy" size={15} />{common.copy}</Button>
-								</div>
-							</li>
-						{/each}
-					</ul>
-				</Card.Root>
-			</section>
+			<StudentInvitations {invitations} {invitationPage} {hasMoreInvitations} />
 		{:else if section === 'reports'}
 			<div class="import-steps">
 				<Card.Root class="gap-0 p-0">
@@ -469,20 +397,7 @@
 	.link-info h3 { margin: 0; font-size: 0.84rem; }
 	.link-info p { margin: 0.3rem 0 0.5rem; color: var(--muted-foreground); font-size: 0.68rem; overflow-wrap: anywhere; }
 	.link-actions { display: flex; align-items: flex-end; flex-direction: column; gap: 0.7rem; }
-	.invitations-grid { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); align-items: stretch; }
-	.invitation-instrument { position: relative; display: flex; min-width: 0; overflow: hidden; text-align: center; }
-	.invitation-instrument :global([data-slot="card"]) { background: radial-gradient(ellipse at 50% 28%, #2b382a80, transparent 65%), var(--card); }
-	.invitation-instrument h2 { margin: 0.65rem 0 0; font-size: 1.2rem; letter-spacing: -0.03em; }
-	.invitation-instrument p:not(.eyebrow) { margin: 0.7rem 0 1rem; color: var(--muted-foreground); font-size: 0.72rem; line-height: 1.8; }
-	.invitation-radar { position: relative; width: 11rem; height: 11rem; margin-bottom: 0.5rem; }
-	.orbit { position: absolute; top: 50%; left: 50%; border: 1px solid #526448; border-radius: 50%; transform: translate(-50%, -50%); }
-	.orbit-one { width: 100%; height: 100%; opacity: 0.4; } .orbit-two { width: 73%; height: 73%; opacity: 0.6; } .orbit-three { width: 40%; height: 40%; background: #2b382b; }
-	.radar-axis { position: absolute; inset: 50% 0 auto; border-top: 1px dashed #637357; opacity: 0.5; }
-	.radar-axis::after { position: absolute; left: 50%; top: -5.5rem; height: 11rem; content: ''; border-left: 1px dashed #637357; }
-	.radar-center { position: absolute; inset: 0; display: grid; place-items: center; color: var(--primary); }
-	.radar-center :global(svg) { color: var(--primary); }
-	.radar-point { position: absolute; width: 6px; height: 6px; border: 1px solid var(--primary); border-radius: 50%; background: #657f49; box-shadow: 0 0 8px #bed29c50; }
-	.point-one { top: 16%; left: 37%; } .point-two { top: 52%; right: 10%; } .point-three { bottom: 19%; left: 24%; }
+
 	.import-step-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 1rem 1.3rem; }
 	.import-step-grid > div { display: flex; align-items: center; gap: 0.7rem; color: var(--muted-foreground); }
 	.step-number { display: grid; flex-shrink: 0; place-items: center; width: 2rem; height: 2rem; border: 1px solid var(--border); border-radius: 4px; font-size: 0.65rem; }
@@ -531,7 +446,7 @@
 	.attendance-grid { position: absolute; inset: 1.2rem; display: grid; grid-template-columns: repeat(6, 1fr); pointer-events: none; opacity: 0.12; }
 	.attendance-grid span { border: 1px solid var(--primary); border-right: 0; } .attendance-grid span:last-child { border-right: 1px solid var(--primary); }
 	.operation-feedback { position: fixed; right: 1.5rem; bottom: 1.5rem; z-index: 20; width: min(30rem, calc(100vw - 2rem)); }
-	@media (max-width: 70rem) { .operations-grid, .invitations-grid { grid-template-columns: minmax(0, 1fr); } .invitation-instrument { display: none; } }
+	@media (max-width: 70rem) { .operations-grid { grid-template-columns: minmax(0, 1fr); } }
 	@media (max-width: 40rem) {
 		.operation-form, .refund-body, .upload-body { padding: 1.1rem; }
 		.preview-list li { flex-wrap: wrap; gap: 0.8rem; padding: 1.1rem; } .link-info { flex-basis: calc(100% - 3.5rem); }

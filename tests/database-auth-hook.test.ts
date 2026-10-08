@@ -256,10 +256,10 @@ describeDatabase('auth hook with real Better Auth and isolated PostgreSQL fixtur
 			expectAnonymous(locals);
 			expect(getViewer(locals)).toBeNull();
 			expect(getAdminPageState(locals)).toEqual({ isAdmin: false });
-			return Response.json(await loadAdminPage({ locals } as Parameters<typeof loadAdminPage>[0]));
+			return Response.json(await loadAdminPage({ locals, url: new URL('/admin', config.baseURL) } as Parameters<typeof loadAdminPage>[0]));
 		});
 		expect(response.status).toBe(200);
-		expect(await response.json()).toEqual({ isAdmin: false, localAdmin: false, students: [] });
+		expect(await response.json()).toEqual({ isAdmin: false, localAdmin: false, students: [], invitations: [], invitationPage: 1, hasMoreInvitations: false });
 		expect(audiences).toEqual([]);
 		expect(addressCalls).toBe(0);
 	});

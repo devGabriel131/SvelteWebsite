@@ -90,7 +90,7 @@ function letterForm(event: Event, overrides: Record<string, string> = {}): FormD
 		...overrides });
 }
 function eventForm(overrides: Record<string, string> = {}): FormData {
-	return form({ title: 'Bootcamp Ficticio Estándar', venue: 'Cancha de Añasco', legalSource: 'standard', legalApproved: 'true',
+	return form({ title: 'Bootcamp Ficticio Estándar', venue: 'Cancha de Añasco',
 		eventDate: signingDate(new Date(Date.now() + 10 * day)), startTime: '08:00', endTime: '16:00',
 		...overrides });
 }
@@ -230,13 +230,13 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 					en: { agreement: 'Fictional approved agreement. Preserve  exact words.', liability: 'Fictional liability terms.', media: 'Fictional media terms.' },
 					es: { agreement: 'Acuerdo ficticio aprobado. Conservar  palabras exactas.', liability: 'Relevo ficticio.', media: 'Términos ficticios de imagen.' }
 				},
-				legalApproved: true, registrationOpen: true, approvedBy: admin.id, createdBy: admin.id,
+				registrationOpen: true, createdBy: admin.id,
 				...overrides, id
 			}).returning();
 			return row;
 		}
 		async function createEvent(input: FormData, activate = false) {
-			const id = await (activate ? activateEvent : saveEvent)(db, admin.id, input);
+			const id = activate ? await activateEvent(db, admin.id, input, true) : await saveEvent(db, admin.id, input);
 			owned.events.push(id);
 			const [row] = await db.select().from(events).where(eq(events.id, id));
 			return row;
@@ -766,7 +766,7 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 	test('registration triggers preserve the signed waiver, letter choice, student, and event associations', async () => {
 		await withFixtures(async (f) => {
 			const event = await f.event();
-			const nextEvent = await f.event();
+			const nextEvent = await f.event({ registrationOpen: false });
 			const other = await f.participant();
 			const { person, registration } = await f.ready(event);
 			for (const change of [
@@ -842,36 +842,141 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 		});
 	});
 
-	test('activation creates standard Spanish legal without approval and ignores forged IDs and legal fields', async () => {
+	test('single-open migration closes expired rows, removes approval columns and preserves stored legal', async () => {
+		const migration = await Bun.file(new URL('../drizzle/0009_bootcamp_single_active_event.sql', import.meta.url)).text();
+		await connection.client.begin(async (tx) => {
+			await tx`CREATE TEMP TABLE bootcamp_migration_admin (id text PRIMARY KEY) ON COMMIT DROP`;
+			await tx`INSERT INTO bootcamp_migration_admin VALUES ('test-admin')`;
+			await tx`CREATE TEMP TABLE bootcamp_events (
+				id integer PRIMARY KEY, registration_open boolean NOT NULL,
+				registration_closes_at timestamptz NOT NULL, updated_at timestamptz NOT NULL DEFAULT now(),
+				legal jsonb NOT NULL, legal_approved boolean NOT NULL, approved_by text,
+				CONSTRAINT bootcamp_event_approval CHECK (NOT registration_open OR (legal_approved AND approved_by IS NOT NULL)),
+				CONSTRAINT bootcamp_events_approved_by_auth_user_id_fk FOREIGN KEY (approved_by) REFERENCES bootcamp_migration_admin(id)
+			) ON COMMIT DROP`;
+			await tx`INSERT INTO bootcamp_events VALUES
+				(1, true, now() - interval '1 second', now(), '{"historical":"unchanged"}', true, 'test-admin'),
+				(2, true, now() + interval '1 day', now(), '{"standard":"unchanged"}', true, 'test-admin')`;
+			for (const statement of migration.split('--> statement-breakpoint')) await tx.unsafe(statement);
+			expect([...await tx`SELECT id, registration_open, legal FROM bootcamp_events ORDER BY id`]).toEqual([
+				{ id: 1, registration_open: false, legal: { historical: 'unchanged' } },
+				{ id: 2, registration_open: true, legal: { standard: 'unchanged' } }
+			]);
+			const columns = await tx`SELECT attname FROM pg_attribute WHERE attrelid = 'pg_temp.bootcamp_events'::regclass AND NOT attisdropped AND attnum > 0`;
+			expect(columns.map((column) => column.attname)).not.toContain('legal_approved');
+			expect(columns.map((column) => column.attname)).not.toContain('approved_by');
+			await expect(tx.savepoint(async (sp) => {
+				await sp`UPDATE bootcamp_events SET registration_open = true WHERE id = 1`;
+			})).rejects.toMatchObject({ code: '23505', constraint_name: 'bootcamp_event_single_open' });
+		});
+	});
+
+	test('single-open migration aborts conflicting future rows and rolls back its expired-row cleanup', async () => {
+		const migration = await Bun.file(new URL('../drizzle/0009_bootcamp_single_active_event.sql', import.meta.url)).text();
+		await connection.client.begin(async (tx) => {
+			await tx`CREATE TEMP TABLE bootcamp_events (
+				id integer PRIMARY KEY, registration_open boolean NOT NULL,
+				registration_closes_at timestamptz NOT NULL, updated_at timestamptz NOT NULL DEFAULT now(),
+				legal_approved boolean NOT NULL DEFAULT true, approved_by text
+			) ON COMMIT DROP`;
+			await tx`INSERT INTO bootcamp_events (id, registration_open, registration_closes_at) VALUES
+				(1, true, now() - interval '1 second'), (2, true, now() + interval '1 day'), (3, true, now() + interval '2 days')`;
+			await expect(tx.savepoint(async (sp) => {
+				for (const statement of migration.split('--> statement-breakpoint')) await sp.unsafe(statement);
+			})).rejects.toMatchObject({ message: 'Multiple bootcamp events have registration open. Close all but one and rerun migrations.' });
+			expect([...await tx`SELECT id, registration_open FROM bootcamp_events ORDER BY id`]).toEqual([
+				{ id: 1, registration_open: true }, { id: 2, registration_open: true }, { id: 3, registration_open: true }
+			]);
+			const columns = await tx`SELECT attname FROM pg_attribute WHERE attrelid = 'pg_temp.bootcamp_events'::regclass AND NOT attisdropped AND attnum > 0`;
+			expect(columns.map((column) => column.attname)).toContain('legal_approved');
+			expect(columns.map((column) => column.attname)).toContain('approved_by');
+		});
+	});
+
+	test('activation opens a bootcamp one week away on the student page and ignores forged IDs and legal fields', async () => {
 		await withFixtures(async (f) => {
-			const existing = await f.event();
-			const details = eventForm();
-			details.delete('legalSource');
-			details.delete('legalApproved');
-			const created = await f.createEvent(details, true);
-			expect(created.id).not.toBe(existing.id);
-			expect(created).toMatchObject({ revision: 1, legalApproved: false, approvedBy: null, registrationOpen: false, createdBy: f.admin.id });
-			expect(created.legal.en).toEqual(created.legal.es);
-			for (const key of sectionKeys) expect(created.legal.es[key].length).toBeGreaterThan(100);
-			const forged = eventForm({ id: existing.id, revision: String(existing.revision), legalSource: 'custom', legalApproved: 'true',
-				registrationOpen: 'true', approvedBy: f.admin.id, startsAt: existing.startsAt.toISOString(), arrivalAt: 'forged' });
-			for (const language of ['en', 'es']) for (const key of sectionKeys) forged.set(`legal_${language}_${key}`, 'Forged legal text');
+			const existing = await f.event({ registrationOpen: false });
+			const forged = eventForm({ eventDate: signingDate(new Date(Date.now() + 7 * day)),
+				id: existing.id, revision: '99', legalSource: 'custom', legalApproved: 'true', approvedBy: f.admin.id });
+			for (const language of ['en', 'es']) for (const key of sectionKeys) forged.set(`legal_${language}_${key}`, 'Forged legal 🖊');
 			const activated = await f.createEvent(forged, true);
 			expect(activated.id).not.toBe(existing.id);
-			expect(activated.id).not.toBe(created.id);
-			expect(activated).toMatchObject({ revision: 1, legalApproved: false, approvedBy: null, registrationOpen: false, legal: created.legal });
+			expect(activated).toMatchObject({ revision: 1, registrationOpen: true, createdBy: f.admin.id });
+			expect(activated).not.toHaveProperty('legalApproved');
+			expect(activated).not.toHaveProperty('approvedBy');
+			expect(activated.legal.en).toEqual(activated.legal.es);
+			for (const key of sectionKeys) expect(activated.legal.es[key].length).toBeGreaterThan(100);
 			expect((await f.db.select().from(events).where(eq(events.id, existing.id)))[0]).toEqual(existing);
-			await expect(toggleEvent(f.db, form({ eventId: activated.id, revision: '1', open: 'true' }), true))
-				.rejects.toMatchObject({ code: 'unavailable' });
-			await saveEvent(f.db, f.admin.id, eventForm({ id: activated.id, revision: '1', legalApproved: 'true' }), activated.id);
-			expect(await getEvent(f.db, activated.id)).toMatchObject({ id: activated.id, revision: 2, legalApproved: true });
+			const participant = await f.participant();
+			const studentView = await studentPage(f.db, participant.account.id, true);
+			expect(studentView.events.find((event) => event.id === activated.id)).toMatchObject({ registrationOpen: true });
+			expect(studentView.registrations).toHaveLength(0);
+			await f.service.start(participant.account.id, activated.id);
+			await expect(activateEvent(f.db, f.admin.id, eventForm(), true)).rejects.toMatchObject({ code: 'activeEvent' });
+			await expect(toggleEvent(f.db, form({ eventId: existing.id, revision: '1', open: 'true' }), true)).rejects.toMatchObject({ code: 'activeEvent' });
+			const failure = await f.db.update(events).set({ registrationOpen: true }).where(eq(events.id, existing.id)).then(() => null, postgresError);
+			expect(failure).toMatchObject({ code: '23505', constraint_name: 'bootcamp_event_single_open' });
+		});
+	});
+
+	test('simultaneous activations and reopens allow exactly one open event', async () => {
+		await withFixtures(async (f) => {
+			const attempts = await Promise.allSettled([f.createEvent(eventForm(), true), f.createEvent(eventForm(), true)]);
+			expect(attempts.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+			expect(attempts.filter((result) => result.status === 'rejected')).toEqual([
+				expect.objectContaining({ reason: expect.objectContaining({ code: 'activeEvent' }) })
+			]);
+			const active = attempts.find((result) => result.status === 'fulfilled');
+			if (active?.status !== 'fulfilled') throw new Error('Expected an activation winner');
+			await toggleEvent(f.db, form({ eventId: active.value.id, revision: '1', open: 'false' }), false);
+			const second = await f.event({ registrationOpen: false });
+			const reopen = await Promise.allSettled([active.value, second].map((event) =>
+				toggleEvent(f.db, form({ eventId: event.id, revision: '1', open: 'true' }), true)));
+			expect(reopen.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+			expect(reopen.filter((result) => result.status === 'rejected')).toEqual([
+				expect.objectContaining({ reason: expect.objectContaining({ code: 'activeEvent' }) })
+			]);
+			const open = await f.db.select().from(events).where(eq(events.registrationOpen, true));
+			expect(open).toHaveLength(1);
+		});
+	});
+
+	test('activation and reopening enforce readiness/cutoff and retire expired open rows', async () => {
+		await withFixtures(async (f) => {
+			await expect(activateEvent(f.db, f.admin.id, eventForm(), false)).rejects.toMatchObject({ code: 'unavailable' });
+			await expect(activateEvent(f.db, f.admin.id, eventForm({ eventDate: '2000-01-01' }), true)).rejects.toMatchObject({ code: 'unavailable' });
+			const expired = await f.event({ registrationClosesAt: new Date(Date.now() - 1000) });
+			const reopen = form({ eventId: expired.id, revision: '1', open: 'true' });
+			await expect(toggleEvent(f.db, reopen, true)).rejects.toMatchObject({ code: 'unavailable' });
+			const activated = await f.createEvent(eventForm(), true);
+			expect(await getEvent(f.db, expired.id)).toMatchObject({ registrationOpen: false });
+			expect(activated.registrationOpen).toBe(true);
+			await toggleEvent(f.db, form({ eventId: activated.id, revision: '1', open: 'false' }), false);
+			await toggleEvent(f.db, form({ eventId: activated.id, revision: '1', open: 'true' }), true);
+			expect(await getEvent(f.db, activated.id)).toMatchObject({ registrationOpen: true });
+			await f.db.update(events).set({ registrationClosesAt: new Date(Date.now() - 1000) }).where(eq(events.id, activated.id));
+			const next = await f.event({ registrationOpen: false });
+			await toggleEvent(f.db, form({ eventId: next.id, revision: '1', open: 'true' }), true);
+			expect(await getEvent(f.db, activated.id)).toMatchObject({ registrationOpen: false });
+			expect(await getEvent(f.db, next.id)).toMatchObject({ registrationOpen: true });
+		});
+	});
+
+	test('editing closes an event at the old or new cutoff without implicitly reopening it', async () => {
+		await withFixtures(async (f) => {
+			const expired = await f.event({ registrationClosesAt: new Date(Date.now() - 1000) });
+			await saveEvent(f.db, f.admin.id, eventForm({ id: expired.id, revision: '1' }));
+			expect(await getEvent(f.db, expired.id)).toMatchObject({ revision: 2, registrationOpen: false });
+			const active = await f.event();
+			await saveEvent(f.db, f.admin.id, eventForm({ id: active.id, revision: '1', eventDate: '2000-01-01' }));
+			expect(await getEvent(f.db, active.id)).toMatchObject({ revision: 2, registrationOpen: false });
 		});
 	});
 
 	test('route-scoped edits reject forged or missing IDs and keep optimistic revision protection', async () => {
 		await withFixtures(async (f) => {
 			const event = await f.event();
-			const other = await f.event();
+			const other = await f.event({ registrationOpen: false });
 			for (const submittedId of [other.id, '', 'invalid', randomUUID()]) {
 				await expect(saveEvent(f.db, f.admin.id, eventForm({ id: submittedId, revision: '1' }), event.id))
 					.rejects.toMatchObject({ code: 'invalid' });
@@ -882,14 +987,14 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 			const edit = eventForm({ id: event.id, revision: '1' });
 			expect(await saveEvent(f.db, f.admin.id, edit, event.id)).toBe(event.id);
 			await expect(saveEvent(f.db, f.admin.id, edit, event.id)).rejects.toMatchObject({ code: 'stale' });
-			expect(await getEvent(f.db, event.id)).toMatchObject({ revision: 2, registrationOpen: false });
+			expect(await getEvent(f.db, event.id)).toMatchObject({ revision: 2, registrationOpen: true });
 		});
 	});
 
 	test('admin event list and lookup return event views without a roster or a fallback event', async () => {
 		await withFixtures(async (f) => {
 			const first = await f.event();
-			const latest = await f.event({ startsAt: new Date(first.startsAt.getTime() + day), endsAt: new Date(first.endsAt.getTime() + day) });
+			const latest = await f.event({ registrationOpen: false, startsAt: new Date(first.startsAt.getTime() + day), endsAt: new Date(first.endsAt.getTime() + day) });
 			const listed = (await listEvents(f.db)).filter((event) => [first.id, latest.id].includes(event.id));
 			expect(listed).toEqual([eventView(latest), eventView(first)]);
 			expect(await getEvent(f.db, first.id)).toEqual(eventView(first));
@@ -904,8 +1009,7 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 			const inputDate = input.get('eventDate') as string;
 			expect([...input.keys()].some((key) => key.startsWith('legal_'))).toBe(false);
 			const event = await f.createEvent(input);
-			expect(event).toMatchObject({ revision: 1, registrationOpen: false, legalApproved: false,
-				approvedBy: null, createdBy: f.admin.id,
+			expect(event).toMatchObject({ revision: 1, registrationOpen: false, createdBy: f.admin.id,
 				startsAt: new Date(`${inputDate}T12:00:00.000Z`), endsAt: new Date(`${inputDate}T20:00:00.000Z`),
 				arrivalAt: new Date(`${inputDate}T11:00:00.000Z`), registrationClosesAt: new Date(`${inputDate}T00:00:00.000Z`) });
 			expect(event.legal.en).toEqual(event.legal.es);
@@ -915,8 +1019,7 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 			}
 			for (const value of [event.venue, '$30.00', '$15.00', 'El registro comienza a las 07:00:00.',
 				'No se aceptarán estudiantes después de las 08:00:00.']) expect(event.legal.es.agreement).toContain(value);
-			await expect(toggleEvent(f.db, form({ eventId: event.id, revision: '1', open: 'true' }), true))
-				.rejects.toMatchObject({ code: 'unavailable' });
+			await toggleEvent(f.db, form({ eventId: event.id, revision: '1', open: 'true' }), true);
 			const date = signingDate(new Date(event.startsAt.getTime() + 2 * day));
 			const edit = eventForm({ id: event.id, revision: '1', venue: 'Cancha Nueva de Ponce',
 				eventDate: date, startTime: '13:15', endTime: '18:00',
@@ -927,8 +1030,7 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 			}
 			expect(await saveEvent(f.db, f.admin.id, edit)).toBe(event.id);
 			const [saved] = await f.db.select().from(events).where(eq(events.id, event.id));
-			expect(saved).toMatchObject({ revision: 2, registrationOpen: false, legalApproved: true,
-				approvedBy: f.admin.id, venue: 'Cancha Nueva de Ponce',
+			expect(saved).toMatchObject({ revision: 2, registrationOpen: true, venue: 'Cancha Nueva de Ponce',
 				startsAt: new Date(`${date}T13:15:00-04:00`), endsAt: new Date(`${date}T18:00:00-04:00`),
 				arrivalAt: new Date(`${date}T12:15:00-04:00`), registrationClosesAt: new Date(`${date}T01:15:00-04:00`) });
 			expect(saved.legal.en).toEqual(saved.legal.es);
@@ -985,7 +1087,7 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 				eventDate: date, startTime: '13:15', endTime: '18:00' });
 			await saveEvent(f.db, f.admin.id, edit);
 			const [current] = await f.db.select().from(events).where(eq(events.id, event.id));
-			expect(current).toMatchObject({ revision: 2, registrationOpen: false,
+			expect(current).toMatchObject({ revision: 2, registrationOpen: true,
 				startsAt: new Date(`${date}T13:15:00-04:00`), endsAt: new Date(`${date}T18:00:00-04:00`),
 				arrivalAt: new Date(`${date}T12:15:00-04:00`), registrationClosesAt: new Date(`${date}T01:15:00-04:00`) });
 			expect(current.legal.es.agreement).not.toBe(snapshot.event.legal.es.agreement);
@@ -1028,35 +1130,28 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 		});
 	}
 
-	test('admin custom saves copy Spanish into both slots, preserve manual clauses, enforce approval/readiness and reject stale edits', async () => {
+	test('edits regenerate standard clauses, preserve a closed event and reopening requires readiness', async () => {
 		await withFixtures(async (f) => {
 			const event = await f.event({ registrationOpen: false });
-			const date = signingDate(new Date(event.startsAt.getTime() + day));
-			const values: Record<string, string> = { id: event.id, revision: '1', title: 'Evento Ficticio Editado',
-				venue: 'Cancha Nueva', legalSource: 'custom', legalApproved: 'false',
-				eventDate: date, startTime: '08:00', endTime: '16:00' };
-			for (const section of sectionKeys) values[`legal_es_${section}`] = ` \n${event.legal.es[section].normalize('NFD')}\n `;
-			expect(await saveEvent(f.db, f.admin.id, form(values))).toBe(event.id);
+			const edit = eventForm({ id: event.id, revision: '1', venue: 'Cancha Nueva', legalSource: 'custom', legal_es_media: 'Forged 🖊' });
+			await saveEvent(f.db, f.admin.id, edit);
 			const [saved] = await f.db.select().from(events).where(eq(events.id, event.id));
-			expect(saved).toMatchObject({ revision: 2, registrationOpen: false, legalApproved: false, approvedBy: null,
-				startsAt: new Date(`${date}T12:00:00.000Z`), endsAt: new Date(`${date}T20:00:00.000Z`),
-				arrivalAt: new Date(`${date}T11:00:00.000Z`), registrationClosesAt: new Date(`${date}T00:00:00.000Z`),
-				legal: { en: event.legal.es, es: event.legal.es } });
-			await expect(saveEvent(f.db, f.admin.id, form(values))).rejects.toMatchObject({ code: 'stale' });
-			await expect(toggleEvent(f.db, form({ eventId: event.id, revision: '2', open: 'true' }), true)).rejects.toMatchObject({ code: 'unavailable' });
-			await saveEvent(f.db, f.admin.id, form({ ...values, revision: '2', legalApproved: 'true' }));
-			const open = form({ eventId: event.id, revision: '3', open: 'true' });
+			expect(saved).toMatchObject({ revision: 2, registrationOpen: false, venue: 'Cancha Nueva' });
+			expect(saved.legal.en).toEqual(saved.legal.es);
+			expect(saved.legal.es.agreement).toContain('Cancha Nueva');
+			expect(saved.legal.es.media).not.toContain('Forged');
+			await expect(saveEvent(f.db, f.admin.id, edit)).rejects.toMatchObject({ code: 'stale' });
+			const open = form({ eventId: event.id, revision: '2', open: 'true' });
 			await expect(toggleEvent(f.db, open, false)).rejects.toMatchObject({ code: 'unavailable' });
 			await toggleEvent(f.db, open, true);
-			const [opened] = await f.db.select().from(events).where(eq(events.id, event.id));
-			expect(opened).toMatchObject({ registrationOpen: true, legalApproved: true, approvedBy: f.admin.id });
+			expect(await getEvent(f.db, event.id)).toMatchObject({ registrationOpen: true });
 		});
 	});
 
 	test('event report includes active non-starters, every registration stage, and event-local balances only', async () => {
 		await withFixtures(async (f) => {
 			const event = await f.event();
-			const nextEvent = await f.event();
+			const nextEvent = await f.event({ registrationOpen: false });
 			const people = {
 				notStarted: await f.participant(), waiver: await f.participant(), letter: await f.participant(),
 				payment: await f.participant(), deposit: await f.participant(), full: await f.participant(),
@@ -1093,6 +1188,8 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 			await expect(eventReport(f.db, randomUUID())).rejects.toMatchObject({ code: 'invalid' });
 			await expect(eventReport(f.db, 'invalid')).rejects.toMatchObject({ code: 'invalid' });
 			expect(next.find((entry) => entry.studentId === people.deposit.student.id)).toMatchObject({ status: 'not_started', paidCents: 0, remainingCents: 3000, documents: [] });
+			await toggleEvent(f.db, form({ eventId: event.id, revision: '1', open: 'false' }), true);
+			await toggleEvent(f.db, form({ eventId: nextEvent.id, revision: '1', open: 'true' }), true);
 			const { registration } = await f.ready(nextEvent, people.full);
 			await f.db.insert(payments).values({ registrationId: registration.id, amountCents: 1500, status: 'completed', transactionId: `fictional-receipt-${randomUUID()}` });
 			expect((await eventReport(f.db, nextEvent.id)).find((entry) => entry.studentId === people.full.student.id)).toMatchObject({ paidCents: 1500, remainingCents: 1500 });

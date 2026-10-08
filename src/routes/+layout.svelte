@@ -25,9 +25,9 @@
 
 {#if page.url.pathname === resolve('/admin') || page.url.pathname.startsWith(`${resolve('/admin')}/`)}
 	{@render children()}
-{:else if page.route.id === '/ist' || page.route.id === '/attendance'}
+{:else if page.route.id === '/ist' || page.route.id === '/attendance' || page.route.id === '/enroll'}
 	<main id="main-content" class="home-main" tabindex="-1">
-		<StudentShell activePage={page.route.id === '/ist' ? 'ist' : 'attendance'}>
+		<StudentShell activePage={page.route.id === '/ist' ? 'ist' : page.route.id === '/attendance' ? 'attendance' : 'enroll'}>
 			{@render children()}
 		</StudentShell>
 	</main>

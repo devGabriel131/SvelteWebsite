@@ -16,7 +16,7 @@ const schedule = {
 };
 const event: typeof events.$inferSelect = {
 	id: eventId, revision: 1, title: 'Evento de prueba', venue: 'Cancha de prueba', ...schedule,
-	legal: defaultLegalText({ venue: 'Cancha de prueba', ...schedule }), legalApproved: false, approvedBy: null,
+	legal: defaultLegalText({ venue: 'Cancha de prueba', ...schedule }),
 	registrationOpen: false, createdBy: adminId, createdAt: new Date('2030-01-01'), updatedAt: new Date('2030-01-01')
 };
 const eventRow = Object.keys(getTableColumns(events)).map((key) => {
@@ -40,18 +40,21 @@ function database(respond: (query: Query) => unknown[][] = () => []) {
 		queries.push(query);
 		return { rows: respond(query) };
 	}) as unknown as Database;
+	// Proxy does not implement transactions; persistence/rollback are tested against PostgreSQL.
+	db.transaction = ((work: (tx: Database) => Promise<unknown>) => work(db)) as Database['transaction'];
 	return { db, queries };
 }
 
 describe('bootcamp admin route data and mutations', () => {
-	test('activation accepts details only and generates unapproved standard legal on the server', async () => {
+	test('activation generates standard legal on the server and opens registration immediately', async () => {
 		const { db, queries } = database(() => [[eventId]]);
-		expect(await activateEvent(db, adminId, form())).toBe(eventId);
-		expect(queries).toHaveLength(1);
-		expect(queries[0].sql).toStartWith('insert into "bootcamp_events"');
-		expect(queries[0].params).toEqual([
+		expect(await activateEvent(db, adminId, form(), true)).toBe(eventId);
+		expect(queries).toHaveLength(2);
+		expect(queries[0].sql).toContain('clock_timestamp()');
+		expect(queries[1].sql).toStartWith('insert into "bootcamp_events"');
+		expect(queries[1].params).toEqual([
 			event.title, event.venue, schedule.startsAt.toISOString(), schedule.endsAt.toISOString(),
-			schedule.arrivalAt.toISOString(), schedule.registrationClosesAt.toISOString(), JSON.stringify(event.legal), false, null, adminId
+			schedule.arrivalAt.toISOString(), schedule.registrationClosesAt.toISOString(), JSON.stringify(event.legal), true, adminId
 		]);
 	});
 
@@ -61,22 +64,39 @@ describe('bootcamp admin route data and mutations', () => {
 			legal_es_agreement: 'Forged', legal_es_liability: 'Forged', legal_es_media: 'Forged', legal_en_media: 'Forged' });
 		const before = [...input.entries()];
 		const { db, queries } = database(() => [[eventId]]);
-		expect(await activateEvent(db, adminId, input)).toBe(eventId);
-		expect(queries).toHaveLength(1);
-		expect(queries[0].sql).toStartWith('insert into "bootcamp_events"');
-		expect(queries[0].params).toContain(JSON.stringify(event.legal));
-		expect(queries[0].params).not.toContain(otherId);
-		expect(queries[0].params).not.toContain(true);
-		expect(queries[0].params).not.toContain('Forged');
+		expect(await activateEvent(db, adminId, input, true)).toBe(eventId);
+		expect(queries).toHaveLength(2);
+		expect(queries[1].sql).toStartWith('insert into "bootcamp_events"');
+		expect(queries[1].params).toContain(JSON.stringify(event.legal));
+		expect(queries[1].params).not.toContain(otherId);
+		expect(queries[1].params).toContain(true);
+		expect(queries[1].params).not.toContain('Forged');
 		expect([...input.entries()]).toEqual(before);
 	});
 
 	test('activation still validates event details before any write', async () => {
 		const { db, queries } = database();
 		for (const [key, value] of [['title', ''], ['venue', ''], ['eventDate', 'invalid'], ['endTime', '07:00']]) {
-			await expect(activateEvent(db, adminId, form({ [key]: value }))).rejects.toMatchObject({ code: 'invalid' });
+			await expect(activateEvent(db, adminId, form({ [key]: value }), true)).rejects.toMatchObject({ code: 'invalid' });
 		}
 		expect(queries).toHaveLength(0);
+	});
+
+	test('activation rejects missing readiness and an elapsed 12-hour cutoff without writing', async () => {
+		const { db, queries } = database();
+		await expect(activateEvent(db, adminId, form(), false)).rejects.toMatchObject({ code: 'unavailable' });
+		await expect(activateEvent(db, adminId, form({ eventDate: '2000-01-01' }), true)).rejects.toMatchObject({ code: 'unavailable' });
+		expect(queries).toHaveLength(0);
+	});
+
+	test('activation maps only the named unique constraint, including wrapped errors, to activeEvent', async () => {
+		const conflict = database(({ sql }) => {
+			if (sql.startsWith('insert')) throw { code: '23505', constraint_name: 'bootcamp_event_single_open' };
+			return [];
+		});
+		await expect(activateEvent(conflict.db, adminId, form(), true)).rejects.toMatchObject({ code: 'activeEvent' });
+		const unrelated = database(() => { throw { code: '23505', constraint_name: 'another_constraint' }; });
+		await expect(activateEvent(unrelated.db, adminId, form(), true)).rejects.not.toMatchObject({ code: 'activeEvent' });
 	});
 
 	test('scoped edits reject missing, malformed, or different submitted IDs before any SQL', async () => {
@@ -90,7 +110,7 @@ describe('bootcamp admin route data and mutations', () => {
 		expect(queries).toHaveLength(0);
 	});
 
-	test('scoped edits keep the event/revision predicate, explicit legal approval and closed registration', async () => {
+	test('scoped edits keep the revision predicate and preserve open registration only before both cutoffs', async () => {
 		const { db, queries } = database(() => [[eventId]]);
 		const input = form({ id: eventId, revision: '1', legalSource: 'standard', legalApproved: 'true' });
 		expect(await saveEvent(db, adminId, input, eventId)).toBe(eventId);
@@ -99,9 +119,10 @@ describe('bootcamp admin route data and mutations', () => {
 		expect(queries[0].sql).toContain('"revision" = "bootcamp_events"."revision" + 1');
 		expect(queries[0].sql).toMatch(/where \("bootcamp_events"\."id" = \$\d+ and "bootcamp_events"\."revision" = \$\d+\)/);
 		expect(queries[0].params.slice(-2)).toEqual([eventId, 1]);
-		expect(queries[0].params).toContain(true);
-		expect(queries[0].params).toContain(adminId);
-		expect(queries[0].params).toContain(false);
+		expect(queries[0].sql).toContain('"registration_open" = "bootcamp_events"."registration_open" AND "bootcamp_events"."registration_closes_at" > clock_timestamp()');
+		expect(queries[0].sql).toContain('::timestamptz > clock_timestamp()');
+		expect(queries[0].sql).not.toContain('legal_approved');
+		expect(queries[0].sql).not.toContain('approved_by');
 		const stale = database();
 		await expect(saveEvent(stale.db, adminId, input, eventId)).rejects.toMatchObject({ code: 'stale' });
 		expect(stale.queries).toHaveLength(1);

@@ -24,7 +24,9 @@
 			<div class="fields">
 				{#each ['firstName', 'lastName', 'email', 'dateOfBirth'] as field}
 					<label for={`${id}-${field}`}>{edit[field as 'firstName' | 'lastName' | 'email' | 'dateOfBirth']}
-						<input id={`${id}-${field}`} name={field} type={field === 'email' ? 'email' : field === 'dateOfBirth' ? 'date' : 'text'} value={student[field as 'firstName' | 'lastName' | 'email' | 'dateOfBirth'] ?? ''} required={field !== 'dateOfBirth'} />
+						<input id={`${id}-${field}`} name={field} type={field === 'email' ? 'email' : field === 'dateOfBirth' ? 'date' : 'text'} value={student[field as 'firstName' | 'lastName' | 'email' | 'dateOfBirth'] ?? ''} required={field !== 'dateOfBirth'}
+							readonly={field === 'email' && student.hasAccount} aria-describedby={field === 'email' && student.hasAccount ? `${id}-linked-email` : undefined} />
+						{#if field === 'email' && student.hasAccount}<span class="linked-email-note" id={`${id}-linked-email`}>{edit.linkedEmailNote}</span>{/if}
 					</label>
 				{/each}
 			</div>
@@ -61,6 +63,7 @@
 	.fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 1rem; }
 	.fields label { display: grid; gap: 0.4rem; }
 	.fields input { border: 1px solid var(--border); border-radius: 0.4rem; padding: 0.6rem; width: 100%; background: var(--background); }
+	.linked-email-note { color: var(--muted-foreground); font-size: 0.75rem; line-height: 1.6; }
 	.options { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 	.options label { display: flex; align-items: center; gap: 0.4rem; padding: 0.5rem; border: 1px solid var(--border); border-radius: 0.4rem; }
 	p, dl { color: var(--muted-foreground); font-size: 0.8rem; margin: 0.5rem 0 1rem; }

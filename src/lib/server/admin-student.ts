@@ -6,7 +6,7 @@ import { students, studentSubjectScores } from './db/schema';
 import { subjects } from '../admin/roster';
 
 export class StudentEditError extends Error {
-	constructor(public code: 'invalid' | 'missing' | 'duplicate' | 'storage') { super(code); }
+	constructor(public code: 'invalid' | 'missing' | 'duplicate' | 'linkedEmail' | 'storage') { super(code); }
 }
 export function parseStudentEdit(form: FormData, today = new Date().toISOString().slice(0, 10)) {
 	const text = (key: string) => { const value = form.get(key); if (typeof value !== 'string') throw new StudentEditError('invalid'); return value.trim(); };
@@ -27,8 +27,11 @@ export function parseStudentEdit(form: FormData, today = new Date().toISOString(
 export async function updateAdminStudent(db: Database, form: FormData) {
 	const input = parseStudentEdit(form);
 	await db.transaction(async (tx) => {
-		const [student] = await tx.update(students).set(input.profile).where(eq(students.id, input.id)).returning({ id: students.id });
+		const [student] = await tx.select({ authUserId: students.authUserId, email: students.email })
+			.from(students).where(eq(students.id, input.id)).for('update');
 		if (!student) throw new StudentEditError('missing');
+		if (student.authUserId && student.email.trim().toLowerCase() !== input.profile.email) throw new StudentEditError('linkedEmail');
+		await tx.update(students).set(input.profile).where(eq(students.id, input.id));
 		if (input.scores) await tx.insert(studentSubjectScores).values({ studentId: input.id, ...input.scores }).onConflictDoUpdate({ target: studentSubjectScores.studentId, set: input.scores });
 		else await tx.delete(studentSubjectScores).where(eq(studentSubjectScores.studentId, input.id));
 	});

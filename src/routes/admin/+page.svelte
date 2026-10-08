@@ -7,6 +7,7 @@
 	import AdminOverview from '#lib/admin/AdminOverview.svelte';
 	import AdminStudents from '#lib/admin/AdminStudents.svelte';
 	import AdminOperations from '#lib/admin/AdminOperations.svelte';
+
 	import { resolveAdminSection } from '#lib/admin/navigation.ts';
 	import LanguageSelector from '#lib/components/LanguageSelector.svelte';
 	import SignInForm from '#lib/components/SignInForm.svelte';
@@ -34,8 +35,8 @@
 </script>
 
 <svelte:head>
-	<title>{data.isAdmin ? messages.pageTitle : language.messages.auth.admin.pageTitle}</title>
-	<meta name="description" content={data.isAdmin ? messages.description : language.messages.auth.admin.description} />
+	<title>{data.isAdmin ? section === 'invitations' ? messages.studentImport.pageTitle : messages.pageTitle : language.messages.auth.admin.pageTitle}</title>
+	<meta name="description" content={data.isAdmin ? section === 'invitations' ? messages.studentImport.description : messages.description : language.messages.auth.admin.description} />
 	<meta name="robots" content="noindex, nofollow" />
 </svelte:head>
 
@@ -59,7 +60,11 @@
 	</div>
 {:else}
 	<div class="admin-overview">
-		<Alert.Root role="note" class="preview-banner border-warning/30 bg-warning/10 text-muted-foreground"><span class="preview-light" aria-hidden="true"></span><strong class="mono shrink-0 text-[0.59rem] font-medium uppercase tracking-[0.05em] text-warning">{messages.prototype}</strong><span class="preview-copy">{messages.roster.workspaceNote}</span></Alert.Root>
+		<Alert.Root role="note" class={`preview-banner text-muted-foreground ${section === 'invitations' ? 'border-primary/30 bg-primary/10' : 'border-warning/30 bg-warning/10'}`}>
+			<span class="preview-light" class:connected={section === 'invitations'} aria-hidden="true"></span>
+			<strong class={`mono shrink-0 text-[0.59rem] font-medium uppercase tracking-[0.05em] ${section === 'invitations' ? 'text-primary' : 'text-warning'}`}>{section === 'invitations' ? messages.roster.connected : messages.prototype}</strong>
+			{#if section !== 'invitations'}<span class="preview-copy">{messages.roster.workspaceNote}</span>{/if}
+		</Alert.Root>
 
 		<section class="page-intro" aria-labelledby="console-title">
 			<div class="intro-copy"><p class="eyebrow">{intro.eyebrow}</p><h1 id="console-title" tabindex="-1" bind:this={title}>{intro.title}<span aria-hidden="true">.</span></h1><p class="intro-description">{intro.description}</p></div>
@@ -73,7 +78,7 @@
 		<div id="console-view">
 			{#if section === 'overview'}<AdminOverview {students} />
 			{:else if section === 'students'}<AdminStudents {students} />{/if}
-			<AdminOperations {section} {students} />
+			<AdminOperations {section} {students} invitations={data.invitations} invitationPage={data.invitationPage} hasMoreInvitations={data.hasMoreInvitations} />
 		</div>
 	</div>
 {/if}
@@ -91,6 +96,7 @@
 	.console-brand small { color: var(--primary); font-family: var(--font-mono); font-size: 0.56rem; letter-spacing: 0.1em; text-transform: uppercase; }
 	.admin-overview > :global(.preview-banner) { display: flex; align-items: center; gap: 0.7rem; padding: 0.7rem 0.9rem; font-size: 0.63rem; line-height: 1.6; }
 	.preview-light { flex-shrink: 0; width: 5px; height: 5px; border-radius: 50%; background: var(--warning); }
+	.preview-light.connected { background: var(--primary); }
 	.page-intro { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 10rem; padding: 1.7rem 0 1.5rem; }
 	.intro-copy { z-index: 1; max-width: 45rem; }
 	.page-intro .eyebrow { font-size: 0.62rem; }

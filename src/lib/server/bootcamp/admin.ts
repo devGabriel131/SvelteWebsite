@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, lte, sql } from 'drizzle-orm';
 import type { Database } from '../db/connection';
 import { students } from '../db/schema';
 import { bootcampDocuments as documents, bootcampEvents as events, bootcampPayments as payments, bootcampRegistrations as registrations } from '../db/bootcamp-schema';
@@ -40,28 +40,50 @@ export async function getEvent(db: Database, eventId: unknown) {
 	return event ? eventView(event) : null;
 }
 
-export async function activateEvent(db: Database, adminId: string, form: FormData) {
-	// Creation accepts event details only, never an existing ID or browser-supplied approval/legal text.
+// Drizzle wraps driver errors; only this named constraint represents an active-event conflict.
+function openingError(cause: unknown): never {
+	let current = cause;
+	while (current && typeof current === 'object') {
+		const error = current as { code?: string; constraint_name?: string; cause?: unknown };
+		if (error.code === '23505' && error.constraint_name === 'bootcamp_event_single_open') throw new BootcampError('activeEvent');
+		current = error.cause;
+	}
+	throw cause;
+}
+
+export async function activateEvent(db: Database, adminId: string, form: FormData, ready: boolean) {
 	const details = new FormData();
 	for (const key of ['title', 'venue', 'eventDate', 'startTime', 'endTime']) {
 		const value = form.get(key);
 		if (value !== null) details.set(key, value);
 	}
-	details.set('legalSource', 'standard');
-	details.set('legalApproved', 'false');
-	return saveEvent(db, adminId, details);
+	const values = eventFields(details);
+
+	if (!ready || values.registrationClosesAt <= new Date()) throw new BootcampError('unavailable');
+	try {
+		return await db.transaction(async (tx) => {
+			await tx.update(events).set({ registrationOpen: false, updatedAt: new Date() })
+				.where(and(eq(events.registrationOpen, true), lte(events.registrationClosesAt, sql`clock_timestamp()`)));
+			const [created] = await tx.insert(events).values({ ...values, registrationOpen: true, createdBy: adminId }).returning({ id: events.id });
+			return created.id;
+		});
+	} catch (cause) { openingError(cause); }
 }
 
 export async function saveEvent(db: Database, adminId: string, form: FormData, expectedEventId?: string) {
 	if (expectedEventId !== undefined && id(form.get('id')) !== id(expectedEventId)) throw new BootcampError('invalid');
 	const values = eventFields(form);
-	const approvedBy = values.legalApproved ? adminId : null;
 	const eventId = form.get('id');
 	if (!eventId) {
-		const [created] = await db.insert(events).values({ ...values, approvedBy, createdBy: adminId }).returning({ id: events.id });
+		const [created] = await db.insert(events).values({ ...values, createdBy: adminId }).returning({ id: events.id });
 		return created.id;
 	}
-	const [saved] = await db.update(events).set({ ...values, approvedBy, registrationOpen: false, revision: sql`${events.revision} + 1`, updatedAt: new Date() })
+	const [saved] = await db.update(events).set({
+		...values,
+		// Check both deadlines: moving an expired event forward must not implicitly reopen it.
+		registrationOpen: sql`${events.registrationOpen} AND ${events.registrationClosesAt} > clock_timestamp() AND ${values.registrationClosesAt.toISOString()}::timestamptz > clock_timestamp()`,
+		revision: sql`${events.revision} + 1`, updatedAt: new Date()
+	})
 		.where(and(eq(events.id, id(eventId)), eq(events.revision, revisionField(form)))).returning({ id: events.id });
 	if (!saved) throw new BootcampError('stale');
 	return saved.id;
@@ -70,12 +92,16 @@ export async function toggleEvent(db: Database, form: FormData, ready: boolean) 
 	const eventId = id(form.get('eventId'));
 	const open = form.get('open');
 	if (open !== 'true' && open !== 'false') throw new BootcampError('invalid');
-	await db.transaction(async (tx) => {
-		const [event] = await tx.select().from(events).where(eq(events.id, eventId)).for('update');
-		if (!event || event.revision !== revisionField(form)) throw new BootcampError('stale');
-		if (open === 'true' && (!ready || !event.legalApproved || event.registrationClosesAt <= new Date())) throw new BootcampError('unavailable');
-		await tx.update(events).set({ registrationOpen: open === 'true', updatedAt: new Date() }).where(eq(events.id, eventId));
-	});
+	try {
+		await db.transaction(async (tx) => {
+			const [event] = await tx.select().from(events).where(eq(events.id, eventId)).for('update');
+			if (!event || event.revision !== revisionField(form)) throw new BootcampError('stale');
+			if (open === 'true' && (!ready || event.registrationClosesAt <= new Date())) throw new BootcampError('unavailable');
+			if (open === 'true') await tx.update(events).set({ registrationOpen: false, updatedAt: new Date() })
+				.where(and(eq(events.registrationOpen, true), lte(events.registrationClosesAt, sql`clock_timestamp()`)));
+			await tx.update(events).set({ registrationOpen: open === 'true', updatedAt: new Date() }).where(eq(events.id, eventId));
+		});
+	} catch (cause) { openingError(cause); }
 }
 
 export function reportCsv(rows: ReportRow[], language: Language): string {

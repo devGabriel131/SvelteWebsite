@@ -64,6 +64,20 @@
       "when": 1791407882833,
       "tag": "0008_black_virginia_dare",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791479395795,
+      "tag": "0009_bootcamp_single_active_event",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791482874050,
+      "tag": "0010_student_invitations",
+      "breakpoints": true
     }
   ]
 }

@@ -1,12 +1,14 @@
 <script lang="ts">
 	import { useLanguage } from '#lib/i18n/language.svelte.ts';
 	import { formatMessage } from '#lib/i18n/translations.ts';
-	import { priceCents, depositCents, eventTimeZone } from '../types';
-		import { parseEventSchedule } from '../rules';
-	import { classTypes, registrationCoverage, previewRows, seedEvent, savePreviewEvent, previewSteps, type PreviewDesign, type PreviewStep, type PreviewStudent } from './model';
+	import { priceCents, depositCents, eventTimeZone, sectionKeys } from '../types';
+	import { defaultLegalText } from '../legal';
+	import { parseEventSchedule } from '../rules';
+	import { canOpenPreviewRegistration, classTypes, registrationCoverage, previewRows, seedEvent, savePreviewEvent, previewSteps, type PreviewDesign, type PreviewStep, type PreviewStudent } from './model';
 	let { design, roster }: { design: PreviewDesign; roster: PreviewStudent[] } = $props();
 	const language = useLanguage();
 	const m = $derived(language.messages.bootcampMockups);
+	const messages = $derived(language.messages.bootcamp);
 	let step = $state<PreviewStep>('list');
 	let event = $state(seedEvent());
 	let draft = $state(seedEvent());
@@ -16,6 +18,13 @@
 		let classFilter = $state<'all' | PreviewStudent['classType']>('all');
 	let feedback = $state<'saved' | 'activated' | null>(null);
 	const schedule = $derived(parseEventSchedule(draft.date, draft.start, draft.end));
+	const cutoffPassed = $derived(Boolean(schedule && schedule.registrationClosesAt.getTime() <= Date.now()));
+	const mayOpen = $derived(canOpenPreviewRegistration(event));
+	const isOpen = $derived(event.open && mayOpen);
+	const legalPreview = $derived.by(() => {
+		const venue = draft.venue.trim().normalize('NFC');
+		return venue && schedule ? defaultLegalText({ venue, ...schedule }).es : null;
+	});
 		const scheduleDate = (value: Date) => new Intl.DateTimeFormat(language.current === 'es' ? 'es-PR' : 'en-US', {
 			dateStyle: 'medium', timeStyle: 'short', timeZone: eventTimeZone, hourCycle: 'h23'
 		}).format(value);
@@ -39,12 +48,16 @@
 		step = next;
 	}
 	function save() {
-		const saved = savePreviewEvent(draft, event.revision);
-				if (!saved) return;
-				event = saved;
+		const saved = savePreviewEvent(draft, event);
+		if (!saved) return;
+		event = saved;
 		feedback = step === 'activate' ? 'activated' : 'saved';
 		step = step === 'activate' ? 'edit' : 'report';
 		draft = { ...event };
+	}
+	function toggleRegistration() {
+		if (!event.open && !canOpenPreviewRegistration(event)) return;
+		event.open = !event.open;
 	}
 	function reset() { event = seedEvent(); draft = seedEvent(); step = 'list'; feedback = null; search = ''; filter = 'all'; classFilter = 'all'; }
 </script>
@@ -72,7 +85,7 @@
 		<p class="subtle">{m.timezone}</p>
 		<div class="coverage"><span>{m.progress}</span><strong>{rows.length ? Math.round(registered.length / rows.length * 100) : 0}%</strong></div>
 		<progress aria-label={m.progress} value={registered.length} max={rows.length || 1}></progress>
-		<span class="badge" class:open={event.open}>{event.open ? m.open : m.closed}</span>
+		<span class="badge" class:open={isOpen}>{isOpen ? m.open : m.closed}</span>
 	</aside>
 {/snippet}
 
@@ -116,18 +129,19 @@
 	{#if feedback}<p class="feedback" role="status">{m[feedback]}</p>{/if}
 	{#if step === 'list'}
 		{#if design === 'ledger'}
-			<div class="table-scroll"><table class="event-ledger"><thead><tr><th scope="col">{m.event}</th><th scope="col">{m.date}</th><th scope="col">{m.status}</th></tr></thead><tbody><tr><th scope="row">{title}<small>{venue}</small></th><td>{date(event.date)}</td><td><span class="badge" class:open={event.open}>{event.open ? m.open : m.closed}</span></td></tr></tbody></table></div>
+			<div class="table-scroll"><table class="event-ledger"><thead><tr><th scope="col">{m.event}</th><th scope="col">{m.date}</th><th scope="col">{m.status}</th></tr></thead><tbody><tr><th scope="row">{title}<small>{venue}</small></th><td>{date(event.date)}</td><td><span class="badge" class:open={isOpen}>{isOpen ? m.open : m.closed}</span></td></tr></tbody></table></div>
 			{@render eventActions()}
 		{:else if design === 'board'}
 			<div class="stage-cards">
 				{#each steps.slice(1) as stage, i}<button type="button" class="stage-card" onclick={() => go(stage)}><span class="overline">0{i + 2}</span><strong>{m[stage]}</strong><span>{stage === 'report' ? formatMessage(m.count, { count: registered.length }) : venue}</span><span aria-hidden="true">↗</span></button>{/each}
 			</div>
 		{:else}
-			<article class="event-card"><div class="date-tile"><span>{new Intl.DateTimeFormat(language.current, { month: 'short' }).format(new Date(`${event.date}T12:00:00`))}</span><strong>{event.date.slice(8)}</strong><span>{event.date.slice(0, 4)}</span></div><div><span class="badge" class:open={event.open}>{event.open ? m.open : m.closed}</span><h3>{title}</h3><p>{venue} · {event.start} — {event.end}</p>{@render eventActions()}</div></article>
+			<article class="event-card"><div class="date-tile"><span>{new Intl.DateTimeFormat(language.current, { month: 'short' }).format(new Date(`${event.date}T12:00:00`))}</span><strong>{event.date.slice(8)}</strong><span>{event.date.slice(0, 4)}</span></div><div><span class="badge" class:open={isOpen}>{isOpen ? m.open : m.closed}</span><h3>{title}</h3><p>{venue} · {event.start} — {event.end}</p>{@render eventActions()}</div></article>
 		{/if}
 		{@render stats()}
 		{@render studentTable()}
 	{:else if step === 'activate' || step === 'edit'}
+		<p>{step === 'activate' ? messages.admin.activationHint : messages.admin.editWarning}</p>
 		<form onsubmit={(e) => { e.preventDefault(); save(); }}>
 			<div class="editor-fields"><label class="wide">{m.event}<input bind:value={draft.title} maxlength="200" required /></label><label class="wide">{m.location}<input bind:value={draft.venue} maxlength="300" required /></label><label>{m.date}<input type="date" bind:value={draft.date} required /></label><label>{m.start}<input type="time" bind:value={draft.start} required /></label><label>{m.end}<input type="time" bind:value={draft.end} min={draft.start} required /></label></div>
 			<div class="schedule" aria-live="polite">
@@ -137,8 +151,20 @@
 								{:else}<span>{m.scheduleInvalid}</span>{/if}
 								<span>{m.timezone}</span>
 							</div>
-			<section class="legal"><h3>{m.legal}</h3><p>{m.legalNote}</p><label class="check"><input type="checkbox" bind:checked={draft.reviewed} />{m.approved}</label></section>
-			<div class="actions"><button type="submit" class="primary" disabled={!schedule}>{step === 'activate' ? m.create : m.save}</button><button type="button" onclick={() => go('list')}>{m.cancel}</button><button type="button" onclick={() => go('report')}>{m.viewReport}</button></div>
+			{#if step === 'activate' && cutoffPassed}<p role="status">{messages.admin.cutoffPassed}</p>{/if}
+			<section class="legal">
+				<h3>{m.legal}</h3><p>{m.legalNote}</p>
+				{#if legalPreview}
+					{#each sectionKeys as section (section)}
+						<details>
+							<summary>{formatMessage(messages.admin.legalLabel, { section: messages.waiver.sections[section] })}</summary>
+							<!-- svelte-ignore a11y_no_noninteractive_tabindex (Keyboard access to the read-only agreement preview.) -->
+							<div class="legal-text" role="region" tabindex="0" aria-label={formatMessage(messages.admin.legalLabel, { section: messages.waiver.sections[section] })} lang="es">{legalPreview[section]}</div>
+						</details>
+					{/each}
+				{:else}<p>{messages.admin.legalPreviewPending}</p>{/if}
+			</section>
+			<div class="actions"><button type="submit" class="primary" disabled={!schedule || (step === 'activate' && cutoffPassed)}>{step === 'activate' ? m.create : m.save}</button><button type="button" onclick={() => go('list')}>{m.cancel}</button><button type="button" onclick={() => go('report')}>{m.viewReport}</button></div>
 		</form>
 	{:else}
 		{@render stats()}
@@ -158,7 +184,7 @@
 		<div class="editorial-top">{@render navigation()}<button type="button" class="reset" onclick={reset}>{m.reset}</button></div>
 		<div class="main-panel">{@render content()}</div>
 	{/if}
-	<footer><span>{formatMessage(m.revision, { revision: event.revision })}</span><button type="button" class="text-button" disabled={!event.activated} onclick={() => { event.open = !event.open; }}>{event.open ? m.closeRegistration : m.openRegistration}</button></footer>
+	<footer><span>{formatMessage(m.revision, { revision: event.revision })}</span><button type="button" class="text-button" disabled={!event.activated || (!event.open && !mayOpen)} onclick={toggleRegistration}>{event.open ? m.closeRegistration : m.openRegistration}</button></footer>
 </div>
 
 <style>
@@ -169,7 +195,7 @@
 	.class-filters { margin-bottom: 12px; }
 	.preview { --accent: #315a4c; --wash: #edf3ef; border: 1px solid var(--border); border-radius: 16px; overflow: hidden; background: var(--card); color: var(--card-foreground); }
 	button, input { font: inherit; } button { cursor: pointer; border: 1px solid var(--border); background: var(--card); border-radius: 7px; padding: 9px 13px; font-size: 12px; font-weight: 550; transition: background .15s; }
-	button:hover { background: var(--muted); } button:focus-visible, input:focus-visible, summary:focus-visible, .table-scroll:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
+	button:hover { background: var(--muted); } button:focus-visible, input:focus-visible, summary:focus-visible, .table-scroll:focus-visible, .legal-text:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
 	.primary { background: var(--accent); color: white; border-color: var(--accent); } .primary:hover { background: var(--accent); filter: brightness(1.1); }
 	nav { display: flex; gap: 6px; flex-wrap: wrap; } nav button { background: transparent; border-color: transparent; color: var(--muted-foreground); display: flex; align-items: center; gap: 9px; } nav button.current { color: var(--foreground); background: var(--muted); }
 
@@ -188,12 +214,12 @@
 	.stats > div { padding: 0 22px; border-right: 1px solid var(--border); } .stats > div:first-child { padding-left: 0; } .stats > div:last-child { border: 0; } .stats span { font-size: 11px; color: var(--muted-foreground); } .stats strong { display: block; font-size: 27px; font-weight: 550; letter-spacing: -.03em; margin-top: 6px; } .stats small { font-size: 14px; font-weight: 400; color: var(--muted-foreground); }
 	.section-heading, .report-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; } .subtle { font-size: 11px; color: var(--muted-foreground); }
 	.toolbar { display: flex; justify-content: space-between; gap: 12px; margin: 18px 0; flex-wrap: wrap; }
-	input:not([type='checkbox']) { width: 100%; border: 1px solid var(--border); border-radius: 7px; background: var(--background); color: var(--foreground); padding: 10px 12px; font-size: 13px; min-width: 0; } .search { flex: 1; max-width: 320px; min-width: 180px; }
+	input { width: 100%; border: 1px solid var(--border); border-radius: 7px; background: var(--background); color: var(--foreground); padding: 10px 12px; font-size: 13px; min-width: 0; } .search { flex: 1; max-width: 320px; min-width: 180px; }
 	.filters { display: flex; gap: 4px; flex-wrap: wrap; } .filters button { font-size: 11px; border-color: transparent; background: transparent; } .filters .chosen { background: var(--muted); border-color: var(--border); }
 	.table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; } table { width: 100%; border-collapse: collapse; text-align: left; font-size: 12px; white-space: nowrap; } th, td { padding: 14px 16px; border-bottom: 1px solid var(--border); } thead th { font-size: 10px; font-weight: 550; color: var(--muted-foreground); background: var(--muted); } tbody th { font-weight: 500; } tbody th strong { font-weight: 550; } tbody small { display: block; font-size: 10px; color: var(--muted-foreground); margin-top: 4px; } tbody tr:last-child > * { border-bottom: 0; } td { font-variant-numeric: tabular-nums; }
 	.editor-fields { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 20px; max-width: 850px; } .editor-fields label { display: flex; flex-direction: column; gap: 8px; font-size: 12px; } .wide { grid-column: 1 / -1; }
 	.schedule { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11px; color: var(--muted-foreground); padding: 20px 0; }
-	.legal { background: var(--muted); border-radius: 10px; padding: 20px; margin: 8px 0; } .legal p { margin: 8px 0 16px; max-width: 650px; font-size: 12px; } .check { display: flex; align-items: center; gap: 10px; font-size: 12px; } input[type='checkbox'] { accent-color: var(--accent); width: 16px; height: 16px; }
+	.legal { background: var(--muted); border-radius: 10px; padding: 20px; margin: 8px 0; } .legal p { margin: 8px 0 16px; max-width: 650px; font-size: 12px; } .legal details { margin-top: 12px; font-size: 12px; } .legal-text { max-height: 18rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; padding: 12px; margin-top: 8px; background: var(--background); border: 1px solid var(--border); border-radius: 7px; }
 	.feedback { border-left: 3px solid var(--accent); padding: 9px 12px; background: var(--wash); color: var(--accent); margin-bottom: 20px; font-size: 12px; }
 	.tools { font-size: 12px; padding: 18px 0 0; color: var(--muted-foreground); } summary { cursor: pointer; } .tools p { font-size: 12px; margin-top: 10px; }
 	footer { border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; padding: 12px 26px; gap: 12px; font-size: 10px; color: var(--muted-foreground); } .text-button { background: transparent; border: 0; font-size: 11px; padding: 4px; text-decoration: underline; text-underline-offset: 3px; }

@@ -1,4 +1,4 @@
-import { asc, eq } from 'drizzle-orm';
+import { asc, eq, sql } from 'drizzle-orm';
 import type { Database } from './db/connection';
 import { students, studentSubjectScores } from './db/schema';
 import type { AdminStudent } from '../admin/roster';
@@ -22,12 +22,13 @@ export async function readAdminRoster(db: Database): Promise<AdminStudent[]> {
 		email: students.email, classType: students.classType, status: students.status,
 				dateOfBirth: students.dateOfBirth, gender: students.gender,
 				createdAt: students.createdAt, updatedAt: students.updatedAt,
-		scores: studentSubjectScores
+		scores: studentSubjectScores,
+		hasAccount: sql<boolean>`${students.authUserId} IS NOT NULL`
 	}).from(students).leftJoin(studentSubjectScores, eq(students.id, studentSubjectScores.studentId))
 		.orderBy(asc(students.lastName), asc(students.firstName), asc(students.id));
 	return rows.map((row) => ({
 		id: row.id, name: `${row.firstName} ${row.lastName}`, email: row.email,
-		firstName: row.firstName, lastName: row.lastName, dateOfBirth: row.dateOfBirth,
+		firstName: row.firstName, lastName: row.lastName, dateOfBirth: row.dateOfBirth, hasAccount: row.hasAccount,
 				gender: row.gender, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString(),
 				classType: row.classType, status: row.status,
 		subjectScores: row.scores ? {

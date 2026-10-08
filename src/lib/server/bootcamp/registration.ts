@@ -15,7 +15,7 @@ export function eventView(event: typeof events.$inferSelect): BootcampEvent {
 		id: event.id, revision: event.revision, title: event.title, venue: event.venue,
 		startsAt: event.startsAt.toISOString(), endsAt: event.endsAt.toISOString(), arrivalAt: event.arrivalAt.toISOString(),
 		registrationClosesAt: event.registrationClosesAt.toISOString(), legal: event.legal,
-		legalApproved: event.legalApproved, registrationOpen: event.registrationOpen
+		registrationOpen: event.registrationOpen
 	};
 }
 export async function linkedStudent(db: Database, userId: string): Promise<Student | null> {

@@ -213,8 +213,7 @@ export function createPaymentService(db: Database, client: AthClient, encryption
 					if (registration.eventId !== event.id || registration.studentId !== student.id) throw new PaymentError('unavailable');
 					// Recheck deadlines and age AFTER all lock waits, using the database clock and PR calendar.
 					const [available] = await tx.select({ id: events.id, checkedAt: sql<string>`clock_timestamp()::text` }).from(events).where(and(
-						eq(events.id, event.id), eq(events.registrationOpen, true), eq(events.legalApproved, true),
-						isNotNull(events.approvedBy), gt(events.registrationClosesAt, now), gt(events.startsAt, now)
+						eq(events.id, event.id), eq(events.registrationOpen, true), gt(events.registrationClosesAt, now), gt(events.startsAt, now)
 					));
 					if (!available) throw new PaymentError('unavailable');
 					const checkedAt = new Date(available.checkedAt);

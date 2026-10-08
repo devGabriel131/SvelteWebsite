@@ -8,7 +8,7 @@
 	import { Label } from '#lib/components/ui/label/index.js';
 	import { useLanguage } from '#lib/i18n/language.svelte.ts';
 
-	let { audience, localAdmin = false }: { audience: 'student' | 'admin'; localAdmin?: boolean } = $props();
+	let { audience, localAdmin = false, returnTo }: { audience: 'student' | 'admin'; localAdmin?: boolean; returnTo?: string } = $props();
 	const language = useLanguage();
 	const id = $props.id();
 	const messages = $derived(language.messages.auth);
@@ -56,7 +56,14 @@
 			password = '';
 			email = '';
 			// A full navigation refreshes the server-owned viewer from the session cookie.
-			window.location.assign(resolve(audience === 'admin' ? '/admin' : '/'));
+			let destination: string = resolve(audience === 'admin' ? '/admin' : '/');
+			if (returnTo) {
+				try {
+					const target = new URL(returnTo, window.location.origin);
+					if (target.origin === window.location.origin && target.protocol === window.location.protocol) destination = target.href;
+				} catch { /* Invalid return URLs use the audience's workspace. */ }
+			}
+			window.location.assign(destination);
 		} catch {
 			error = 'unavailable';
 			pending = false;

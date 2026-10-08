@@ -1,10 +1,10 @@
-import { sectionKeys, type EmployerDetails, type LegalText } from '../../bootcamp/types';
+import type { EmployerDetails } from '../../bootcamp/types';
 import { defaultLegalText } from '../../bootcamp/legal';
 import { parseEventSchedule } from '../../bootcamp/rules';
 import type { Language } from '../../i18n/translations';
 import { isSupportedPdfText } from '../../bootcamp/pdf-text';
 
-export type BootcampErrorCode = 'invalid' | 'unavailable' | 'closed' | 'ineligible' | 'stale' | 'notLinked' | 'payment' | 'storage' | 'unsupportedText';
+export type BootcampErrorCode = 'invalid' | 'unavailable' | 'closed' | 'ineligible' | 'stale' | 'notLinked' | 'payment' | 'storage' | 'unsupportedText' | 'activeEvent';
 export class BootcampError extends Error {
 	constructor(readonly code: BootcampErrorCode) { super(code); this.name = 'BootcampError'; }
 }
@@ -34,21 +34,11 @@ export function eventFields(form: FormData) {
 	const { startsAt, endsAt, arrivalAt, registrationClosesAt } = schedule;
 	const title = field(form, 'title');
 	const venue = field(form, 'venue', 300);
-	const source = form.get('legalSource');
-	if (source !== null && source !== 'standard' && source !== 'custom') throw new BootcampError('invalid');
-	let legal: LegalText;
-	if (source === 'standard') {
-		legal = defaultLegalText({ venue, startsAt, endsAt, arrivalAt });
-	} else {
-		const spanish = {} as LegalText['es'];
-		for (const section of sectionKeys) spanish[section] = field(form, `legal_es_${section}`, 30000);
-		// Retain the historical JSON shape, not a separately maintained English agreement.
-		legal = { es: spanish, en: { ...spanish } };
-	}
+	const legal = defaultLegalText({ venue, startsAt, endsAt, arrivalAt });
 	if (![title, venue, ...Object.values(legal.en), ...Object.values(legal.es)].every(isSupportedPdfText)) throw new BootcampError('unsupportedText');
 	return {
 		title, venue, startsAt, endsAt, arrivalAt, registrationClosesAt,
-		legal, legalApproved: form.get('legalApproved') === 'true'
+		legal
 	};
 }
 export function employerFields(form: FormData): EmployerDetails {

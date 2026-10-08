@@ -17,14 +17,23 @@ export const previewSteps = (activated: boolean): PreviewStep[] => ['list', acti
 export const designs: PreviewDesign[] = ['editorial', 'board', 'ledger'];
 export const seedEvent = () => ({
 	title: '', venue: '', date: '2026-11-14', start: '09:00', end: '16:00',
-	activated: false, open: false, reviewed: false, revision: 1
+	activated: false, open: false, revision: 1
 });
 
 export type PreviewEvent = ReturnType<typeof seedEvent>;
 
-export function savePreviewEvent(draft: PreviewEvent, revision: number): PreviewEvent | null {
-	if (!parseEventSchedule(draft.date, draft.start, draft.end)) return null;
-	return { ...draft, activated: true, open: false, revision: revision + 1 };
+export function canOpenPreviewRegistration(event: PreviewEvent, now = new Date()): boolean {
+	const schedule = parseEventSchedule(event.date, event.start, event.end);
+	return Boolean(event.activated && schedule && schedule.registrationClosesAt > now);
+}
+
+export function savePreviewEvent(draft: PreviewEvent, current: PreviewEvent, now = new Date()): PreviewEvent | null {
+	const schedule = parseEventSchedule(draft.date, draft.start, draft.end);
+	if (!schedule || (!current.activated && schedule.registrationClosesAt <= now)) return null;
+	const open = current.activated
+		? current.open && canOpenPreviewRegistration(current, now) && schedule.registrationClosesAt > now
+		: true;
+	return { ...draft, activated: true, open, revision: current.revision + 1 };
 }
 
 export function previewRows(roster: PreviewStudent[]) {

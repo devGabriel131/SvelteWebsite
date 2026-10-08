@@ -7,7 +7,8 @@
 	import ActionForm from './ActionForm.svelte';
 	import WaiverForm from './WaiverForm.svelte';
 	import RegistrationPayment from './RegistrationPayment.svelte';
-	import { eventTimeZone, sectionKeys, type BootcampEvent, type StudentBootcampPage, type StudentRegistration } from './types';
+	import { registrationAvailable } from './rules';
+	import { eventTimeZone, type BootcampEvent, type StudentBootcampPage, type StudentRegistration } from './types';
 
 	let { event, registration, student, paymentEnabled, now }: {
 		event: BootcampEvent;
@@ -21,9 +22,7 @@
 	const basePath = resolve('/').replace(/\/$/, '');
 	const language = useLanguage();
 	const messages = $derived(language.messages.bootcamp);
-	const canRegister = $derived(event.registrationOpen && event.legalApproved
-		&& now < Date.parse(event.registrationClosesAt) && now <= Date.parse(event.endsAt)
-		&& sectionKeys.every((section) => event.legal?.en?.[section]?.trim() && event.legal?.es?.[section]?.trim()));
+	const canRegister = $derived(registrationAvailable(event, new Date(now)));
 	const ended = $derived(now > Date.parse(event.endsAt));
 
 	let needsLetter = $state<boolean | null>(null);

@@ -12,7 +12,7 @@ export const load: PageServerLoad = ({ locals }) => {
 
 export const actions: Actions = {
 	saveEvent: adminAction(
-		({ services, adminId, form }) => activateEvent(services.db, adminId, form),
+		({ services, adminId, form }) => activateEvent(services.db, adminId, form, services.paymentEnabled && services.driveEnabled),
 		() => redirect(303, resolve('/admin/bootcamps'))
 	)
 };

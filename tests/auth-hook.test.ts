@@ -63,7 +63,7 @@ describe('auth hook without database I/O', () => {
 			event.locals.session = null;
 			event.locals.localAdmin = localAdmin;
 			expect(await loadAdminPage(event as Parameters<typeof loadAdminPage>[0])).toEqual({
-				isAdmin: false, localAdmin, students: []
+				isAdmin: false, localAdmin, students: [], invitations: [], invitationPage: 1, hasMoreInvitations: false
 			});
 		});
 	}

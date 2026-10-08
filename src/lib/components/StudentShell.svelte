@@ -14,7 +14,7 @@
 		preview = false
 	}: {
 		children: Snippet;
-		activePage?: 'home' | 'speed-math' | 'frequency' | 'ist' | 'attendance' | 'bootcamps' | 'courses';
+		activePage?: 'home' | 'speed-math' | 'frequency' | 'ist' | 'attendance' | 'bootcamps' | 'courses' | 'enroll';
 		preview?: boolean;
 	} = $props();
 	const language = useLanguage();
@@ -28,7 +28,7 @@
 		{ key: 'ist', page: 'ist', href: resolve('/ist'), icon: Dumbbell, ...messages.tools.ist },
 		{ key: 'attendance', page: 'attendance', href: resolve('/attendance'), icon: FileText, ...messages.tools.attendance }
 	]);
-	const pageTitle = $derived(activePage === 'courses' ? language.messages.coursesPreview.label : activePage === 'bootcamps' ? language.messages.bootcamp.title : tools.find((tool) => tool.page === activePage)?.title ?? messages.home);
+	const pageTitle = $derived(activePage === 'enroll' ? language.messages.enrollment.navigation : activePage === 'courses' ? language.messages.coursesPreview.label : activePage === 'bootcamps' ? language.messages.bootcamp.title : tools.find((tool) => tool.page === activePage)?.title ?? messages.home);
 </script>
 
 <div class="student-shell" data-preview={preview ? '' : undefined}>
@@ -55,7 +55,12 @@
 			<Button href={resolve('/courses-preview')} variant="ghost" aria-current={activePage === 'courses' ? 'page' : undefined} class="justify-start gap-3 px-3 text-left">
 								<BookOpen aria-hidden="true" />{language.messages.coursesPreview.label}
 							</Button>
-							{#if viewer?.role === 'student'}
+			{#if activePage === 'enroll'}
+				<Button href={page.url.pathname + page.url.search} variant="ghost" aria-current="page" class="justify-start gap-3 px-3 text-left">
+					<UserRound aria-hidden="true" />{language.messages.enrollment.navigation}
+				</Button>
+			{/if}
+			{#if viewer?.role === 'student'}
 				<Button href={resolve('/bootcamps')} variant="ghost" aria-current={activePage === 'bootcamps' ? 'page' : undefined} class="justify-start gap-3 px-3 text-left">
 					<FileText aria-hidden="true" />{language.messages.bootcamp.title}
 				</Button>

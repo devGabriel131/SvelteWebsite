@@ -10,6 +10,7 @@ export interface AdminStudent {
 		createdAt: string;
 		updatedAt: string;
 	email: string;
+	hasAccount: boolean;
 	classType: 'basic' | 'regular';
 	status: StudentStatus;
 	subjectScores: { ar: number; pc: number; wk: number; mk: number; isFixture: boolean } | null;

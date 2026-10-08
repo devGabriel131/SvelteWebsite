@@ -1,3 +1,4 @@
+import { defaultLegalText } from '../src/lib/bootcamp/legal';
 import { describe, expect, test } from 'bun:test';
 import { sectionKeys, type LegalText } from '../src/lib/bootcamp/types';
 import { BootcampError, employerFields, eventFields, field, id, languageField, readForm, revisionField } from '../src/lib/server/bootcamp/validation';
@@ -55,8 +56,8 @@ function streamed(chunks: Uint8Array[], contentType: string, contentLength?: str
 	return { request: request(body, contentType, contentLength), body, cancelled: () => cancelled, reads: () => index };
 }
 
-test('event publication rejects PDF-unsupported title, venue, and approved legal characters', () => {
-	for (const key of ['title', 'venue', ...sectionKeys.map((section) => `legal_es_${section}`)]) {
+test('event publication rejects PDF-unsupported title and venue', () => {
+	for (const key of ['title', 'venue', ]) {
 		for (const value of ['Non\u2011breaking hyphen', 'Internal\ttab', 'Unsupported 🖊']) {
 			expect(() => eventFields(eventForm({ [key]: value }))).toThrow(BootcampError);
 			try { eventFields(eventForm({ [key]: value })); } catch (error) { expect(error).toMatchObject({ code: 'unsupportedText' }); }
@@ -154,13 +155,13 @@ describe('bootcamp scalar and employer fields', () => {
 	}
 });
 
-describe('one-day event schedules, legal text, and approval', () => {
+describe('one-day event schedules and standard legal text', () => {
 	test('derives the four canonical UTC dates solely from the Puerto Rico date and minute-precision times', () => {
 		expect(eventFields(eventForm())).toEqual({
 			title: 'Bootcamp de preparación', venue: 'San Juan, Puerto Rico',
 			startsAt: new Date('2026-10-10T12:00:00.000Z'), endsAt: new Date('2026-10-10T20:00:00.000Z'),
 			arrivalAt: new Date('2026-10-10T11:00:00.000Z'), registrationClosesAt: new Date('2026-10-10T00:00:00.000Z'),
-			legal, legalApproved: true
+			legal: defaultLegalText({ venue: 'San Juan, Puerto Rico', startsAt: new Date('2026-10-10T12:00:00Z'), endsAt: new Date('2026-10-10T20:00:00Z'), arrivalAt: new Date('2026-10-10T11:00:00Z') })
 		});
 	});
 
@@ -239,62 +240,12 @@ describe('one-day event schedules, legal text, and approval', () => {
 		});
 	}
 
-	test('preserves the three Spanish custom sections exactly in both compatibility language slots', () => {
-		expect(sectionKeys).toEqual(['agreement', 'liability', 'media']);
-		const input = eventForm({ title: '  Preparacio\u0301n ', venue: '  An\u0303asco ' });
-		const rawValues = [...input.entries()];
-		const saved = eventFields(input);
-		expect(saved.title).toBe('Preparación');
-		expect(saved.venue).toBe('Añasco');
-		expect(saved.legal).toEqual(legal);
-		expect(saved.legal).not.toBe(legal);
-		expect([...input.entries()]).toEqual(rawValues);
-		input.set('legal_es_agreement', 'Cambio posterior');
-		expect(saved.legal.en.agreement).toBe(legal.en.agreement);
-	});
-
-	test('trims/NFC-normalizes legal input once; resaving canonical displayed/PDF text is lossless', () => {
-		const input = eventForm();
-		for (const section of sectionKeys) input.set(`legal_es_${section}`, ` \n${legal.es[section].normalize('NFD')}\n\t `);
-		const saved = eventFields(input);
-		expect(saved.legal).toEqual(legal);
-		const resubmitted = eventForm();
-		for (const section of sectionKeys) resubmitted.set(`legal_es_${section}`, saved.legal.es[section]);
-		expect(eventFields(resubmitted).legal).toEqual(saved.legal);
-	});
-
-	for (const section of sectionKeys) {
-		const key = `legal_es_${section}`;
-		test(`${key} is mandatory text with an inclusive 30,000-character bound`, () => {
-			const missing = eventForm();
-			missing.delete(key);
-			expectInvalid(() => eventFields(missing));
-			expect(eventFields(eventForm({ [key]: 'x'.repeat(30000) })).legal.es[section]).toBe('x'.repeat(30000));
-			for (const value of ['', ' \r\n\t', 'x'.repeat(30001), 'Invalid\0legal', new File(['Approved'], 'legal.txt')]) {
-				expectInvalid(() => eventFields(eventForm({ [key]: value })));
-			}
-		});
-	}
-
-	test('missing or custom source reads only Spanish, never English as an alternative', () => {
-		for (const source of [undefined, 'custom']) {
-			const input = eventForm(source ? { legalSource: source } : {});
-			for (const section of sectionKeys) input.set(`legal_en_${section}`, 'Different English wording 🖊');
-			expect(eventFields(input).legal).toEqual(legal);
-			for (const section of sectionKeys) {
-				for (const value of [null, '', ' \n', new File(['Texto'], 'legal.txt')]) {
-					if (value === null) input.delete(`legal_es_${section}`);
-					else input.set(`legal_es_${section}`, value);
-					expectInvalid(() => eventFields(input));
-				}
-				input.set(`legal_es_${section}`, legal.es[section]);
-			}
-		}
-	});
-
-	test('rejects unknown, noncanonical and uploaded legal sources', () => {
-		for (const legalSource of ['', 'default', 'STANDARD', ' standard ', 'custom\n', new File(['standard'], 'source.txt')]) {
-			expectInvalid(() => eventFields(eventForm({ legalSource })));
+	test('all browser legal and approval fields are ignored', () => {
+		const expected = eventFields(eventForm({ legalSource: 'standard' }));
+		for (const legalSource of ['custom', 'unknown', new File(['custom'], 'source')]) {
+			const input = eventForm({ legalSource, legalApproved: 'true', legal_es_agreement: 'Forged 🖊' });
+			expect(eventFields(input)).toEqual(expected);
+			expect(eventFields(input)).not.toHaveProperty('legalApproved');
 		}
 	});
 
@@ -305,7 +256,6 @@ describe('one-day event schedules, legal text, and approval', () => {
 		const before = [...input.entries()];
 		const saved = eventFields(input);
 		expect(saved.legal.en).toEqual(saved.legal.es);
-		expect(saved.legalApproved).toBe(true);
 		for (const value of ['Añasco', '11 de febrero de 2027', '21:03:00', '22:03:00', '$30.00', '$15.00']) {
 			expect(saved.legal.es.agreement).toContain(value);
 		}
@@ -352,18 +302,19 @@ describe('one-day event schedules, legal text, and approval', () => {
 		expect(original).toEqual(before);
 	});
 
-	test('custom edits keep manual dates, placeholders, spaces and punctuation instead of regenerating clauses', () => {
+	test('legacy custom submissions cannot override regenerated standard clauses', () => {
 		const input = eventForm({ legalSource: 'custom', venue: 'Cancha Nueva de Ponce',
 			eventDate: '2027-02-12', startTime: '13:15', endTime: '18:00',
 			legal_es_agreement: 'Acuerdo  especial: 1 de agosto de 2026, {venue}.\nSin sustituciones.' });
 		const saved = eventFields(input);
-		expect(saved.legal.es.agreement).toBe(input.get('legal_es_agreement') as string);
-		expect(saved.legal.es.liability).toBe(legal.es.liability);
-		expect(saved.legal.es.media).toBe(legal.es.media);
+		expect(saved.legal.es.agreement).not.toBe(input.get('legal_es_agreement') as string);
+		expect(saved.legal.es.agreement).toContain('Cancha Nueva de Ponce');
+		expect(saved.legal.es.agreement).toContain('12 de febrero de 2027');
+		expect(saved.legal.es.agreement).not.toContain('{venue}');
 		expect(saved.legal.en).toEqual(saved.legal.es);
 	});
 
-	test('standard mode still enforces chronology, required fields, approval and PDF-safe dynamic venue', () => {
+	test('event fields still enforce chronology, required fields and PDF-safe dynamic venue', () => {
 		for (const key of ['title', 'venue', ...scheduleKeys]) {
 			const input = eventForm({ legalSource: 'standard' });
 			input.delete(key);
@@ -376,12 +327,7 @@ describe('one-day event schedules, legal text, and approval', () => {
 		for (const key of ['title', 'venue']) for (const value of ['Cancha 🖊', 'Cancha\u2011Nueva', 'Cancha\tNueva']) {
 			expect(() => eventFields(eventForm({ legalSource: 'standard', [key]: value }))).toThrow('unsupportedText');
 		}
-		const unapproved = eventForm({ legalSource: 'standard' });
-		unapproved.delete('legalApproved');
-		expect(eventFields(unapproved).legalApproved).toBe(false);
-		for (const value of ['false', 'on', '1', new File(['true'], 'approval.txt')]) {
-			expect(eventFields(eventForm({ legalSource: 'standard', legalApproved: value })).legalApproved).toBe(false);
-		}
+
 	});
 
 	for (const [key, limit] of [['title', 200], ['venue', 300]] as const) {
@@ -396,15 +342,6 @@ describe('one-day event schedules, legal text, and approval', () => {
 		});
 	}
 
-	test('only the literal true checkbox approves legal text, never truthy strings or files', () => {
-		const missing = eventForm();
-		missing.delete('legalApproved');
-		expect(eventFields(missing).legalApproved).toBe(false);
-		expect(eventFields(eventForm({ legalApproved: 'true' })).legalApproved).toBe(true);
-		for (const value of ['', 'false', 'on', '1', 'TRUE', ' true ', new File(['true'], 'true')]) {
-			expect(eventFields(eventForm({ legalApproved: value })).legalApproved).toBe(false);
-		}
-	});
 });
 
 describe('bounded form request parsing', () => {

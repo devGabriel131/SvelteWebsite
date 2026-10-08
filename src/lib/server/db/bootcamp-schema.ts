@@ -25,15 +25,13 @@ export const bootcampEvents = pgTable('bootcamp_events', {
 	arrivalAt: time('arrival_at').notNull(),
 	registrationClosesAt: time('registration_closes_at').notNull(),
 	legal: jsonb('legal').$type<LegalText>().notNull(),
-	legalApproved: boolean('legal_approved').default(false).notNull(),
-	approvedBy: text('approved_by').references(() => user.id, { onDelete: 'restrict' }),
 	registrationOpen: boolean('registration_open').default(false).notNull(),
 	createdBy: text('created_by').notNull().references(() => user.id, { onDelete: 'restrict' }),
 	createdAt: time('created_at').defaultNow().notNull(),
 	updatedAt: time('updated_at').defaultNow().notNull()
 }, (t) => [
 	check('bootcamp_event_dates', sql`${t.endsAt} > ${t.startsAt} AND ${t.arrivalAt} <= ${t.startsAt} AND ${t.registrationClosesAt} <= ${t.startsAt}`),
-	check('bootcamp_event_approval', sql`NOT ${t.registrationOpen} OR (${t.legalApproved} AND ${t.approvedBy} IS NOT NULL)`),
+	uniqueIndex('bootcamp_event_single_open').on(t.registrationOpen).where(sql`${t.registrationOpen}`),
 	check('bootcamp_event_revision', sql`${t.revision} > 0`)
 ]);
 

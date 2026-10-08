@@ -9,7 +9,7 @@ function event(overrides: Partial<BootcampEvent> = {}): BootcampEvent {
 		title: 'Bootcamp', venue: 'San Juan',
 		startsAt: '2026-10-10T12:00:00.000Z', endsAt: '2026-10-10T20:00:00.000Z',
 		arrivalAt: '2026-10-10T11:30:00.000Z', registrationClosesAt: '2026-10-09T04:00:00.000Z',
-		registrationOpen: true, legalApproved: true,
+		registrationOpen: true,
 		legal: {
 			en: { agreement: 'Agreement', liability: 'Liability', media: 'Media' },
 			es: { agreement: 'Acuerdo', liability: 'Relevo', media: 'Imagen' }
@@ -155,9 +155,9 @@ describe('Puerto Rico signing dates and the 21-year eligibility boundary', () =>
 });
 
 describe('bootcamp registration availability', () => {
-	test('requires both open registration and approved legal text', () => {
-		for (const registrationOpen of [false, true]) for (const legalApproved of [false, true]) {
-			expect(registrationAvailable(event({ registrationOpen, legalApproved }), now)).toBe(registrationOpen && legalApproved);
+	test('requires open registration', () => {
+		for (const registrationOpen of [false, true]) {
+			expect(registrationAvailable(event({ registrationOpen }), now)).toBe(registrationOpen);
 		}
 	});
 

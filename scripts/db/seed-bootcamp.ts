@@ -30,12 +30,12 @@ export async function seedBootcamp(databaseUrl: string) {
 				registrationClosesAt: new Date('2026-11-13T21:00:00-04:00')
 			};
 			const [existing] = await tx.select().from(bootcampEvents).where(eq(bootcampEvents.id, demoBootcampId));
-			if (existing && (existing.title !== title || existing.createdBy !== admin.id || existing.registrationOpen || existing.legalApproved)) {
+			if (existing && (existing.title !== title || existing.createdBy !== admin.id || existing.registrationOpen)) {
 				throw new Error('Demo event has been changed; refusing to add registrations or overwrite it.');
 			}
 			await tx.insert(bootcampEvents).values({
 				id: demoBootcampId, title, ...schedule, legal: defaultLegalText(schedule),
-				createdBy: admin.id, registrationOpen: false, legalApproved: false
+				createdBy: admin.id, registrationOpen: false
 			}).onConflictDoNothing({ target: bootcampEvents.id });
 			const selected = roster.slice(0, Math.floor(roster.length / 2));
 			// Only started registrations: never manufacture signatures, documents, or verified transactions.
@@ -52,6 +52,6 @@ export async function seedBootcamp(databaseUrl: string) {
 
 if (import.meta.main) {
 	const result = await seedBootcamp(requireDatabaseUrl(process.env.DATABASE_URL));
-	console.info(`Local DEMO bootcamp: ${result.selected}/${result.roster} students selected; ${result.inserted} registrations inserted. Registration is closed; no legal approval, signatures, documents, or payments were created.`);
+	console.info(`Local DEMO bootcamp: ${result.selected}/${result.roster} students selected; ${result.inserted} registrations inserted. Registration is closed; no signatures, documents, or payments were created.`);
 	console.info(`/admin/bootcamps/${result.eventId}/report`);
 }

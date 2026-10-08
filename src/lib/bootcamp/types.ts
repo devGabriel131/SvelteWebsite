@@ -39,7 +39,7 @@ export type LetterSnapshot = {
 };
 export type DocumentKind = 'waiver' | 'letter';
 export type RegistrationStatus = 'not_started' | 'waiver' | 'letter' | 'payment' | 'confirmed';
-export type BootcampEvent = EventSnapshot & { registrationOpen: boolean; legalApproved: boolean };
+export type BootcampEvent = EventSnapshot & { registrationOpen: boolean };
 export type StudentRegistration = {
 	id: string;
 	eventId: string;

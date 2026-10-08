@@ -43,7 +43,7 @@ export function isAdult(value: string | null, now = new Date()): boolean {
 }
 
 export function registrationAvailable(event: BootcampEvent, now = new Date()): boolean {
-	return event.registrationOpen && event.legalApproved && now.getTime() < Date.parse(event.registrationClosesAt) && now.getTime() <= Date.parse(event.endsAt);
+	return event.registrationOpen && now.getTime() < Date.parse(event.registrationClosesAt) && now.getTime() <= Date.parse(event.endsAt);
 }
 
 export function registrationStatus(registered: boolean, waiver: boolean, letterChoice: boolean | null, paidCents: number): RegistrationStatus {
