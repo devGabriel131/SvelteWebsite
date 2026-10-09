@@ -1,12 +1,10 @@
-import { createGoogleClient, type GoogleClientOptions } from '../google/client';
+import { createGoogleClient, isNonblank, isRecord, type GoogleClientOptions } from '../google/client';
 import type { GmailConfig } from './config';
 import { GmailError } from './error';
 import { composeEmail, parseMailbox, type Email } from './message';
 
-export { GmailError } from './error';
-export type { Email, EmailAttachment } from './message';
-
 export type GmailClient = {
+	readonly testMode: boolean;
 	send(email: Email, signal?: AbortSignal): Promise<string>;
 };
 
@@ -21,6 +19,7 @@ export function createGmailClient(config: GmailConfig, options: GoogleClientOpti
 	const google = createGoogleClient(config, { ...options, service: 'Gmail', error: GmailError });
 
 	return {
+		testMode,
 		async send(email, signal) {
 			if (signal?.aborted) throw new GmailError('upstream', 'Gmail request was cancelled.');
 			const mime = await composeEmail(email, senderAddress, testMode);
@@ -29,8 +28,7 @@ export function createGmailClient(config: GmailConfig, options: GoogleClientOpti
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ raw: mime.toString('base64url') })
 			}, signal);
-			if (typeof data !== 'object' || data === null || Array.isArray(data) ||
-				!('id' in data) || typeof data.id !== 'string' || !data.id || /[^A-Za-z0-9_-]/.test(data.id)) {
+			if (!isRecord(data) || !isNonblank(data.id) || /[^A-Za-z0-9_-]/.test(data.id)) {
 				throw new GmailError('upstream', 'Gmail returned an invalid message ID.', status);
 			}
 			return data.id;

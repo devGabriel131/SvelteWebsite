@@ -1,6 +1,5 @@
 import { titleAttendanceName } from './names';
 import {
-	attendanceFields,
 	attendanceTextLimits,
 	type AttendanceErrors,
 	type AttendanceField,
@@ -13,15 +12,6 @@ const controlPattern = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
 // The PDF renderer's built-in fonts use WinAnsi; reject unsupported glyphs rather than corrupting text.
 const unsupportedWinAnsiPattern = /[^\u0020-\u007e\u00a0-\u00ff€ŒœŠšŸŽžƒˆ˜‘’‚“”„–—…†‡•‰‹›™]/u;
 
-export function readAttendanceFormData(data: FormData): Record<AttendanceField, unknown> {
-	const raw = {} as Record<AttendanceField, unknown>;
-	for (const field of attendanceFields) {
-		const values = data.getAll(field);
-		// Keep duplicate entries and Files untrusted rather than silently selecting a string.
-		raw[field] = values.length > 1 ? values : values[0];
-	}
-	return raw;
-}
 
 function isCalendarDate(value: string): boolean {
 	if (value.length !== 10 || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value)) return false;
@@ -123,14 +113,3 @@ export function validateAttendanceInput(raw: unknown): AttendanceValidationResul
 	};
 }
 
-export function revalidateAttendanceErrors(raw: unknown, visibleErrors: AttendanceErrors): AttendanceErrors {
-	const validation = validateAttendanceInput(raw);
-	if (validation.valid) return {};
-
-	// Refresh only existing errors; untouched fields stay quiet until submission.
-	const errors: AttendanceErrors = {};
-	for (const field of attendanceFields) {
-		if (visibleErrors[field] && validation.errors[field]) errors[field] = validation.errors[field];
-	}
-	return errors;
-}

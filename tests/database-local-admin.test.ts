@@ -3,15 +3,14 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { getIP } from 'better-auth/api';
 import { hashPassword, verifyPassword } from 'better-auth/crypto';
 import { eq, inArray } from 'drizzle-orm';
-import { assertLocalDatabaseUrl, verifyLocalDatabase } from '../scripts/db/local-target';
+import { openLocalDatabase } from '../scripts/db/local-target';
 import { migrateDatabase } from '../scripts/db/migrate';
 import { seedLocalAdmin } from '../scripts/db/seed-admin';
-import { readAuthConfig, type AuthEnvironment } from '../src/lib/server/auth/config';
+import { LOCAL_ADMIN_EMAIL, readAuthConfig, type AuthEnvironment } from '../src/lib/server/auth/config';
 import { AUTH_IP_HEADER, createAuth } from '../src/lib/server/auth/core';
-import type { AuthAudience } from '../src/lib/server/auth/credentials';
-import { LOCAL_ADMIN_EMAIL } from '../src/lib/server/auth/local-admin';
+import type { AuthAudience } from '../src/lib/auth-credentials';
 import { account, rateLimit, session, user } from '../src/lib/server/db/auth-schema';
-import { createDatabase, type DatabaseConnection } from '../src/lib/server/db/connection';
+import type { DatabaseConnection } from '../src/lib/server/db/connection';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const describeDatabase = databaseUrl ? describe : describe.skip;
@@ -58,9 +57,7 @@ describeDatabase('local admin seed with isolated PostgreSQL fixtures', () => {
 	const rateKeys = new Set<string>();
 
 	beforeAll(async () => {
-		const target = assertLocalDatabaseUrl(databaseUrl!, 'test');
-		connection = createDatabase(databaseUrl!);
-		await verifyLocalDatabase(connection, target);
+		connection = await openLocalDatabase(databaseUrl, 'test');
 		await migrateDatabase(connection.db);
 		const [existing] = await connection.db.select().from(user).where(eq(user.email, LOCAL_ADMIN_EMAIL));
 		if (existing) {
@@ -71,7 +68,7 @@ describeDatabase('local admin seed with isolated PostgreSQL fixtures', () => {
 
 	beforeEach(async () => {
 		if (!setupReady) throw new Error('Local admin fixture setup did not pass its safety checks.');
-		const result = await seedLocalAdmin(databaseUrl!);
+		const result = await seedLocalAdmin(databaseUrl);
 		if (!result.created) {
 			throw new Error('Refusing to claim an existing local admin account as a test fixture.');
 		}
@@ -193,8 +190,8 @@ describeDatabase('local admin seed with isolated PostgreSQL fixtures', () => {
 
 	test('reruns are no-ops, preserving IDs, hashes, and timestamps', async () => {
 		const before = await readFixture();
-		expect(await seedLocalAdmin(databaseUrl!)).toEqual({ created: false });
-		expect(await seedLocalAdmin(databaseUrl!)).toEqual({ created: false });
+		expect(await seedLocalAdmin(databaseUrl)).toEqual({ created: false });
+		expect(await seedLocalAdmin(databaseUrl)).toEqual({ created: false });
 		expect(await readFixture()).toEqual(before);
 	});
 
@@ -229,7 +226,7 @@ describeDatabase('local admin seed with isolated PostgreSQL fixtures', () => {
 			}
 		}
 		const before = await readFixture();
-		await expect(seedLocalAdmin(databaseUrl!)).rejects.toThrow(/Refusing to overwrite or promote/);
+		await expect(seedLocalAdmin(databaseUrl)).rejects.toThrow(/Refusing to overwrite or promote/);
 		expect(await readFixture()).toEqual(before);
 	});
 

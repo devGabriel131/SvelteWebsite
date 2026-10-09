@@ -1,9 +1,10 @@
 import { eq } from 'drizzle-orm';
-import { error, fail } from '@sveltejs/kit';
-import { getViewer } from './auth/access';
+import { fail } from '@sveltejs/kit';
+import { requireActionViewer, type AuthLocals } from './auth/access';
 import type { Database } from './db/connection';
-import { students, studentSubjectScores } from './db/schema';
+import { studentAccounts, students, studentSubjectScores } from './db/schema';
 import { subjects } from '../admin/roster';
+import { isStudentId, isValidDateOfBirth, studentClassTypes, studentGenders, studentStatuses, type StudentClassType, type StudentGender, type StudentStatus } from '../student';
 
 export class StudentEditError extends Error {
 	constructor(public code: 'invalid' | 'missing' | 'duplicate' | 'linkedEmail' | 'storage') { super(code); }
@@ -14,33 +15,31 @@ export function parseStudentEdit(form: FormData, today = new Date().toISOString(
 	const firstName = text('firstName'), lastName = text('lastName'), email = text('email').toLowerCase();
 	const dateOfBirth = text('dateOfBirth') || null, gender = text('gender') || null;
 	const classType = text('classType'), status = text('status');
-	if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) || !firstName || !lastName || !/^[^\s@]+@[^\s@]+$/.test(email) || !['basic', 'regular'].includes(classType) || !['active', 'inactive', 'invited'].includes(status) || (gender !== null && !['male', 'female'].includes(gender))) throw new StudentEditError('invalid');
-	if (dateOfBirth && (!/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth) || dateOfBirth < '0001-01-01' || dateOfBirth > today || !Number.isFinite(Date.parse(dateOfBirth)) || new Date(dateOfBirth).toISOString().slice(0, 10) !== dateOfBirth)) throw new StudentEditError('invalid');
+	if (!isStudentId(id) || !firstName || !lastName || !/^[^\s@]+@[^\s@]+$/.test(email) || !studentClassTypes.includes(classType as StudentClassType) || !studentStatuses.includes(status as StudentStatus) || (gender !== null && !studentGenders.includes(gender as StudentGender))) throw new StudentEditError('invalid');
+	if (dateOfBirth && !isValidDateOfBirth(dateOfBirth, today)) throw new StudentEditError('invalid');
 	const values = subjects.map((subject) => text(subject));
 	let scores: { ar: number; pc: number; wk: number; mk: number } | null = null;
 	if (values.some(Boolean)) {
 		if (values.some((value) => !/^\d{1,3}$/.test(value) || Number(value) > 100)) throw new StudentEditError('invalid');
 		scores = { ar: Number(values[0]), pc: Number(values[1]), wk: Number(values[2]), mk: Number(values[3]) };
 	}
-	return { id, profile: { firstName, lastName, email, dateOfBirth, gender: gender as 'male' | 'female' | null, classType: classType as 'basic' | 'regular', status: status as 'active' | 'inactive' | 'invited' }, scores };
+	return { id, profile: { firstName, lastName, email, dateOfBirth, gender: gender as StudentGender | null, classType: classType as StudentClassType, status: status as StudentStatus }, scores };
 }
 export async function updateAdminStudent(db: Database, form: FormData) {
 	const input = parseStudentEdit(form);
 	await db.transaction(async (tx) => {
-		const [student] = await tx.select({ authUserId: students.authUserId, email: students.email })
+		const [student] = await tx.select({ email: students.email })
 			.from(students).where(eq(students.id, input.id)).for('update');
 		if (!student) throw new StudentEditError('missing');
-		if (student.authUserId && student.email.trim().toLowerCase() !== input.profile.email) throw new StudentEditError('linkedEmail');
+		const [association] = await tx.select({ userId: studentAccounts.userId }).from(studentAccounts).where(eq(studentAccounts.studentId, input.id));
+		if (association && student.email.trim().toLowerCase() !== input.profile.email) throw new StudentEditError('linkedEmail');
 		await tx.update(students).set(input.profile).where(eq(students.id, input.id));
 		if (input.scores) await tx.insert(studentSubjectScores).values({ studentId: input.id, ...input.scores }).onConflictDoUpdate({ target: studentSubjectScores.studentId, set: input.scores });
 		else await tx.delete(studentSubjectScores).where(eq(studentSubjectScores.studentId, input.id));
 	});
 }
-export async function editStudentAction(locals: Pick<App.Locals, 'user' | 'session'>, request: Request, database: () => Database | Promise<Database>) {
-	const viewer = getViewer(locals);
-	if (!viewer) error(401);
-	if (viewer.role !== 'admin') error(403);
-	if (request.headers.get('origin') !== new URL(request.url).origin) error(403);
+export async function editStudentAction(locals: AuthLocals, request: Request, database: () => Database | Promise<Database>) {
+	requireActionViewer(locals, request, 'admin');
 	let id: string | null = null;
 	try {
 		const form = await request.formData();

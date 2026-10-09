@@ -1,20 +1,7 @@
 import { asc, eq, sql } from 'drizzle-orm';
 import type { Database } from './db/connection';
-import { students, studentSubjectScores } from './db/schema';
+import { studentAccounts, students, studentSubjectScores } from './db/schema';
 import type { AdminStudent } from '../admin/roster';
-import { getAdminPageState } from './auth/access';
-
-export async function loadAdminRoster(
-	locals: Pick<App.Locals, 'user' | 'session' | 'localAdmin'>,
-	database: () => Database | Promise<Database>
-) {
-	const state = getAdminPageState(locals);
-	return {
-		...state,
-		localAdmin: locals.localAdmin === true,
-		students: state.isAdmin ? await readAdminRoster(await database()) : []
-	};
-}
 
 export async function readAdminRoster(db: Database): Promise<AdminStudent[]> {
 	const rows = await db.select({
@@ -23,7 +10,7 @@ export async function readAdminRoster(db: Database): Promise<AdminStudent[]> {
 				dateOfBirth: students.dateOfBirth, gender: students.gender,
 				createdAt: students.createdAt, updatedAt: students.updatedAt,
 		scores: studentSubjectScores,
-		hasAccount: sql<boolean>`${students.authUserId} IS NOT NULL`
+		hasAccount: sql<boolean>`EXISTS (SELECT 1 FROM ${studentAccounts} WHERE ${studentAccounts.studentId} = ${students.id})`
 	}).from(students).leftJoin(studentSubjectScores, eq(students.id, studentSubjectScores.studentId))
 		.orderBy(asc(students.lastName), asc(students.firstName), asc(students.id));
 	return rows.map((row) => ({

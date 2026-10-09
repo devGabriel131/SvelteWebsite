@@ -7,13 +7,6 @@ import type { LegalText, LetterSnapshot, WaiverSnapshot } from '../../bootcamp/t
 const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => 'bytea' });
 const time = (name: string) => timestamp(name, { withTimezone: true });
 
-// Explicit, administrator-controlled identity mapping; never trust submitted student IDs.
-export const bootcampAccounts = pgTable('bootcamp_accounts', {
-	userId: text('user_id').primaryKey().references(() => user.id, { onDelete: 'restrict' }),
-	studentId: uuid('student_id').notNull().unique().references(() => students.id, { onDelete: 'restrict' }),
-	linkedBy: text('linked_by').notNull().references(() => user.id, { onDelete: 'restrict' }),
-	createdAt: time('created_at').defaultNow().notNull()
-});
 
 export const bootcampEvents = pgTable('bootcamp_events', {
 	id: uuid('id').defaultRandom().primaryKey(),

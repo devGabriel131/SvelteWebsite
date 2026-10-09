@@ -2,8 +2,8 @@
 
 ## Implemented scope
 
-- `/bootcamps`: authenticated, explicitly linked active students, **21 or older at signing** using the Puerto Rico calendar. Missing DOB is collected once and saved to the roster on successful waiver submission. A known DOB cannot be overridden in the form.
-- `/admin/bootcamps`: real, persistent event list and registration open/close controls. Activation, editing, and reports have separate routes (below), rather than stacking panels on the list. This is separate from the existing fictional admin console panels.
+- `/bootcamps`: authenticated students associated through canonical `student_accounts`, with `students.status='active'`, **21 or older at signing** using the Puerto Rico calendar. Missing DOB is collected once and saved on successful waiver submission; a known DOB cannot be overridden. Imported invited accounts use the same association, but cannot register until enrollment activates the profile.
+- `/admin/bootcamps`: persistent event list/open-close controls, with separate activation/edit/report routes. These real operations are distinct from the root-console's local payment/grade-report demos.
 - Flow: begin registration → three mandatory read-and-sign sections → optional bootcamp employer letter → one ATH Móvil purchase of **$30 full payment** or **$15 deposit**.
 - A verified deposit confirms registration and flags **$15 remaining**. The remainder is collected outside this checkout. There is no recurring charge, subsequent balance checkout, offline payment editor, or carryover to another event.
 - The surrounding UI, accessibility labels, and errors remain available in English and Spanish through the shared translations. **Legal agreements and newly signed waiver PDFs are Spanish-only**, including when the interface is English. Optional employer letters still use the student's selected language. Historical signed documents retain their original language and bytes; do not translate them into a second signed document.
@@ -11,8 +11,8 @@
 ## Required setup before opening an event
 
 1. Review the intended `DATABASE_URL`, then run `bun run db:migrate` through the existing controlled migration process. `0006_bootcamp_registration.sql` adds bootcamp tables, restrictive foreign keys, immutable evidence/association triggers, and unique registration/payment constraints. Builds do **not** migrate application databases.
-2. Real student/admin Better Auth accounts and roster records are required. This feature does not create credentials or convert the demo roster into real students. Production student provisioning and invitation acceptance are not yet implemented.
-3. **Student onboarding dependency:** the manual admin account-linking form and its server action have been removed. Existing one-to-one `bootcamp_accounts` associations remain necessary for student eligibility, registration/payment ownership, and private PDF access. Already-associated students can continue registering on the student side. Accounts without an association cannot register until a trusted onboarding flow establishes their roster identity; that replacement is not implemented yet. Matching emails or a submitted student ID must not automatically grant access.
+2. Real Better Auth accounts and roster records are required. [Admin intake/invitations](student-import.md) provisions student identities and completes enrollment; roster seeds alone do not create credentials. Production-admin provisioning remains separate.
+3. `student_accounts` is the single one-to-one identity owner for enrollment, eligibility, registration/payment ownership, and private PDFs. Apply the `0011` identity and `0012` status-only migrations with the matching application; [schema migration safety](database-schema.md#identity-and-lifecycle-cutover) owns their conflict/provenance rules. There is no manual link/reassociation form or second bootcamp link. Matching emails or browser-selected student IDs never grant access.
 4. Configure the existing private [Google Drive variables](google-drive.md): `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `DRIVE_OAUTH_REFRESH_TOKEN`, `DRIVE_REPORTS_FOLDER_ID`. The configured app/account must be allowed to create and inspect its private files.
 5. Resolve the protocol questions in [ATH Móvil integration notes](ath-bootcamps.md). Configure private `ATH_PUBLIC_TOKEN`, `ATH_PRIVATE_TOKEN`, and a **64-hex-character** `BOOTCAMP_PAYMENT_KEY` generated from 32 cryptographically random bytes. Retain that key securely: losing/changing it prevents decryption of outstanding payment capabilities.
 6. Configure a private `BOOTCAMP_WORKER_SECRET` of at least 32 random characters and the recurring worker invocation below. Set `BOOTCAMP_PAYMENTS_ENABLED=true` **only after separately approved live merchant verification**. Merely having credentials or passing mock tests is not production certification.
@@ -26,6 +26,8 @@ Activation and reopening require configured backup, explicitly enabled/configure
 
 The migration removes `legal_approved`, `approved_by`, and their approval constraint/foreign key, then adds the partial unique index `bootcamp_event_single_open` on `registration_open WHERE registration_open`. This enforces the invariant for concurrent requests and direct database writes, not just UI controls. Closing one event allows another to activate/reopen. Only violations of this named index become `activeEvent`; unrelated database failures retain their normal error handling. Apply the migration together with the updated backend/UI; older binaries still expect the removed columns. Builds do not apply migrations, and this change does not migrate production automatically.
 
+Identity/status cutover preserves legal/payment history and legacy link provenance; canonical restrictive associations remain intentional. Do not deploy this application against the old identity/lifecycle schema or silently resolve conflicting records.
+
 ### Admin routes
 
 | Route | Purpose |
@@ -38,9 +40,21 @@ The migration removes `legal_approved`, `approved_by`, and their approval constr
 
 The real routes use the Compact ledger layout: a single event table, a compact details editor, and a registration ledger. Activate is available for a new bootcamp; existing events expose Edit and Report instead, with editable dates/times. The report shows started versus confirmed counts, website payment totals, confirmed outstanding balances, and separate Basic/Regular coverage. Coverage measures started registrations against each class's report roster, not completed payment. Search, class buttons, and registration buttons filter only the displayed table; CSV exports the full event report. Document retry and payment reconciliation remain under Report tools.
 
-Every page inherits the shared admin layout/sidebar/header, including direct visits and refreshes. Navigation uses real links, so browser back/forward does not depend on an in-memory editor selection. The activation and event-list loads do not fetch student reports. A malformed or missing event ID produces a localized 404 instead of falling back to another event. Old `/admin/bootcamps?event=…` report links redirect to the event-specific report.
+Authenticated pages inherit `AdminShell` on direct visits/refreshes; anonymous admin sign-in is separate, and `/bootcamps` inherits `StudentShell`. Navigation uses real links. Activation/list loads do not fetch student reports; edit GET reads the database without assembling provider services. Malformed/missing route or CSV query event IDs return localized 404/private-no-store, not a fallback event. Old `/admin/bootcamps?event=…` report links still redirect.
 
-Successful create/edit submissions redirect to the list. The creation action accepts event details only, ignoring browser-supplied IDs, approval, and legal text; it cannot update another event. The activation route passes server-derived `paymentEnabled && driveEnabled` to `activateEvent`; readiness cannot be supplied by the browser. The edit action requires its submitted ID to match the route, with the existing revision check. Report actions use the route's event ID, not a submitted ID. Existing authentication, same-origin checks, rate limits, private response headers, and activation safeguards remain in force.
+Successful activation/edit redirects to the list. Activation accepts event details only and uses server-derived `paymentEnabled && driveEnabled`; supplied IDs/approval/legal text cannot change another event or readiness. `updateEvent(db, eventId, form)` owns edits: submitted ID must equal the route ID, revision compare-and-set rejects stale forms, and both old/new cutoff checks remain. The HTTP action is still named `saveEvent`; there is no service create branch. Report actions use route event IDs, not hidden overrides.
+
+### Guarded HTTP form actions
+
+`src/lib/server/bootcamp/http.ts` owns `bootcampAction(role, work, onSuccess?)`. Work receives `{ services, viewerId, form, params }`; role is exactly `admin` or `student`. Order is private/no-store header → verified session/role gate **outside failure conversion** → exact Origin → services → database-backed request limit → bounded form read → service work. Missing viewer is `401`, wrong role `403`; body/dependencies are untouched by denied auth. Feature failures use localized action results; success redirects run outside that conversion.
+
+Buckets are `bootcamp:${role}:${viewerId}` over 60 seconds: admin **30 requests / 400,000 body bytes**, student **20 / 2,300,000**. Form MIME/parse/read/cancel/overflow errors remain `invalid`. `requireAdminEvent` also guards CSV IDs before report queries. Worker, webhook, PDF-preview, document, and report-download gates stay distinct rather than inheriting form-action policy.
+
+### Submission feedback and authoritative refresh
+
+`ActionForm` owns feedback for each enhanced submission. It clears its prior result while pending, displays local failure without applying/reloading `page.form`, and awaits `refreshAll()` before success callbacks or payment unlock. A fulfilled refresh is still rejected if `page.error` is set: SvelteKit may resolve after rendering a failed load. Redirects alone use `update({ reset: false })`. Transport/error-result/refresh failures and a thrown `beforeSubmit` become unavailable/onFailure; a false pre-submit result cancels silently. Pending resets in `finally`. A load failure may render the shared error page instead of keeping the form visible.
+
+Each page retains native `page.form` feedback for initial/no-JavaScript POSTs, then suppresses that fallback after the next enhanced submit; hydration alone does not hide it and refresh does not resurrect it. A form has one current submission result, not duplicate SSR/enhanced alerts. Independent forms may retain separate outcomes—there is no global feedback queue. Unsuccessful/uncertain payment checks keep the submission lock; only successful authoritative refresh can unlock it.
 
 ### Schedule rules
 
@@ -50,7 +64,7 @@ Existing stored schedules, legal text and signed documents are not rewritten by 
 
 ### Legal text and event edits
 
-The canonical source is the **user-provided Spanish legacy wording**, consolidated in `src/lib/bootcamp/legal-templates.ts` and exposed as `translations.es.bootcamp.waiver.legalText`. Its provenance is the original Masterminds `frontends/waiver/src/lib/legal-text.ts` and adult PDF template `apps/certificate-worker/internal/waiver/templates/adult.html`. It is not a newly invented agreement or a separate English translation. The adult version incorporates the weapons, parking/arrival, companion-area, belongings/loss, and waiver-signing clauses so the screen and PDF use the same terms. Paper delivery/carry-a-copy and guardian/minor instructions are omitted for this digital **21+** flow; there is no guardian bypass.
+The canonical source is the **user-provided Spanish legacy wording** in `src/lib/bootcamp/legal-templates.ts`; `legal.ts` imports `spanishBootcampLegal` directly, with no translation-dictionary mirrors. Provenance is the original Masterminds `frontends/waiver/src/lib/legal-text.ts` and adult PDF template `apps/certificate-worker/internal/waiver/templates/adult.html`. This is not a newly invented agreement or English translation. The adult version includes weapons, parking/arrival, companion-area, belongings/loss, and waiver-signing clauses so screen/PDF terms match. Paper delivery/carry-a-copy and guardian/minor instructions are omitted for this digital **21+** flow; no guardian bypass.
 
 **The standard template is the only legal-text source for activation and editing.** `defaultLegalText` resolves the actual event's Puerto Rico date (or a historical snapshot's date range), venue, check-in opening time, latest arrival/event start time, and the **$30.00** price, **$15.00** deposit, and **$15.00** remaining balance. Times use 24-hour notation including seconds; check-in also includes its calendar date when it falls before the event's start day. `arrivalAt` opens check-in; `startsAt` is the event start and latest arrival, not a second check-in opening. There is no fixed August 1, 2026 date or legacy park name. The balance is handled by administration outside the website; the fixed Saturday/1600 no-show balance deadline is omitted without inventing a replacement deadline. The original absence/nonrefund provision remains.
 
@@ -69,11 +83,11 @@ Saving an event edit increments its revision and **preserves its existing open/c
 ## Documents, previews, and access
 
 - The student scrolls each section to its end, acknowledges reading, and draws each signature. Pointer and keyboard drawing are supported. Server validation decodes bounded PNGs and checks visible ink; this is not proof of comprehension or legal identity.
-- Preview/download before submission is **optional** and does not create a registration, completed document, backup, or payment. A server-authenticated preview proof binds the exact identity, content, signatures, and signing timestamp for up to 24 hours. An unchanged preview submitted with that proof becomes the **same PDF bytes**, not a newly dated rendering.
+- Optional preview/download uses `registration.previewDocument(userId, form): Promise<{ pdf, token }>`; it creates no registration, completed document, backup, or payment. The authenticated token binds exact identity/content/signatures/signing clock for up to 24 hours. Submitting an unchanged preview with its proof preserves **identical PDF bytes**, not a newly dated render. Preview and first submission each reuse one loaded student/event context for preparation; completed-document retries and event → student → registration locked eligibility/proof/revision rechecks remain.
 - Draft signatures live in page memory, not local storage. Changing signer details or the event revision invalidates them; a reload before submission requires re-signing. The waiver language stays Spanish regardless of interface language. Completed steps persist and resume from the server.
 - Successful waiver submission atomically stores its snapshot, student information, validated signatures, exact PDF `bytea`, and SHA-256. An optional letter is stored similarly at its completion. No download or payment is required for storage/backup.
-- Database-first persistence is followed by an immediate Drive backup attempt. Failures remain in a durable queue. The Drive file ID is reserved before upload, so a timeout followed by retry does not create another file. A conflict must match stored metadata, checksum, size, MIME type, and destination folder before it is accepted as saved.
-- Student downloads read the saved bytes, never regenerate from edited event text. Only the owning linked account can download through the event's current end time, even after registration closes or the student's active status changes. Pending-payment documents are included. Admin downloads do not expire with the event.
+- Database-first persistence is followed by an immediate Drive backup attempt; failures remain durably queued. `createBootcampBackup(db, binding)` accepts a validated `{ client, folderId }` with required `upload`, `generateFileId`, and `getFile` capabilities; `null` alone disables backup. Disabled batches still validate arguments and return queued without database work. Reserved IDs, two-minute leases, attempt fences, backoff, and conflict verification protect recovery. A 409 must match metadata/hash/checksum/size/MIME/destination before success. This workflow is separate from the paired, nondurable IST/attendance report archive, although both reuse the same cached Drive client.
+- Downloads authorize canonical association/event expiry in SQL **before loading PDF bytes**, then return saved bytes rather than regenerating edited text. Only the owning account can download through the event's current end time, including pending-payment documents and after registration closes or status changes; unrelated/expired student requests load no PDF. Admin document access does not expire with the event.
 - Closing/ending an event does not delete records or backups. There is no automatic retention deletion or public Drive sharing. Operational database/Drive access must protect these sensitive documents; backups do not replace an organizational retention/access policy.
 - Backup status, attempts, reserved file ID, and sanitized failure category are durable. Already-saved Drive files are not continuously checked for later deletion by a Drive user.
 
@@ -110,13 +124,11 @@ The report includes **current active roster records even when they never started
 
 CSV includes a UTF-8 BOM for Excel and escapes spreadsheet-formula values. It includes registration status, payment status/verification attention, website amount/remaining balance, and saved-document indicators. Admin document links and backup status remain on the event page.
 
-## Local sample and design previews
+## Local sample
 
-Visit `/admin/bootcamps/mockups` (or **Choose a layout** on the event list) to compare three interactive designs: Event desk, Operations board, and Compact ledger. Each previews the list → activation → edit → report flow inside the shared admin shell. They read the student roster, mark `floor(roster.length / 2)` students as fictionally registered, and show illustrative full/deposit balances. Preview controls never mutate the database or call payment/document services; refreshing resets the preview.
+`bun run db:seed:bootcamp` creates a persistent, closed `[DEMO] ASVAB intensive · November` event and started registrations for half the fictional local roster. It requires the guarded local target, seeded local admin, and only `@example.test` students, preserves roster records, skips existing fixture event/registrations, and refuses an opened or renamed demo event. Its real report is `/admin/bootcamps/00000000-0000-4000-8000-00000000bc01/report`.
 
-Run `bun run db:seed:bootcamp` to create a persistent, closed `[DEMO] ASVAB intensive · November` event and started registrations for half of the fictional local roster. It uses the existing guarded local Compose target, requires the local admin and only `@example.test` students, and leaves existing roster records untouched. Reruns skip existing event/registration rows and refuse an opened/approved or renamed demo event. The report is `/admin/bootcamps/00000000-0000-4000-8000-00000000bc01/report`.
-
-The seeded report deliberately has no signed waivers, documents, legal approval, or verified payments. Payment balances in the three mockups are demo-only—not transaction evidence. Production routes and their safeguards remain unchanged.
+The seed has no signed waivers, documents, or verified payments. Do not assume its stored schedule is future or activate it for a real charge. Completed comparison routes are retired; the seed still exercises supported persistent report pages.
 
 ## Validation
 
@@ -131,11 +143,10 @@ Broader checks and the separately managed disposable database suite:
 ```sh
 bun test
 bun run check
-bun run db:check
 bun run build
 bun run db:test:up
 bun run db:test
 bun run db:test:down
 ```
 
-The PostgreSQL suite uses only the guarded disposable loopback test target, never the development/production database. Legal regressions cover the real canonical templates, Puerto Rico token resolution, strict Spanish custom input, standard creation without legal inputs, regenerated event details, preserved custom clauses, and Spanish-only new waivers. PostgreSQL cases compare student-page legal data with the saved snapshot and extracted PDF legal text, then verify that rescheduling preserves the original saved bytes and hash while new signatures use the updated clauses. Historical English PDF rendering and bilingual optional letters remain covered. Tests also cover signature decoding, age boundaries, linkage/ownership, immutable evidence, Drive recovery, provider mocks, and real PostgreSQL registration/payment concurrency. Live ATH charges, live Drive uploads, and browser/device sign-off remain separate verification steps.
+PostgreSQL suites use the guarded disposable target, never development/production data. Regression contracts include canonical identity/enrollment-to-eligibility, template substitutions and extracted saved legal text, Spanish-only new waivers/historical English rendering, byte/hash preservation after rescheduling, signatures/age/proofs, SQL document authorization, immutable evidence, Drive recovery, and registration/payment concurrency. Provider tests use synthetic transports, not real ATH/Google/email. They are not live certification or production-latency evidence; authorized live merchant/provider checks and browser/device sign-off remain separate.

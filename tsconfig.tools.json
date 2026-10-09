@@ -1,0 +1,14 @@
+{
+	"extends": "./tsconfig.json",
+	"include": [
+		"drizzle.config.ts",
+		"scripts/**/*.ts",
+		"tests/**/*.ts",
+		"src/app.d.ts",
+		"src/env.ts"
+	],
+	"compilerOptions": {
+		"types": ["$app/types", "bun"],
+		"noEmit": true
+	}
+}

@@ -78,6 +78,20 @@
       "when": 1791482874050,
       "tag": "0010_student_invitations",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791499010239,
+      "tag": "0011_student_accounts",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1791499225998,
+      "tag": "0012_students_status_only",
+      "breakpoints": true
     }
   ]
 }

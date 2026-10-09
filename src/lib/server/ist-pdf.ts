@@ -1,5 +1,5 @@
-import { Buffer } from 'node:buffer';
-import PDFDocument from 'pdfkit';
+import type { Buffer } from 'node:buffer';
+import { renderPdf, wrapWords } from './pdf';
 import logo from '../../../static/logo.png?inline';
 import type { IstReport } from '../ist/presentation';
 import type { Grade } from '../ist/types';
@@ -39,33 +39,8 @@ function renderReport(doc: PDFKit.PDFDocument, report: IstReport): void {
 	const horizontalInset = 12;
 	const cardLineHeight = 12.5;
 
-	function wrap(text: string, width: number, style: TextStyle): TextLine[] {
-		doc.font(style.font).fontSize(style.size);
-		const lines: TextLine[] = [];
-		const push = (text: string) => lines.push({ ...style, text });
-		// Measure with the drawing font; even unbroken names flow without truncation.
-		for (const paragraph of text.split(/\r\n|\r|\n/)) {
-			let line = '';
-			for (const word of paragraph.split(/\s+/).filter(Boolean)) {
-				const candidate = line ? `${line} ${word}` : word;
-				if (doc.widthOfString(candidate) <= width) {
-					line = candidate;
-					continue;
-				}
-				if (line) push(line);
-				line = '';
-				for (const character of word) {
-					if (line && doc.widthOfString(line + character) > width) {
-						push(line);
-						line = '';
-					}
-					line += character;
-				}
-			}
-			push(line);
-		}
-		return lines;
-	}
+	const wrap = (text: string, width: number, style: TextStyle): TextLine[] =>
+		wrapWords(doc, text, width, style);
 
 	function drawLine(line: TextLine, x: number, top: number): void {
 		// Explicit single lines keep PDFKit's automatic flow out of positioned content.
@@ -251,22 +226,9 @@ function renderReport(doc: PDFKit.PDFDocument, report: IstReport): void {
 
 /** Render the same already-presented snapshot used by the report view, without reassessing it. */
 export function generateIstPdf(report: IstReport): Promise<Buffer> {
-	return new Promise((resolve, reject) => {
-		const doc = new PDFDocument({
-			size: 'LETTER', autoFirstPage: false,
-			margins: { top: margin, left: margin, right: margin, bottom: pageHeight - contentBottom },
-			info: { Title: report.title, Subject: report.subtitle, Author: `${report.brand} ${report.brandDescription}` }
-		});
-		const chunks: Buffer[] = [];
-		doc.on('data', (chunk: Buffer) => chunks.push(chunk));
-		doc.once('end', () => resolve(Buffer.concat(chunks)));
-		doc.once('error', reject);
-		try {
-			renderReport(doc, report);
-			doc.end();
-		} catch (error) {
-			doc.destroy();
-			reject(error);
-		}
-	});
+	return renderPdf({
+		size: 'LETTER', autoFirstPage: false,
+		margins: { top: margin, left: margin, right: margin, bottom: pageHeight - contentBottom },
+		info: { Title: report.title, Subject: report.subtitle, Author: `${report.brand} ${report.brandDescription}` }
+	}, (doc) => renderReport(doc, report));
 }

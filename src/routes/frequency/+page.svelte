@@ -1,9 +1,8 @@
 <script lang="ts">
-	import StudentShell from '#lib/components/StudentShell.svelte';
 	import VocabularyPractice from '#lib/components/VocabularyPractice.svelte';
 	import { useLanguage } from '#lib/i18n/language.svelte.ts';
 	import { formatMessage } from '#lib/i18n/translations.ts';
-	import { roundSize } from '#lib/frequency/practice.ts';
+	import { roundSize } from '#lib/frequency/rules.ts';
 	import { frequencyWords } from '#lib/frequency/vocabulary.ts';
 
 	const language = useLanguage();
@@ -16,7 +15,6 @@
 	<meta name="description" content={messages.description} />
 </svelte:head>
 
-<StudentShell activePage="frequency">
 	<div class="page-heading">
 		<p class="eyebrow">{messages.eyebrow}</p>
 		<h1>{messages.title}</h1>
@@ -29,7 +27,6 @@
 	</div>
 
 	<VocabularyPractice />
-</StudentShell>
 
 <style>
 	.page-heading { margin-bottom: 1.5rem; }

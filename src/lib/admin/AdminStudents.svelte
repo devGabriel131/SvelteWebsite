@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { page } from '$app/state';
 		import StudentEditor from './StudentEditor.svelte';
-		import { filterStudents, subjects, type AdminStudent, type StudentStatus } from './roster';
+		import { filterStudents, subjects, type AdminStudent } from './roster';
+	import { studentStatuses, type StudentStatus } from '#lib/student.ts';
 	import { useLanguage } from '#lib/i18n/language.svelte.ts';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
@@ -26,7 +27,7 @@
 		<div class="filters">
 			<div class="search"><Label for={`${id}-search`}>{messages.searchLabel}</Label><Input id={`${id}-search`} type="search" bind:value={query} placeholder={messages.search} /></div>
 			<div role="group" aria-label={messages.filterLabel} class="choices">
-				{#each ['all', 'active', 'inactive', 'invited'] as option}
+				{#each ['all', ...studentStatuses] as option}
 					<Button variant="outline" type="button" aria-pressed={status === option} onclick={() => status = option as typeof status}>{messages.statuses[option as keyof typeof messages.statuses]}</Button>
 				{/each}
 			</div>

@@ -27,6 +27,12 @@ export const istFields = [
 	'plankStatus', 'plankMinutes', 'plankSeconds'
 ] as const;
 export type IstField = (typeof istFields)[number];
+export const exerciseValueFields = {
+	pushUps: ['pushUpsValue'],
+	sitUps: ['sitUpsValue'],
+	plank: ['plankMinutes', 'plankSeconds'],
+	run: ['runMinutes', 'runSeconds']
+} as const satisfies Record<ExerciseKey, readonly IstField[]>;
 export type IstFormValues = Record<IstField, string>;
 export type ValidationCode =
 	| 'required' | 'number' | 'whole' | 'range' | 'sex' | 'status' | 'inconsistent' | 'bodyFat';

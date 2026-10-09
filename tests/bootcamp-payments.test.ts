@@ -6,6 +6,7 @@ import { students } from '../src/lib/server/db/schema';
 import { bootcampEvents, bootcampPayments, bootcampRegistrations } from '../src/lib/server/db/bootcamp-schema';
 import { AthError, type AthClient, type AthVerification } from '../src/lib/server/bootcamp/ath';
 import { createPaymentService, createPaymentTokenVault, PaymentError } from '../src/lib/server/bootcamp/payments';
+import { creditedCents, isPaymentAmount, normalizePhone, paymentNeedsAttention } from '../src/lib/bootcamp/payment-rules';
 
 const key = 'ab'.repeat(32); // Test-only key, never used by a server or provider.
 const token = 'test.secret.transaction-token';
@@ -31,7 +32,7 @@ const registration = {
 	waiver: { event: { id: eventId, revision: 1 } }, letterChoice: false
 };
 const event = { id: eventId, revision: 1 };
-const student = { id: registration.studentId, isActive: true, dateOfBirth: '2000-01-01' as string | null };
+const student = { id: registration.studentId, status: 'active', dateOfBirth: '2000-01-01' as string | null };
 const checkedAt = '2026-10-06T12:00:00.000Z';
 const dialect = new PgDialect();
 
@@ -218,6 +219,30 @@ async function fails(work: () => unknown, code: PaymentError['code']) {
 	throw new Error('Expected sanitized payment failure');
 }
 
+describe('shared payment policy', () => {
+	test('only completed attempts contribute credit; every retained error needs attention', () => {
+		expect(creditedCents([
+			{ status: 'completed', amountCents: 1500 }, { status: 'completed', amountCents: 3000 },
+			...['creating', 'pending', 'uncertain', 'cancelled', 'refunded'].map((status) => ({ status, amountCents: 3000 }))
+		])).toBe(4500);
+		expect(creditedCents([])).toBe(0);
+		for (const status of ['creating', 'pending', 'uncertain', 'completed', 'cancelled', 'refunded']) {
+			expect(paymentNeedsAttention({ status, lastError: null })).toBe(status === 'uncertain');
+			expect(paymentNeedsAttention({ status, lastError: 'lookup_failed' })).toBe(true);
+		}
+	});
+
+	test('amount and phone rules reject coercion and oversized inputs', () => {
+		for (const amount of [1500, 3000]) expect(isPaymentAmount(amount)).toBe(true);
+		for (const amount of [undefined, null, '1500', 1500.1, 0, 1499, 3001, NaN, Infinity]) expect(isPaymentAmount(amount)).toBe(false);
+		expect(normalizePhone('+1 (787) 555-0100')).toBe('7875550100');
+		expect(normalizePhone(`7875550100${' '.repeat(30)}`)).toBe('7875550100');
+		for (const phone of [undefined, null, 7875550100, '+44 7875550100', '7875550100 ext 2', `7875550100${' '.repeat(31)}`]) {
+			expect(normalizePhone(phone)).toBeNull();
+		}
+	});
+});
+
 describe('payment token vault', () => {
 	test('AES-256-GCM round trip uses independent nonces and no plaintext', () => {
 		const first = vault.seal(token, context);
@@ -247,6 +272,13 @@ describe('payment token vault', () => {
 			await fails(() => vault.open(parts.join('.'), context), 'token');
 		}
 		for (const invalid of [token, '', 'v2.a.b.c', 'v1.a.b.c.extra', 'v1...']) await fails(() => vault.open(invalid, context), 'token');
+	});
+	test('token capability validation retains the vault size bound and bearer grammar', async () => {
+		const maximum = 'a'.repeat(16_384);
+		expect(vault.open(vault.seal(maximum, context), context)).toBe(maximum);
+		for (const invalid of ['', 'a'.repeat(16_385), 'capability\nheader', ' padded ', 'not:bearer']) {
+			await fails(() => vault.seal(invalid, context), 'token');
+		}
 	});
 });
 
@@ -304,7 +336,7 @@ describe('durable checkout creation', () => {
 	}
 
 	for (const change of [
-		{ isActive: false }, { dateOfBirth: null }, { dateOfBirth: '2010-01-01' },
+		{ status: 'inactive' }, { status: 'invited' }, { dateOfBirth: null }, { dateOfBirth: '2010-01-01' },
 		{ dateOfBirth: '2027-01-01' }, { dateOfBirth: '2000-02-30' }
 	]) {
 		test(`rechecks locked roster eligibility ${JSON.stringify(change)}`, async () => {
@@ -420,6 +452,65 @@ describe('durable checkout creation', () => {
 	test('database errors are sanitized and never cause a provider call', async () => {
 		const mock = database({ operation: 'select', table: bootcampRegistrations, run() { throw new Error(`${key} ${token}`); } });
 		await fails(() => createPaymentService(mock.db, ath(), key).start(registrationId, 1500, '7875550100'), 'storage');
+		mock.done();
+	});
+});
+
+describe('latest registration reconciliation', () => {
+	for (const id of ['', 'bad-id', `${registrationId} `, registrationId.replace('-4111-', '-0111-')]) {
+		test('validates registration ID before querying or contacting ATH', async () => {
+			const mock = database();
+			await fails(() => createPaymentService(mock.db, ath(), key).reconcileLatest(id), 'invalid_input');
+			expect(mock.calls).toHaveLength(0);
+		});
+	}
+
+	test('no attempt makes only the bounded latest lookup', async () => {
+		const mock = database(select(bootcampPayments, [], (query) => {
+			expect(query.fields).toEqual({ id: bootcampPayments.id });
+			expect(where(query).params).toEqual([registrationId]);
+			expect(query.order).toHaveLength(1);
+			expect(dialect.sqlToQuery(query.order![0] as SQL).sql).toBe('"bootcamp_payments"."created_at" desc');
+			expect(query.limit).toBe(1);
+			expect(query.transaction).toBe(false);
+		}));
+		expect(await createPaymentService(mock.db, ath(), key).reconcileLatest(registrationId)).toBeUndefined();
+		mock.done();
+	});
+
+	test('latest attempt uses the existing claim and verification path', async () => {
+		const row = payment();
+		const mock = database(select(bootcampPayments, [{ id: attemptId }]), claim(row), ...finish(row, 'pending'));
+		let checks = 0;
+		const client = ath({ async verify(input) {
+			checks++;
+			expect(input.attemptId).toBe(attemptId);
+			return { status: 'pending' };
+		} });
+		expect(await createPaymentService(mock.db, client, key).reconcileLatest(registrationId)).toBeUndefined();
+		expect(checks).toBe(1);
+		mock.done();
+	});
+
+	test('lookup failure is a fixed native error with no raw SQL details or cause', async () => {
+		const mock = database({ operation: 'select', table: bootcampPayments, run() { throw new Error(`${key} ${token}`); } });
+		try {
+			await createPaymentService(mock.db, ath(), key).reconcileLatest(registrationId);
+			throw new Error('Expected lookup failure');
+		} catch (error) {
+			expect(error).toEqual(new Error('Payment lookup failed.'));
+			expect(error).not.toBeInstanceOf(PaymentError);
+			expect(error).not.toHaveProperty('cause');
+			noSecrets(`${error} ${JSON.stringify(error)}`);
+		}
+		mock.done();
+	});
+
+	test('reconciliation storage failure keeps PaymentError classification', async () => {
+		const mock = database(select(bootcampPayments, [{ id: attemptId }]), {
+			operation: 'update', table: bootcampPayments, run() { throw new Error(`${key} ${token}`); }
+		});
+		await fails(() => createPaymentService(mock.db, ath(), key).reconcileLatest(registrationId), 'storage');
 		mock.done();
 	});
 });
@@ -549,7 +640,7 @@ describe('leased reconciliation and durable authorization intent', () => {
 		mock.done();
 	});
 
-	for (const status of ['pending', 'cancelled', 'expired'] as const) {
+	for (const status of ['pending', 'cancelled'] as const) {
 		test(`${status} after authorization cannot release the one-payment restriction`, async () => {
 			const row = payment({ status: 'uncertain', authorizationStarted: true });
 			const mock = database(claim(row), ...finish(row, 'uncertain', { lastError: 'authorization_unresolved' }));
@@ -561,14 +652,12 @@ describe('leased reconciliation and durable authorization intent', () => {
 		});
 	}
 
-	for (const status of ['cancelled', 'expired'] as const) {
-		test(`a verified ${status} before authorization can release the attempt`, async () => {
-			const row = payment();
-			const mock = database(claim(row), ...finish(row, 'cancelled'));
-			expect((await createPaymentService(mock.db, ath({ async verify() { return { status }; } }), key).reconcile(attemptId))?.status).toBe('cancelled');
-			mock.done();
-		});
-	}
+	test('a verified cancellation before authorization can release the attempt', async () => {
+		const row = payment();
+		const mock = database(claim(row), ...finish(row, 'cancelled'));
+		expect((await createPaymentService(mock.db, ath({ async verify() { return { status: 'cancelled' }; } }), key).reconcile(attemptId))?.status).toBe('cancelled');
+		mock.done();
+	});
 });
 
 describe('idempotent credit and conservative refunds', () => {
@@ -596,16 +685,31 @@ describe('idempotent credit and conservative refunds', () => {
 		mock.done();
 	});
 
-	for (const id of [undefined, '', 'other-receipt']) {
-		test('missing or changed transaction IDs cannot replace settled proof', async () => {
+	for (const id of [undefined, null, 0, '', ' padded ', 'line\nbreak', 'other-receipt']) {
+		test('malformed or changed transaction IDs cannot replace settled proof', async () => {
 			const row = payment({ status: 'completed', transactionId });
 			const mock = database(claim(row), select(bootcampPayments, [row]), blocked(row, 'ath_mismatch'));
-			const result = await createPaymentService(mock.db, ath({ async verify() { return { status: 'completed', transactionId: id }; } }), key).reconcile(attemptId);
+			// Deliberately violate the adapter type to exercise the service's runtime proof boundary.
+			const result = await createPaymentService(mock.db, ath({ async verify() {
+				return { status: 'completed', transactionId: id } as AthVerification;
+			} }), key).reconcile(attemptId);
 			expect(result?.status).toBe('completed');
 			expect(result?.uncertain).toBe(true);
 			mock.done();
 		});
 	}
+
+	test('an undocumented adapter status cannot become settled proof', async () => {
+		const row = payment();
+		const mock = database(claim(row), select(bootcampPayments, [row]), blocked(row, 'ath_protocol'));
+		const result = await createPaymentService(mock.db, ath({ async verify() {
+			// Deliberately violate the adapter type: unknown runtime statuses must still fail closed.
+			return { status: 'undocumented' } as unknown as AthVerification;
+		} }), key).reconcile(attemptId);
+		expect(result?.status).toBe('uncertain');
+		expect(result?.uncertain).toBe(true);
+		mock.done();
+	});
 
 	test('verified refunds remove credit and refunded rows never regain credit', async () => {
 		const paid = payment({ status: 'completed', transactionId });

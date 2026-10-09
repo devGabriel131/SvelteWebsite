@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { createIstActions } from '../src/lib/server/ist-action';
 import { istFields, type IstField, type IstFormValues } from '../src/lib/ist/types';
 import { presentIstAssessment } from '../src/lib/ist/presentation';
+import type { ReportActionEvent } from '../src/lib/server/report-downloads';
 
 const actions = createIstActions(() => null);
 
@@ -23,8 +24,9 @@ async function submit(values: Partial<IstFormValues>, ...extras: [string, string
 	const headers: Record<string, string> = {};
 	const result = await actions.default({
 		request: new Request('http://localhost/ist', { method: 'POST', body: data }),
-		setHeaders: (next: Record<string, string>) => Object.assign(headers, next)
-	} as Parameters<typeof actions.default>[0]);
+		setHeaders: (next) => Object.assign(headers, next),
+		locals: { user: null, session: null }
+	} satisfies ReportActionEvent);
 	return { result, headers };
 }
 
@@ -32,10 +34,10 @@ describe('IST server form action', () => {
 	test('returns one evaluated snapshot and bilingual PDF downloads without caching personal data', async () => {
 		const { result, headers } = await submit(recordedValues());
 		if ('status' in result) throw new Error(`Unexpected action failure: ${result.status}`);
-		if (!result.assessment || !result.reports) throw new Error('Expected an assessment and PDF reports');
+		if (!('assessment' in result) || !result.assessment || !result.reports) throw new Error('Expected an assessment and PDF reports');
 		expect(headers['cache-control']).toBe('no-store');
-		expect(result.errors).toEqual({});
-		expect(result.serverError).toBe(false);
+		expect(result).not.toHaveProperty('errors');
+		expect(result).not.toHaveProperty('failure');
 		expect(result.assessment.input.studentName).toBe('José María Muñoz');
 		expect(result.assessment.input.weightLb).toBe(170.25);
 		expect(result.assessment.input.waistIn).toBe(33.125);
@@ -51,7 +53,7 @@ describe('IST server form action', () => {
 	test('valid below-baseline results generate a report instead of a validation error', async () => {
 		const { result } = await submit({ ...recordedValues(), pushUpsValue: '0' });
 		if ('status' in result) throw new Error(`Unexpected action failure: ${result.status}`);
-		if (!result.assessment || !result.reports) throw new Error('Expected an assessment and PDF reports');
+		if (!('assessment' in result) || !result.assessment || !result.reports) throw new Error('Expected an assessment and PDF reports');
 		expect(result.assessment.passed).toBe(false);
 		expect(result.assessment.belowBaseline).toEqual(['pushUps']);
 		expect(result.assessment.exercises[0].result).toEqual({ status: 'recorded', value: 0 });
@@ -64,7 +66,7 @@ describe('IST server form action', () => {
 		delete values.runSeconds;
 		const { result } = await submit(values);
 		if ('status' in result) throw new Error(`Unexpected action failure: ${result.status}`);
-		if (!result.assessment) throw new Error('Expected an assessment');
+		if (!('assessment' in result) || !result.assessment) throw new Error('Expected an assessment');
 		expect(result.assessment.input.run).toEqual({ status: 'unable_to_complete' });
 		expect(result.assessment.belowBaseline).toEqual(['run']);
 		expect(result.values.runMinutes).toBe('');
@@ -84,19 +86,15 @@ describe('IST server form action', () => {
 			const { result, headers } = await submit(original, ['exerciseChoice', `${status}:unable_to_complete`]);
 			if ('status' in result) throw new Error(`Unexpected action failure: ${result.status}`);
 			expect(headers['cache-control']).toBe('no-store');
-			expect(result.assessment).toBeNull();
-			expect(result.reports).toBeNull();
-			expect(result.errors).toEqual({});
-			expect(result.serverError).toBe(false);
 			const expected = { ...original, [status]: 'unable_to_complete' };
 			for (const field of fields) expected[field] = '';
-			expect(result.values).toEqual(expected);
+			expect(result).toEqual({ values: expected });
 
 			// Native disabled result fields are omitted on the next form submission.
 			const finalValues: Partial<IstFormValues> = { ...result.values };
 			for (const field of fields) delete finalValues[field];
 			const assessment = (await submit(finalValues)).result;
-			if ('status' in assessment || !assessment.assessment || !assessment.reports) {
+			if ('status' in assessment || !('assessment' in assessment) || !assessment.assessment || !assessment.reports) {
 				throw new Error('Native exercise transition did not produce an assessment');
 			}
 			expect(assessment.assessment.input[key]).toEqual({ status: 'unable_to_complete' });
@@ -106,17 +104,15 @@ describe('IST server form action', () => {
 
 		test(`native ${key} choice can recover from a contradictory submission without generating a report`, async () => {
 			const invalid = (await submit({ ...recordedValues(), [status]: 'unable_to_complete' })).result;
-			if (!('status' in invalid)) throw new Error('Contradictory input unexpectedly accepted');
+			if (!('status' in invalid) || !('errors' in invalid.data)) throw new Error('Contradictory input unexpectedly accepted');
 			expect(invalid.status).toBe(400);
 			for (const field of fields) expect(invalid.data.errors[field]).toBe('inconsistent');
 
 			const recovery = (await submit(invalid.data.values, ['exerciseChoice', `${status}:unable_to_complete`])).result;
 			if ('status' in recovery) throw new Error(`Unexpected action failure: ${recovery.status}`);
-			expect(recovery.values[status]).toBe('unable_to_complete');
-			for (const field of fields) expect(recovery.values[field]).toBe('');
-			expect(recovery.errors).toEqual({});
-			expect(recovery.assessment).toBeNull();
-			expect(recovery.reports).toBeNull();
+			const expected = { ...invalid.data.values, [status]: 'unable_to_complete' };
+			for (const field of fields) expected[field] = '';
+			expect(recovery).toEqual({ values: expected });
 		});
 
 		test(`native ${key} choice can return to recorded, but still requires a new numeric result`, async () => {
@@ -126,13 +122,13 @@ describe('IST server form action', () => {
 			if ('status' in update) throw new Error(`Unexpected action failure: ${update.status}`);
 			expect(update.values[status]).toBe('recorded');
 			for (const field of fields) expect(update.values[field]).toBe('');
-			expect(update.assessment).toBeNull();
+			expect(update).not.toHaveProperty('assessment');
 
 			const missing = (await submit(update.values)).result;
-			if (!('status' in missing)) throw new Error('Missing recorded result unexpectedly accepted');
+			if (!('status' in missing) || !('errors' in missing.data)) throw new Error('Missing recorded result unexpectedly accepted');
 			expect(missing.status).toBe(400);
 			for (const field of fields) expect(missing.data.errors[field]).toBe('required');
-			expect(missing.data.assessment).toBeNull();
+			expect(missing.data).not.toHaveProperty('assessment');
 		});
 	}
 
@@ -140,10 +136,7 @@ describe('IST server form action', () => {
 		const original = { ...recordedValues(), studentName: '', age: '', weightLb: '170abc', pushUpsValue: '0' };
 		const { result } = await submit(original, ['exerciseChoice', 'pushUpsStatus:recorded']);
 		if ('status' in result) throw new Error(`Unexpected action failure: ${result.status}`);
-		expect(result.values).toEqual(original);
-		expect(result.errors).toEqual({});
-		expect(result.assessment).toBeNull();
-		expect(result.reports).toBeNull();
+		expect(result).toEqual({ values: original });
 	});
 
 	test('rejects malformed, duplicate, or uploaded native exercise choices', async () => {
@@ -168,27 +161,27 @@ describe('IST server form action', () => {
 			const values = { ...recordedValues(), [field]: value };
 			if (field === 'plankMinutes') values.plankSeconds = '0';
 			const { result, headers } = await submit(values);
-			if (!('status' in result)) throw new Error('Invalid input unexpectedly generated a report');
+			if (!('status' in result) || !('errors' in result.data)) throw new Error('Invalid input unexpectedly generated a report');
 			expect(result.status).toBe(400);
 			expect(result.data.errors[field]).toBe(error);
 			expect(result.data.values[field]).toBe(value);
-			expect(result.data.assessment).toBeNull();
-			expect(result.data.reports).toBeNull();
+			expect(result.data).not.toHaveProperty('assessment');
+			expect(result.data).not.toHaveProperty('reports');
 			expect(headers['cache-control']).toBe('no-store');
 		});
 	}
 
 	test('blocks impossible raw body fat rather than producing a failed assessment', async () => {
 		const { result } = await submit({ ...recordedValues(), weightLb: '400', waistIn: '18' });
-		if (!('status' in result)) throw new Error('Invalid body fat unexpectedly generated a report');
+		if (!('status' in result) || !('errors' in result.data)) throw new Error('Invalid body fat unexpectedly generated a report');
 		expect(result.status).toBe(400);
 		expect(result.data.errors).toMatchObject({ weightLb: 'bodyFat', waistIn: 'bodyFat' });
-		expect(result.data.assessment).toBeNull();
+		expect(result.data).not.toHaveProperty('assessment');
 	});
 
 	test('rejects an inconsistent inability with a recorded value', async () => {
 		const { result } = await submit({ ...recordedValues(), pushUpsStatus: 'unable_to_complete' });
-		if (!('status' in result)) throw new Error('Inconsistent exercise unexpectedly generated a report');
+		if (!('status' in result) || !('errors' in result.data)) throw new Error('Inconsistent exercise unexpectedly generated a report');
 		expect(result.status).toBe(400);
 		expect(result.data.errors.pushUpsValue).toBe('inconsistent');
 	});
@@ -198,10 +191,10 @@ describe('IST server form action', () => {
 			['age', '19'], ['studentName', new File(['Student'], 'name.txt')]
 		] as [IstField, string | File][]) {
 			const { result } = await submit(recordedValues(), extra);
-			if (!('status' in result)) throw new Error('Malformed form unexpectedly generated a report');
+			if (!('status' in result) || !('errors' in result.data)) throw new Error('Malformed form unexpectedly generated a report');
 			expect(result.status).toBe(400);
 			expect(result.data.values[extra[0]]).toBe('');
-			expect(result.data.assessment).toBeNull();
+			expect(result.data).not.toHaveProperty('assessment');
 		}
 	});
 });

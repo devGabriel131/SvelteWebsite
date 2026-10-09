@@ -3,7 +3,6 @@ import {
 	answerCard,
 	advanceRound,
 	getCompleteness,
-	roundSize,
 	selectNextWord,
 	startRound,
 	wordsToReview,
@@ -12,6 +11,7 @@ import {
 	type PracticeRound,
 	type VocabularyProgress
 } from '../src/lib/frequency/practice';
+import { roundSize } from '../src/lib/frequency/rules';
 import {
 	frequencyWords,
 	getSpanishAnswers,

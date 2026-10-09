@@ -1,12 +1,15 @@
 import { describe, expect, mock, spyOn, test } from 'bun:test';
+import assert from 'node:assert/strict';
 import { Buffer } from 'node:buffer';
 import type { AttendanceFormValues } from '../src/lib/attendance/types';
 import type { IstFormValues } from '../src/lib/ist/types';
+import { presentAttendanceCertificate } from '../src/lib/attendance/presentation';
+import { presentIstAssessment } from '../src/lib/ist/presentation';
 import { createAttendanceActions } from '../src/lib/server/attendance-action';
 import { createIstActions } from '../src/lib/server/ist-action';
 import { createReportArchive, type GetReportArchive, type ReportArchive, type ReportFiles } from '../src/lib/server/drive/archive';
 import { DriveError, type DriveClient } from '../src/lib/server/drive/client';
-import { generateReportDownloads } from '../src/lib/server/report-downloads';
+import { generateReportDownloads, type ReportActionEvent } from '../src/lib/server/report-downloads';
 
 const languages = ['en', 'es'] as const;
 const parentFolderId = 'configured-private-reports-folder';
@@ -67,8 +70,8 @@ async function submit(
 	const event = {
 		request, locals,
 		setHeaders: (next) => { Object.assign(headers, next); }
-	} satisfies Pick<Parameters<ReportAction>[0], 'request' | 'locals' | 'setHeaders'>;
-	const result = await action(event as Parameters<ReportAction>[0]);
+	} satisfies ReportActionEvent;
+	const result = await action(event);
 	return { result, headers, signal: request.signal };
 }
 
@@ -76,10 +79,9 @@ function archiveFixture(uploadImplementation: DriveClient['upload'] = async (fil
 	file.filename.includes('_en_') ? fileIds.en : fileIds.es
 ) {
 	const upload = mock<DriveClient['upload']>(uploadImplementation);
-	const createFolder = mock<DriveClient['createFolder']>(async () => 'unexpected-folder-id');
-	const archive = mock(createReportArchive({ upload, createFolder }, parentFolderId));
+	const archive = mock(createReportArchive({ upload }, parentFolderId));
 	const getArchive = mock<GetReportArchive>(() => archive);
-	return { upload, createFolder, archive, getArchive };
+	return { upload, archive, getArchive };
 }
 
 function reportFiles(): ReportFiles {
@@ -100,18 +102,18 @@ function nextTurn() {
 	return new Promise<void>((resolve) => setImmediate(resolve));
 }
 
-for (const { name, createActions, validValues, snapshot } of [
-	{ name: 'attendance', createActions: createAttendanceActions, validValues: attendanceValues, snapshot: 'certificate' },
-	{ name: 'IST', createActions: createIstActions, validValues: istValues, snapshot: 'assessment' }
+for (const { name, createActions, validValues } of [
+	{ name: 'attendance', createActions: createAttendanceActions, validValues: attendanceValues },
+	{ name: 'IST', createActions: createIstActions, validValues: istValues }
 ] as const) {
 	describe(`${name} report archive integration`, () => {
 		test('disabled archiving preserves anonymous bilingual PDF downloads', async () => {
 			const getArchive = mock<GetReportArchive>(() => null);
 			const values = validValues();
 			const { result, headers } = await submit(createActions(getArchive).default, values, anonymous);
-			if ('status' in result || !result.reports) throw new Error('Expected anonymous PDF downloads');
-			expect(result).toMatchObject({ values, errors: {}, serverError: false, archiveError: null, archived: false });
-			expect('certificate' in result ? result.certificate : result.assessment).not.toBeNull();
+			if ('status' in result || !('reports' in result) || !result.reports) throw new Error('Expected anonymous PDF downloads');
+			expect(result).toMatchObject({ values, archived: false });
+			expect('certificate' in result ? result.certificate : 'assessment' in result ? result.assessment : null).not.toBeNull();
 			expect(headers['cache-control']).toBe('no-store');
 			expect(getArchive).toHaveBeenCalledTimes(1);
 			for (const language of languages) {
@@ -126,14 +128,13 @@ for (const { name, createActions, validValues, snapshot } of [
 			const { result, headers, signal } = await submit(createActions(drive.getArchive).default, values, signedIn, [
 				['parentFolderId', 'client-chosen-folder'], ['filename', 'client-chosen.pdf'], ['fileId', 'client-chosen-id']
 			]);
-			if ('status' in result || !result.reports) throw new Error('Expected archived PDF downloads');
-			expect(result).toMatchObject({ values, errors: {}, serverError: false, archiveError: null, archived: true });
-			expect('certificate' in result ? result.certificate : result.assessment).not.toBeNull();
+			if ('status' in result || !('reports' in result) || !result.reports) throw new Error('Expected archived PDF downloads');
+			expect(result).toMatchObject({ values, archived: true });
+			expect('certificate' in result ? result.certificate : 'assessment' in result ? result.assessment : null).not.toBeNull();
 			expect(headers['cache-control']).toBe('no-store');
 			expect(drive.getArchive).toHaveBeenCalledTimes(1);
 			expect(drive.archive).toHaveBeenCalledTimes(1);
 			expect(drive.upload).toHaveBeenCalledTimes(2);
-			expect(drive.createFolder).not.toHaveBeenCalled();
 			const archiveIds: string[] = [];
 			for (const language of languages) {
 				const calls = drive.upload.mock.calls.filter(([file]) => file.filename.includes(`_${language}_`));
@@ -146,6 +147,10 @@ for (const { name, createActions, validValues, snapshot } of [
 				expect(file.parentFolderId).toBe(parentFolderId);
 				expect(uploadSignal).toBe(signal);
 				expect(file.filename).toMatch(uuidSuffix);
+				const filename = 'certificate' in result
+					? presentAttendanceCertificate(result.certificate, language).filename
+					: presentIstAssessment(result.assessment, language).filename.replace(/\.pdf$/, `_${language}.pdf`);
+				expect(file.filename).toBe(filename.replace(/\.pdf$/, `_${file.filename.match(uuidSuffix)![1]}.pdf`));
 				archiveIds.push(file.filename.match(uuidSuffix)![1]);
 			}
 			expect(archiveIds[0]).toBe(archiveIds[1]);
@@ -162,15 +167,11 @@ for (const { name, createActions, validValues, snapshot } of [
 				const { result, headers } = await submit(createActions(drive.getArchive).default, values, locals);
 				if (!('status' in result)) throw new Error('Expected an authentication failure');
 				expect(result.status).toBe(401);
-				expect<Record<string, unknown>>(result.data).toEqual({
-					values, errors: {}, [snapshot]: null, reports: null,
-					serverError: false, archiveError: 'signIn', archived: false
-				});
+				assert.deepStrictEqual(result.data, { values, failure: 'signIn' });
 				expect(headers['cache-control']).toBe('no-store');
 				expect(drive.getArchive).toHaveBeenCalledTimes(1);
 				expect(drive.archive).not.toHaveBeenCalled();
 				expect(drive.upload).not.toHaveBeenCalled();
-				expect(drive.createFolder).not.toHaveBeenCalled();
 			});
 		}
 
@@ -181,10 +182,7 @@ for (const { name, createActions, validValues, snapshot } of [
 				const { result, headers } = await submit(createActions(drive.getArchive).default, values, locals);
 				if (!('status' in result)) throw new Error('Expected a validation failure');
 				expect(result.status).toBe(400);
-				expect<Record<string, unknown>>(result.data).toEqual({
-					values, errors: { studentName: 'required' }, [snapshot]: null, reports: null,
-					serverError: false, archiveError: null, archived: false
-				});
+				assert.deepStrictEqual(result.data, { values, errors: { studentName: 'required' } });
 				expect(headers['cache-control']).toBe('no-store');
 				expect(drive.getArchive).not.toHaveBeenCalled();
 				expect(drive.archive).not.toHaveBeenCalled();
@@ -206,15 +204,11 @@ for (const { name, createActions, validValues, snapshot } of [
 					const { result, headers } = await submit(createActions(getArchive).default, values, signedIn);
 					if (!('status' in result)) throw new Error('Archive failure unexpectedly returned success');
 					expect(result.status).toBe(503);
-					expect<Record<string, unknown>>(result.data).toEqual({
-						values, errors: {}, [snapshot]: null, reports: null,
-						serverError: false, archiveError: 'unavailable', archived: false
-					});
+					assert.deepStrictEqual(result.data, { values, failure: 'unavailable' });
 					expect(headers['cache-control']).toBe('no-store');
 					expect(getArchive).toHaveBeenCalledTimes(1);
 					expect(drive.archive).toHaveBeenCalledTimes(phase === 'configuration' ? 0 : 1);
 					expect(drive.upload).toHaveBeenCalledTimes(phase === 'configuration' ? 0 : 2);
-					expect(drive.createFolder).not.toHaveBeenCalled();
 					expect(log.mock.calls).toEqual([['Unable to archive report PDFs', { kind: error.kind, status: 503 }]]);
 					for (const privateValue of [sensitive, ...Object.values(fileIds), parentFolderId]) {
 						expect(JSON.stringify(result)).not.toContain(privateValue);
@@ -238,10 +232,7 @@ describe('native IST choices with archiving enabled', () => {
 			const { result, headers } = await submit(createIstActions(drive.getArchive).default, values, anonymous, [
 				['exerciseChoice', choice]
 			]);
-			expect(result).toEqual({
-				values: { ...values, ...changes }, errors: {}, assessment: null, reports: null,
-				serverError: false, archiveError: null, archived: false
-			});
+			expect(result).toEqual({ values: { ...values, ...changes } });
 			expect(headers['cache-control']).toBe('no-store');
 			expect(drive.getArchive).not.toHaveBeenCalled();
 			expect(drive.archive).not.toHaveBeenCalled();
@@ -257,7 +248,7 @@ describe('shared report download generation', () => {
 		const getArchive = mock<GetReportArchive>(() => null);
 		const result = await generateReportDownloads({ getArchive, locals: anonymous, signal: new AbortController().signal, generate });
 		expect(result).toEqual({
-			ok: true, serverError: false, archiveError: null, archived: false,
+			ok: true, archived: false,
 			reports: { en: Buffer.from(files.en.bytes).toString('base64'), es: Buffer.from(files.es.bytes).toString('base64') }
 		});
 		expect(getArchive).toHaveBeenCalledTimes(1);
@@ -271,7 +262,7 @@ describe('shared report download generation', () => {
 			const result = await generateReportDownloads({
 				getArchive: drive.getArchive, locals, signal: new AbortController().signal, generate
 			});
-			expect(result).toEqual({ ok: false, status: 401, serverError: false, archiveError: 'signIn', archived: false });
+			expect(result).toEqual({ ok: false, status: 401, failure: 'signIn' });
 			expect(generate).not.toHaveBeenCalled();
 			expect(drive.archive).not.toHaveBeenCalled();
 			expect(drive.upload).not.toHaveBeenCalled();
@@ -288,7 +279,7 @@ describe('shared report download generation', () => {
 			const log = spyOn(console, 'error').mockImplementation(() => {});
 			try {
 				const result = await generateReportDownloads({ getArchive, locals: signedIn, signal: new AbortController().signal, generate });
-				expect(result).toEqual({ ok: false, status: 503, serverError: false, archiveError: 'unavailable', archived: false });
+				expect(result).toEqual({ ok: false, status: 503, failure: 'unavailable' });
 				expect(getArchive).toHaveBeenCalledTimes(1);
 				expect(generate).not.toHaveBeenCalled();
 				expect(log.mock.calls).toEqual([['Unable to archive report PDFs', category]]);
@@ -309,7 +300,7 @@ describe('shared report download generation', () => {
 				const result = await generateReportDownloads({
 					getArchive, locals: enabled ? signedIn : anonymous, signal: new AbortController().signal, generate
 				});
-				expect(result).toEqual({ ok: false, status: 503, serverError: true, archiveError: null, archived: false });
+				expect(result).toEqual({ ok: false, status: 503, failure: 'generation' });
 				expect(generate).toHaveBeenCalledTimes(1);
 				expect(drive.archive).not.toHaveBeenCalled();
 				expect(drive.upload).not.toHaveBeenCalled();
@@ -333,7 +324,7 @@ describe('shared report download generation', () => {
 			const log = spyOn(console, 'error').mockImplementation(() => {});
 			try {
 				const result = await generateReportDownloads({ getArchive: () => archive, locals: signedIn, signal, generate });
-				expect(result).toEqual({ ok: false, status: 503, serverError: false, archiveError: 'unavailable', archived: false });
+				expect(result).toEqual({ ok: false, status: 503, failure: 'unavailable' });
 				expect(generate).toHaveBeenCalledTimes(1);
 				expect(archive).toHaveBeenCalledTimes(1);
 				expect(archive).toHaveBeenCalledWith(files, signal);
@@ -370,7 +361,7 @@ describe('shared report download generation', () => {
 			await pending;
 		}
 		expect(await pending).toEqual({
-			ok: true, serverError: false, archiveError: null, archived: true,
+			ok: true, archived: true,
 			reports: { en: Buffer.from(files.en.bytes).toString('base64'), es: Buffer.from(files.es.bytes).toString('base64') }
 		});
 	});
@@ -384,7 +375,6 @@ describe('Drive report archive pairing and completion', () => {
 		const results = await Promise.all(signals.map((signal) => drive.archive(files, signal)));
 		expect(results).toEqual([undefined, undefined]);
 		expect(drive.upload).toHaveBeenCalledTimes(4);
-		expect(drive.createFolder).not.toHaveBeenCalled();
 		const submissionIds: string[] = [];
 		for (const signal of signals) {
 			const calls = drive.upload.mock.calls.filter(([, uploadSignal]) => uploadSignal === signal);
@@ -431,7 +421,6 @@ describe('Drive report archive pairing and completion', () => {
 				uploads[survivingLanguage].resolve(fileIds[survivingLanguage]);
 				expect(await pending).toEqual({ ok: false, error });
 				expect(drive.upload).toHaveBeenCalledTimes(2);
-				expect(drive.createFolder).not.toHaveBeenCalled();
 			} finally {
 				for (const language of languages) uploads[language].resolve(fileIds[language]);
 				await pending;

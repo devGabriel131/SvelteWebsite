@@ -1,4 +1,5 @@
-import { depositCents, priceCents } from '../../bootcamp/types';
+import { isPaymentAmount, normalizePhone } from '../../bootcamp/payment-rules';
+import { uuidPattern } from './validation';
 
 export type AthConfig = { publicToken: string; privateToken: string };
 export type AthExpectedPayment = { attemptId: string; registrationId: string; amountCents: number };
@@ -7,7 +8,6 @@ export type AthPayment = {
 	reference: string;
 	/** Secret transaction capability. Persist server-side with the reference, never in the browser. */
 	authorizationToken: string;
-	expiresAt?: Date;
 };
 export type AthVerifyInput = AthExpectedPayment & {
 	reference: string;
@@ -17,10 +17,9 @@ export type AthVerifyInput = AthExpectedPayment & {
 	/** Await durable debit intent; rejection MUST prevent the authorization request. */
 	beforeAuthorize?: () => Promise<void>;
 };
-export type AthVerification = {
-	status: 'pending' | 'completed' | 'cancelled' | 'expired' | 'refunded';
-	transactionId?: string;
-};
+export type AthVerification =
+	| { status: 'completed' | 'refunded'; transactionId: string }
+	| { status: 'pending' | 'cancelled' };
 export type AthClient = {
 	create(input: AthCreateInput): Promise<AthPayment>;
 	verify(input: AthVerifyInput): Promise<AthVerification>;
@@ -62,8 +61,7 @@ const urls: Record<AthOperation, string> = {
 	authorize: `${ecommerceUrl}/authorization`,
 	search: 'https://www.athmovil.com/api/v4/searchTransaction'
 };
-const uuidPattern = /^[\da-f]{8}-[\da-f]{4}-[1-8][\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/i;
-const bearerPattern = /^[A-Za-z0-9\-._~+/]+=*$/;
+export const bearerPattern = /^[A-Za-z0-9\-._~+/]+=*$/;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -76,16 +74,9 @@ function isText(value: unknown): value is string {
 function validateExpected(input: AthExpectedPayment): void {
 	if (!isText(input.attemptId) || !uuidPattern.test(input.attemptId) ||
 		!isText(input.registrationId) || input.registrationId.length > 40 ||
-		!Number.isSafeInteger(input.amountCents) || ![depositCents, priceCents].includes(input.amountCents)) {
+		!isPaymentAmount(input.amountCents)) {
 		throw new AthError('bad_input');
 	}
-}
-
-export function normalizeAthPhone(value: string): string {
-	if (typeof value !== 'string' || value.length > 40) throw new AthError('bad_input');
-	const match = /^(?:\+?1)?(\d{10})$/.exec(value.replace(/[\s().-]/g, ''));
-	if (!match) throw new AthError('bad_input');
-	return match[1];
 }
 
 function cents(value: unknown, operation: AthOperation): number {
@@ -134,11 +125,9 @@ export function createAthClient(config: AthConfig, requestFetch: typeof globalTh
 		const aborted = new Promise<never>((_, reject) => {
 			onAbort = () => reject(new AthError('transport', operation));
 			signal.addEventListener('abort', onAbort, { once: true });
-			if (signal.aborted) onAbort();
 		});
 		try {
 			return await Promise.race([aborted, (async () => {
-				if (signal.aborted) throw new AthError('transport', operation);
 				const response = await requestFetch(urls[operation], {
 					method: 'POST',
 					headers: {
@@ -210,7 +199,8 @@ export function createAthClient(config: AthConfig, requestFetch: typeof globalTh
 	return {
 		async create(input) {
 			validateExpected(input);
-			const phone = normalizeAthPhone(input.phone);
+			const phone = normalizePhone(input.phone);
+			if (phone === null) throw new AthError('bad_input');
 			const data = paymentData(await request('create', {
 				env: 'production', publicToken, timeout: 600,
 				total: input.amountCents / 100, subtotal: input.amountCents / 100, tax: 0,

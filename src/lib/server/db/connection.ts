@@ -25,7 +25,7 @@ export function requireDatabaseUrl(value: string | undefined): string {
 	return value;
 }
 
-export function createDatabase(databaseUrl: string) {
+export function createDatabase(databaseUrl: string | undefined) {
 	const client = postgres(requireDatabaseUrl(databaseUrl), {
 		max: 5,
 		connect_timeout: 10,

@@ -4,19 +4,19 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { getIP } from 'better-auth/api';
 import { desc, eq, inArray, or } from 'drizzle-orm';
 import ExcelJS from 'exceljs';
-import { assertLocalDatabaseUrl, verifyLocalDatabase } from '../scripts/db/local-target';
+import { openLocalDatabase } from '../scripts/db/local-target';
 import { migrateDatabase } from '../scripts/db/migrate';
-import { INVITATIONS_PAGE_SIZE, type EnrollmentProfile } from '../src/lib/student-invitations';
+import { INVITATIONS_PAGE_SIZE, type EnrollmentProfile, type StudentImportOptions } from '../src/lib/student-invitations';
 import { updateAdminStudent } from '../src/lib/server/admin-student';
 import { AUTH_IP_HEADER, createAuth, type Auth } from '../src/lib/server/auth/core';
 import { account, rateLimit, session, user } from '../src/lib/server/db/auth-schema';
-import { createDatabase, type DatabaseConnection } from '../src/lib/server/db/connection';
-import { studentInvitations, students, studentSubjectScores } from '../src/lib/server/db/schema';
+import type { DatabaseConnection } from '../src/lib/server/db/connection';
+import { studentAccounts, studentInvitations, students, studentSubjectScores } from '../src/lib/server/db/schema';
 import type { Email } from '../src/lib/server/gmail/message';
 import { completeEnrollmentAction, loadStudentEnrollment } from '../src/lib/server/student-enrollment';
 import { resendInvitationAction, studentImportAction, type StudentImportDependencies } from '../src/lib/server/student-import';
 import type { ImportedStudent } from '../src/lib/server/student-import-file';
-import { verifyStudentImportReview, type StudentImportOptions } from '../src/lib/server/student-import-review';
+import { verifyStudentImportReview } from '../src/lib/server/student-import-review';
 import {
 	completeStudentEnrollment, findStudentImportConflicts, hashInvitationToken, INVITATION_TTL_MS,
 	isInvitationToken, provisionImportedStudents, readAdminStudentInvitations, readStudentEnrollment,
@@ -87,9 +87,7 @@ function emailToken(email: Email) {
 		if (!await Bun.file(new URL('../drizzle/0010_student_invitations.sql', import.meta.url)).exists()) {
 			throw new Error('Student invitation migration 0010 must exist before running database tests.');
 		}
-		const target = assertLocalDatabaseUrl(databaseUrl!, 'test');
-		connection = createDatabase(databaseUrl!);
-		await verifyLocalDatabase(connection, target);
+		connection = await openLocalDatabase(databaseUrl, 'test');
 		await migrateDatabase(connection.db);
 		auth = createAuth(connection.db, config);
 		context = await auth.$context;
@@ -99,8 +97,14 @@ function emailToken(email: Email) {
 	afterAll(async () => {
 		if (!connection) return;
 		try {
-			// Invitations cascade from students; both identity links and invitation creators restrict user deletion.
-			if (emails.size || studentIds.size) await connection.db.delete(students).where(or(inArray(students.email, [...emails]), inArray(students.id, [...studentIds])));
+			// Unlink fixture accounts before deleting their restrictive student/user targets.
+			// Invitations still cascade from students and restrict creator deletion.
+			if (emails.size || studentIds.size) {
+				const profiles = connection.db.select({ id: students.id }).from(students)
+					.where(or(inArray(students.email, [...emails]), inArray(students.id, [...studentIds])));
+				await connection.db.delete(studentAccounts).where(inArray(studentAccounts.studentId, profiles));
+				await connection.db.delete(students).where(or(inArray(students.email, [...emails]), inArray(students.id, [...studentIds])));
+			}
 			if (emails.size || identityIds.size) await connection.db.delete(user).where(or(inArray(user.email, [...emails]), inArray(user.id, [...identityIds])));
 			await connection.db.delete(user).where(eq(user.id, adminId));
 			if (rateKeys.size) await connection.db.delete(rateLimit).where(inArray(rateLimit.key, [...rateKeys]));
@@ -129,14 +133,15 @@ function emailToken(email: Email) {
 		studentIds.add(prepared.studentId);
 		const [student] = await connection.db.select().from(students).where(eq(students.id, prepared.studentId));
 		expect(student).toBeDefined();
-		expect(student.authUserId).toBeString();
-		identityIds.add(student.authUserId!);
+		const [association] = await connection.db.select().from(studentAccounts).where(eq(studentAccounts.studentId, student.id));
+		expect(association).toBeDefined();
+		identityIds.add(association.userId);
 		const [[invitation], [identity], credentials] = await Promise.all([
 			connection.db.select().from(studentInvitations).where(eq(studentInvitations.studentId, student.id)),
-			connection.db.select().from(user).where(eq(user.id, student.authUserId!)),
-			connection.db.select().from(account).where(eq(account.userId, student.authUserId!))
+			connection.db.select().from(user).where(eq(user.id, association.userId)),
+			connection.db.select().from(account).where(eq(account.userId, association.userId))
 		]);
-		return { student, invitation, identity, credentials };
+		return { student, association, invitation, identity, credentials };
 	}
 
 	async function counts(rows: ImportedStudent[]) {
@@ -164,7 +169,7 @@ function emailToken(email: Email) {
 	function actionDependencies(delivery: InvitationDelivery): StudentImportDependencies {
 		return {
 			database: () => connection.db,
-			async authentication() { return { secret: config.secret, baseURL: config.baseURL, hashPin: context.password.hash }; },
+			async authentication() { return { secret: config.secret, hashPin: context.password.hash }; },
 			delivery: () => delivery
 		};
 	}
@@ -178,7 +183,7 @@ function emailToken(email: Email) {
 		}, false);
 		const dependencies = actionDependencies(delivery);
 		let hashes = 0;
-		dependencies.authentication = async () => ({ secret: config.secret, baseURL: config.baseURL, hashPin: async (pin) => { hashes++; return context.password.hash(pin); } });
+		dependencies.authentication = async () => ({ secret: config.secret, hashPin: async (pin) => { hashes++; return context.password.hash(pin); } });
 		const preview = await studentImportAction(locals(adminId, 'admin'), request(form({ file, ...options })), 'preview', dependencies);
 		if ('status' in preview) throw new Error('Expected successful preview');
 		expect(preview.studentImport).toMatchObject({ phase: 'preview', success: true, testMode: false });
@@ -204,8 +209,9 @@ function emailToken(email: Email) {
 			const token = emailToken(sent.email);
 			const [student] = await connection.db.select().from(students).where(eq(students.email, row.email));
 			const state = await stored({ studentId: student.id });
-			expect(state.student).toMatchObject({ email: row.email, classType: 'regular', status: 'invited', isActive: false, dateOfBirth: null, gender: null });
-			expect(state.identity).toMatchObject({ id: state.student.authUserId, email: row.email, role: 'student', emailVerified: false });
+			expect(state.student).toMatchObject({ email: row.email, classType: 'regular', status: 'invited', dateOfBirth: null, gender: null });
+			expect(state.association).toMatchObject({ studentId: student.id, linkedBy: adminId, createdAt: expect.any(Date) });
+			expect(state.identity).toMatchObject({ id: state.association.userId, email: row.email, role: 'student', emailVerified: false });
 			expect(state.credentials).toHaveLength(1);
 			expect(state.credentials[0]).toMatchObject({ userId: state.identity.id, accountId: state.identity.id, providerId: 'credential' });
 			expect(await context.password.verify({ hash: state.credentials[0].password!, password: row.pin })).toBe(true);
@@ -271,7 +277,8 @@ function emailToken(email: Email) {
 		const rows = [{ ...profileRow, row: 2 }, { ...identityRow, row: 3 }];
 		expect(await findStudentImportConflicts(connection.db, rows)).toEqual([{ row: 2, code: 'exists' }, { row: 3, code: 'exists' }]);
 		await expect(provision(rows)).rejects.toMatchObject({ code: 'conflict' });
-		expect((await connection.db.select().from(students).where(eq(students.id, legacyId)))[0]).toMatchObject({ firstName: 'Legacy', authUserId: null, classType: 'basic' });
+		expect((await connection.db.select().from(students).where(eq(students.id, legacyId)))[0]).toMatchObject({ firstName: 'Legacy', classType: 'basic' });
+		expect(await connection.db.select().from(studentAccounts).where(eq(studentAccounts.studentId, legacyId))).toHaveLength(0);
 		expect(await connection.db.select().from(account).where(eq(account.userId, identityId))).toHaveLength(0);
 	});
 
@@ -343,14 +350,14 @@ function emailToken(email: Email) {
 		const { delivery, mail } = trackedDelivery(async () => { throw new Error('Send may have been accepted before connection loss'); });
 		expect(await sendImportedStudentInvitations(connection.db, [prepared], delivery)).toEqual({ sent: 0, failed: 1 });
 		const failure = await stored(prepared);
-		expect(failure.invitation).toMatchObject({ deliveryState: 'failed', sentAt: null, tokenHash: prepared.tokenHash, lastAttemptAt: expect.any(Date) });
+		expect(failure.invitation).toMatchObject({ deliveryState: 'failed', sentAt: null, tokenHash: hashInvitationToken(prepared.token), lastAttemptAt: expect.any(Date) });
 		expect(failure.student).toEqual(initial.student);
 		expect(failure.identity).toEqual(initial.identity);
 		expect(failure.credentials).toEqual(initial.credentials);
 		expect(await sendPreparedStudentInvitation(connection.db, prepared, delivery)).toBe(false);
 		await expect(resendStudentInvitation(connection.db, adminId, prepared.studentId, delivery)).rejects.toMatchObject({ code: 'invalid' });
 		expect(mail).toHaveLength(1);
-		expect((await stored(prepared)).invitation.tokenHash).toBe(prepared.tokenHash);
+		expect((await stored(prepared)).invitation.tokenHash).toBe(hashInvitationToken(prepared.token));
 		await connection.db.update(studentInvitations).set({ lastAttemptAt: new Date(Date.now() - 61_000), expiresAt: new Date(Date.now() - 1_000) }).where(eq(studentInvitations.studentId, prepared.studentId));
 		const next = trackedDelivery();
 		const before = Date.now();
@@ -413,7 +420,7 @@ function emailToken(email: Email) {
 		expect((await readStudentEnrollment(connection.db, saved.identity.id, token)).state).toBe('ready');
 	});
 
-	test('enrollment requires the explicit authUserId link; optional legacy profiles cannot be claimed by matching email', async () => {
+	test('enrollment requires an explicit student account; matching email never claims a legacy profile', async () => {
 		const id = randomUUID(), userId = randomUUID(), email = fixtureEmail(), token = randomBytes(32).toString('hex');
 		studentIds.add(id); identityIds.add(userId);
 		await connection.db.insert(user).values({ id: userId, name: 'Legacy identity', email, role: 'student' });
@@ -424,12 +431,18 @@ function emailToken(email: Email) {
 		const { delivery, mail } = trackedDelivery();
 		await expect(resendStudentInvitation(connection.db, adminId, id, delivery)).rejects.toMatchObject({ code: 'invitation' });
 		expect(mail).toHaveLength(0);
-		await connection.db.update(students).set({ authUserId: userId }).where(eq(students.id, id));
+		expect(await databaseFailure(connection.db.delete(user).where(eq(user.id, adminId)))).toMatchObject({
+			constraint_name: expect.stringMatching(/^(student_accounts_linked_by|student_invitations_created_by)_auth_user_id_fk$/)
+		});
+		await connection.db.insert(studentAccounts).values({ userId, studentId: id, linkedBy: adminId, createdAt: new Date() });
 		expect((await readStudentEnrollment(connection.db, userId, token)).state).toBe('ready');
-		expect(await databaseFailure(connection.db.delete(user).where(eq(user.id, userId)))).toMatchObject({ constraint_name: 'students_auth_user_id_auth_user_id_fk' });
-		expect(await databaseFailure(connection.db.delete(user).where(eq(user.id, adminId)))).toMatchObject({ constraint_name: 'student_invitations_created_by_auth_user_id_fk' });
+		expect(await databaseFailure(connection.db.delete(user).where(eq(user.id, userId)))).toMatchObject({ constraint_name: 'student_accounts_user_id_auth_user_id_fk' });
+		expect(await databaseFailure(connection.db.delete(students).where(eq(students.id, id)))).toMatchObject({ constraint_name: 'student_accounts_student_id_students_id_fk' });
+		expect(await connection.db.select().from(studentInvitations).where(eq(studentInvitations.studentId, id))).toHaveLength(1);
 		const otherId = randomUUID(); studentIds.add(otherId);
-		expect(await databaseFailure(connection.db.insert(students).values({ id: otherId, authUserId: userId, firstName: 'Duplicate', lastName: 'Link', email: fixtureEmail(), classType: 'basic' }))).toMatchObject({ code: '23505' });
+		await connection.db.insert(students).values({ id: otherId, firstName: 'Duplicate', lastName: 'Link', email: fixtureEmail(), classType: 'basic' });
+		expect(await databaseFailure(connection.db.insert(studentAccounts).values({ userId, studentId: otherId, linkedBy: adminId, createdAt: new Date() }))).toMatchObject({ code: '23505' });
+		await connection.db.delete(studentAccounts).where(eq(studentAccounts.studentId, id));
 		await connection.db.delete(students).where(eq(students.id, id));
 		expect(await connection.db.select().from(studentInvitations).where(eq(studentInvitations.studentId, id))).toHaveLength(0);
 		await connection.db.delete(user).where(eq(user.id, userId));
@@ -492,11 +505,12 @@ function emailToken(email: Email) {
 		expect(result).toEqual({ enrollment: { success: true } });
 		expect(JSON.stringify(result)).not.toContain(prepared.token);
 		const saved = await stored(prepared);
-		expect(saved.student).toMatchObject({ ...profile, id: initial.student.id, email: initial.student.email, authUserId: initial.identity.id,
-			classType: 'regular', status: 'active', isActive: true, createdAt: initial.student.createdAt });
+		expect(saved.student).toMatchObject({ ...profile, id: initial.student.id, email: initial.student.email,
+			classType: 'regular', status: 'active', createdAt: initial.student.createdAt });
+		expect(saved.association).toEqual(initial.association);
 		expect(saved.identity).toMatchObject({ name: `${profile.firstName} ${profile.lastName}`, email: initial.identity.email, role: 'student', emailVerified: true });
 		expect(saved.credentials).toEqual(initial.credentials);
-		expect(saved.invitation).toMatchObject({ tokenHash: prepared.tokenHash, acceptedAt: expect.any(Date), createdBy: adminId, createdAt: initial.invitation.createdAt });
+		expect(saved.invitation).toMatchObject({ tokenHash: hashInvitationToken(prepared.token), acceptedAt: expect.any(Date), createdBy: adminId, createdAt: initial.invitation.createdAt });
 		expect(await readStudentEnrollment(connection.db, initial.identity.id, prepared.token)).toEqual({ state: 'complete', student: null });
 		await expect(completeStudentEnrollment(connection.db, initial.identity.id, prepared.token, { ...profile, firstName: 'Replay' })).rejects.toMatchObject({ code: 'invitation' });
 		const { delivery, mail } = trackedDelivery();
@@ -516,7 +530,7 @@ function emailToken(email: Email) {
 		expect((results.find((result) => result.status === 'rejected') as PromiseRejectedResult).reason).toMatchObject({ code: 'invitation' });
 		const winner = profiles[results.findIndex((result) => result.status === 'fulfilled')];
 		const saved = await stored(prepared);
-		expect(saved.student).toMatchObject({ ...winner, status: 'active', isActive: true });
+		expect(saved.student).toMatchObject({ ...winner, status: 'active' });
 		expect(saved.identity).toMatchObject({ name: `${winner.firstName} ${winner.lastName}`, emailVerified: true });
 		expect(saved.invitation.acceptedAt).toBeInstanceOf(Date);
 		expect(saved.credentials).toEqual(initial.credentials);
@@ -536,7 +550,7 @@ function emailToken(email: Email) {
 		const saved = await stored(prepared);
 		if (results[0].status === 'fulfilled') {
 			expect(saved.student).toMatchObject({ ...profile, status: 'active' });
-			expect(saved.invitation).toMatchObject({ acceptedAt: expect.any(Date), tokenHash: prepared.tokenHash });
+			expect(saved.invitation).toMatchObject({ acceptedAt: expect.any(Date), tokenHash: hashInvitationToken(prepared.token) });
 			expect(mail).toHaveLength(0);
 		} else {
 			expect(results[1]).toEqual({ status: 'fulfilled', value: true });
@@ -571,8 +585,9 @@ function emailToken(email: Email) {
 		await updateAdminStudent(connection.db, form({ id: prepared.studentId, firstName: row.firstName, lastName: row.lastName,
 			email: ` ${row.email.toUpperCase()} `, dateOfBirth: '', gender: '', classType: 'regular', status: 'invited', ar: '42', pc: '43', wk: '44', mk: '45' }));
 		const normalized = await stored(prepared);
-		expect(normalized.student).toMatchObject({ email: row.email, authUserId: initial.identity.id, firstName: row.firstName, lastName: row.lastName,
+		expect(normalized.student).toMatchObject({ email: row.email, firstName: row.firstName, lastName: row.lastName,
 			dateOfBirth: null, gender: null, classType: 'regular', status: 'invited', createdAt: initial.student.createdAt });
+		expect(normalized.association).toEqual(initial.association);
 		expect(normalized.invitation).toEqual(initial.invitation);
 		expect(normalized.identity).toEqual(initial.identity);
 		expect(normalized.credentials).toEqual(initial.credentials);
@@ -584,7 +599,8 @@ function emailToken(email: Email) {
 		await connection.db.insert(students).values({ id: legacyId, firstName: 'Legacy', lastName: 'Student', email: legacyEmail, classType: 'basic' });
 		await updateAdminStudent(connection.db, form({ id: legacyId, firstName: 'Legacy', lastName: 'Edited', email: replacementEmail,
 			dateOfBirth: '', gender: '', classType: 'basic', status: 'active', ar: '', pc: '', wk: '', mk: '' }));
-		expect((await connection.db.select().from(students).where(eq(students.id, legacyId)))[0]).toMatchObject({ authUserId: null, email: replacementEmail, lastName: 'Edited' });
+		expect((await connection.db.select().from(students).where(eq(students.id, legacyId)))[0]).toMatchObject({ email: replacementEmail, lastName: 'Edited' });
+		expect(await connection.db.select().from(studentAccounts).where(eq(studentAccounts.studentId, legacyId))).toHaveLength(0);
 	});
 
 	test('201-row lookahead keeps an older unresolved imported invitation recoverable on pages two and three', async () => {
@@ -630,9 +646,9 @@ function emailToken(email: Email) {
 			expect(await readAdminStudentInvitations(connection.db, -1)).toEqual(pageOne);
 			expect(await readAdminStudentInvitations(connection.db, 1_000_000)).toEqual([]);
 			expect(await connection.db.select({ id: user.id }).from(user).where(inArray(user.email, manualEmails))).toHaveLength(0);
-			const manualProfiles = await connection.db.select({ authUserId: students.authUserId }).from(students).where(inArray(students.id, manualIds));
-			expect(manualProfiles).toHaveLength(INVITATIONS_PAGE_SIZE * 2);
-			expect(manualProfiles.every(({ authUserId }) => authUserId === null)).toBe(true);
+			expect(await connection.db.select({ id: students.id }).from(students).where(inArray(students.id, manualIds)))
+				.toHaveLength(INVITATIONS_PAGE_SIZE * 2);
+			expect(await connection.db.select().from(studentAccounts).where(inArray(studentAccounts.studentId, manualIds))).toHaveLength(0);
 
 			const next = trackedDelivery();
 			const result = await resendInvitationAction(locals(adminId, 'admin'), request(form({ studentId: pageThree[0].studentId })), actionDependencies(next.delivery));

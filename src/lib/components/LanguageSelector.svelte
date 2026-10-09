@@ -8,13 +8,13 @@
 	const id = $props.id();
 </script>
 
-<fieldset class="language-selector" lang={language.current}>
-	<legend class="visually-hidden">{language.messages.language.label}</legend>
+<fieldset class="language-selector">
+	<legend class="sr-only">{language.messages.language.label}</legend>
 	<div class="language-options">
 		{#each languages as option (option.code)}
 			<Label class={buttonVariants({ variant: 'ghost', class: 'relative min-w-0 gap-2 rounded-full px-0 text-[0.8125rem] tracking-[0.025em] font-bold cursor-pointer' })}>
 				<input
-					class="visually-hidden"
+					class="sr-only"
 					type="radio"
 					name={`website-language-${id}`}
 					value={option.code}
@@ -23,7 +23,7 @@
 				/>
 				<span class="flag" aria-hidden="true">{option.flag}</span>
 				<span aria-hidden="true">{option.short}</span>
-				<span class="visually-hidden" lang={option.code}>{option.name}</span>
+				<span class="sr-only" lang={option.code}>{option.name}</span>
 			</Label>
 		{/each}
 	</div>
@@ -55,16 +55,5 @@
 		line-height: 1;
 	}
 
-	.visually-hidden {
-		position: absolute;
-		width: 1px;
-		height: 1px;
-		margin: -1px;
-		padding: 0;
-		overflow: hidden;
-		clip-path: inset(50%);
-		white-space: nowrap;
-		border: 0;
-	}
 
 </style>

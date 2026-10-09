@@ -1,7 +1,6 @@
-import { bootcampServices } from '#lib/server/bootcamp/runtime.ts';
+import { bootcampServices, type BootcampServices } from '#lib/server/bootcamp/runtime.ts';
 import { eventReport, getEvent } from '#lib/server/bootcamp/admin.ts';
-import { adminAction, requireAdminEvent } from '#lib/server/bootcamp/admin-route.ts';
-import { requireViewer } from '#lib/server/bootcamp/http.ts';
+import { bootcampAction, requireAdminEvent, requireViewer } from '#lib/server/bootcamp/http.ts';
 import { BootcampError } from '#lib/server/bootcamp/validation.ts';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -12,8 +11,8 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 	return { event, report: await eventReport(db, event.id), paymentEnabled, driveEnabled };
 };
 
-const reportAction = (work: (services: ReturnType<typeof bootcampServices>, eventId: string) => Promise<unknown>) =>
-	adminAction(async ({ services, params }) => {
+const reportAction = (work: (services: BootcampServices, eventId: string) => Promise<unknown>) =>
+	bootcampAction('admin', async ({ services, params }) => {
 		const event = await getEvent(services.db, params.eventId);
 		if (!event) throw new BootcampError('invalid');
 		return work(services, event.id);

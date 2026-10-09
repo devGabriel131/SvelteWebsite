@@ -1,10 +1,9 @@
 import { Buffer } from 'node:buffer';
-import { inflateRawSync } from 'node:zlib';
+import { crc32, inflateRawSync } from 'node:zlib';
 import ExcelJS from 'exceljs';
 import { parseMailbox } from './gmail/message';
 import { MAX_IMPORT_BYTES, MAX_IMPORT_ROWS } from '../student-invitations';
-
-export { MAX_IMPORT_BYTES, MAX_IMPORT_ROWS };
+import { isValidPin } from '../auth-credentials';
 
 export type ImportedStudent = {
 	row: number;
@@ -42,17 +41,6 @@ const aliases: Record<StudentField, string[]> = {
 const headerFields = new Map(Object.entries(aliases).flatMap(([field, names]) =>
 	names.map((name) => [name, field as StudentField] as const)
 ));
-const crcTable = Uint32Array.from({ length: 256 }, (_, index) => {
-	let value = index;
-	for (let bit = 0; bit < 8; bit++) value = (value >>> 1) ^ ((value & 1) ? 0xedb88320 : 0);
-	return value >>> 0;
-});
-
-function crc32(bytes: Buffer): number {
-	let value = 0xffffffff;
-	for (const byte of bytes) value = (value >>> 8) ^ crcTable[(value ^ byte) & 0xff];
-	return (value ^ 0xffffffff) >>> 0;
-}
 
 function checkExtraFields(bytes: Buffer, start: number, length: number, name: Buffer): void {
 	const end = start + length;
@@ -306,7 +294,7 @@ function readEmail(value: ExcelJS.CellValue): string | null {
 }
 
 function readPin(value: ExcelJS.CellValue): string | null {
-	if (typeof value === 'string') return /^[0-9]{4}$/.test(value) ? value : null;
+	if (typeof value === 'string') return isValidPin(value) ? value : null;
 	return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 9999
 		? String(value).padStart(4, '0') : null;
 }

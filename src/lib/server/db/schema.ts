@@ -1,24 +1,19 @@
 import { sql } from 'drizzle-orm';
 import { boolean, check, date, index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { user } from './auth-schema';
-
-export const studentGenders = ['male', 'female'] as const;
-export const studentClassTypes = ['basic', 'regular'] as const;
+import { studentClassTypes, studentGenders, studentStatuses } from '../../student';
 
 export const students = pgTable(
 	'students',
 	{
 		id: uuid('id').defaultRandom().primaryKey(),
-		authUserId: text('auth_user_id').unique().references(() => user.id, { onDelete: 'restrict' }),
 		firstName: text('first_name').notNull(),
 		lastName: text('last_name').notNull(),
 		email: text('email').notNull(),
 		dateOfBirth: date('date_of_birth', { mode: 'string' }),
 		gender: text('gender', { enum: studentGenders }),
 		classType: text('class_type', { enum: studentClassTypes }).notNull(),
-		// Compatibility projection maintained by the student lifecycle trigger.
-				isActive: boolean('is_active').default(true).notNull(),
-				status: text('status', { enum: ['active', 'inactive', 'invited'] }).default('active').notNull(),
+		status: text('status', { enum: studentStatuses }).default('active').notNull(),
 		createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull()
 	},
@@ -33,10 +28,19 @@ export const students = pgTable(
 		),
 		check('students_gender_valid', sql`${table.gender} IN ('male', 'female')`),
 		check('students_class_type_valid', sql`${table.classType} IN ('basic', 'regular')`),
-				check('students_status_valid', sql`${table.status} IN ('active', 'inactive', 'invited')`),
-				check('students_status_active_consistent', sql`${table.isActive} = (${table.status} = 'active')`)
+		check('students_status_valid', sql`${table.status} IN ('active', 'inactive', 'invited')`)
 	]
 );
+
+// Server-owned account-to-student identity; never infer associations from email.
+export const studentAccounts = pgTable('student_accounts', {
+	userId: text('user_id').primaryKey().references(() => user.id, { onDelete: 'restrict' }),
+	studentId: uuid('student_id').notNull().unique().references(() => students.id, { onDelete: 'restrict' }),
+	linkedBy: text('linked_by').references(() => user.id, { onDelete: 'restrict' }),
+	createdAt: timestamp('created_at', { withTimezone: true }).defaultNow()
+}, (table) => [
+	check('student_accounts_link_provenance', sql`(${table.linkedBy} IS NULL) = (${table.createdAt} IS NULL)`)
+]);
 
 export const studentInvitations = pgTable('student_invitations', {
 	studentId: uuid('student_id').primaryKey().references(() => students.id, { onDelete: 'cascade' }),

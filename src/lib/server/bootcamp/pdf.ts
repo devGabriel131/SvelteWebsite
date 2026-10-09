@@ -1,7 +1,7 @@
-import { Buffer } from 'node:buffer';
-import PDFDocument from 'pdfkit';
+import type { Buffer } from 'node:buffer';
+import { renderPdf } from '../pdf';
 import logo from '../../../../static/logo.png?inline';
-import organizerSignature from '../assets/attendance-signature.png?inline';
+import organizerSignature from '../assets/organizer-signature.png?inline';
 import { bootcampDocumentMessages } from '../../bootcamp/document-messages';
 import { assertBootcampPdfText } from '../../bootcamp/pdf-text';
 import { eventTimeZone, sectionKeys, type EventSnapshot, type LetterSnapshot, type WaiverSnapshot } from '../../bootcamp/types';
@@ -146,26 +146,13 @@ function createLayout(doc: PDFKit.PDFDocument, messages: Messages, title: string
 }
 
 function render(language: 'en' | 'es', title: string, time: string, draw: (layout: ReturnType<typeof createLayout>) => void): Promise<Buffer> {
-	return new Promise((resolve, reject) => {
-		const messages = bootcampDocumentMessages[language];
-		const doc = new PDFDocument({
-			size: 'LETTER', autoFirstPage: false, lang: language,
-			margins: { top: margin, bottom: margin, left: margin, right: margin },
-			info: { Title: title, Author: messages.organizer.name, Subject: title,
-				CreationDate: new Date(time), ModDate: new Date(time) }
-		});
-		const chunks: Buffer[] = [];
-		doc.on('data', (chunk: Buffer) => chunks.push(chunk));
-		doc.once('end', () => resolve(Buffer.concat(chunks)));
-		doc.once('error', reject);
-		try {
-			draw(createLayout(doc, messages, title));
-			doc.end();
-		} catch (error) {
-			doc.destroy();
-			reject(error);
-		}
-	});
+	const messages = bootcampDocumentMessages[language];
+	return renderPdf({
+		size: 'LETTER', autoFirstPage: false, lang: language,
+		margins: { top: margin, bottom: margin, left: margin, right: margin },
+		info: { Title: title, Author: messages.organizer.name, Subject: title,
+			CreationDate: new Date(time), ModDate: new Date(time) }
+	}, (doc) => draw(createLayout(doc, messages, title)));
 }
 
 /** Render the selected language's canonical legal text and its three matching signatures. */

@@ -1,3 +1,8 @@
+import type { Language } from './i18n/translations';
+import type { StudentClassType, StudentGender, StudentStatus } from './student';
+
+export type StudentImportOptions = { classType: StudentClassType; emailLanguage: Language };
+
 export const MAX_IMPORT_BYTES = 2 * 1024 * 1024;
 export const MAX_IMPORT_ROWS = 100;
 export const INVITATIONS_PAGE_SIZE = 200;
@@ -9,20 +14,20 @@ export interface StudentInvitation {
 	firstName: string;
 	lastName: string;
 	email: string;
-	language: 'en' | 'es';
+	language: Language;
 	expiresAt: string;
 	acceptedAt: string | null;
 	sentAt: string | null;
 	deliveryState: 'pending' | 'sending' | 'sent' | 'failed';
 	testMode: boolean;
-	status: 'active' | 'inactive' | 'invited';
+	status: StudentStatus;
 }
 
 export interface StudentImportResult {
 	phase: 'preview' | 'import';
 	success: boolean;
 	reviewToken?: string;
-	options?: { classType: 'basic' | 'regular'; emailLanguage: 'en' | 'es' };
+	options?: StudentImportOptions;
 	rows?: { row: number; firstName: string; lastName: string; email: string }[];
 	issues?: { row: number; code: 'name' | 'email' | 'pin' | 'duplicate' | 'cell' | 'exists' }[];
 	error?: 'file' | 'headers' | 'empty' | 'limit' | 'invalid' | 'conflict' | 'review' | 'unavailable' | 'storage';
@@ -48,19 +53,18 @@ export interface EnrollmentProfile {
 	firstName: string;
 	lastName: string;
 	dateOfBirth: string;
-	gender: 'male' | 'female';
+	gender: StudentGender;
 }
 
 export interface EnrollmentData {
 	state: 'signIn' | 'ready' | 'invalid' | 'complete';
-	returnTo: string;
 	student: {
 		firstName: string;
 		lastName: string;
 		email: string;
-		classType: 'basic' | 'regular';
+		classType: StudentClassType;
 		dateOfBirth: string | null;
-		gender: 'male' | 'female' | null;
+		gender: StudentGender | null;
 	} | null;
 }
 

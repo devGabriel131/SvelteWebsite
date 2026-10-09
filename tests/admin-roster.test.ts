@@ -34,6 +34,7 @@ describe('database-backed admin roster', () => {
 		const roster = await readAdminRoster(db);
 		expect(queries).toHaveLength(1);
 		expect(queries[0]).toContain('left join "student_subject_scores"');
+		expect(queries[0]).toContain('EXISTS (SELECT 1 FROM "student_accounts" WHERE "student_accounts"."student_id" = "students"."id")');
 		expect(queries[0]).toContain('order by');
 		expect(roster[0]).toEqual(student);
 		expect(roster[1].subjectScores).toBeNull();

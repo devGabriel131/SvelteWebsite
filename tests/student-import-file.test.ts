@@ -1,10 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { Buffer } from 'node:buffer';
-import { deflateRawSync, inflateRawSync } from 'node:zlib';
+import { crc32, deflateRawSync, inflateRawSync } from 'node:zlib';
 import ExcelJS from 'exceljs';
+import { MAX_IMPORT_BYTES, MAX_IMPORT_ROWS } from '../src/lib/student-invitations';
 import {
-	MAX_IMPORT_BYTES,
-	MAX_IMPORT_ROWS,
 	StudentImportFileError,
 	parseStudentWorkbook,
 	type ImportIssue
@@ -71,15 +70,6 @@ function zipEntries(bytes: Buffer) {
 	return entries;
 }
 
-function crc32(bytes: Buffer): number {
-	let value = 0xffffffff;
-	for (const byte of bytes) {
-		value ^= byte;
-		for (let bit = 0; bit < 8; bit++) value = (value >>> 1) ^ ((value & 1) ? 0xedb88320 : 0);
-	}
-	return (value ^ 0xffffffff) >>> 0;
-}
-
 function rewriteZipEntry(bytes: Buffer, name: string, rewrite: (content: Buffer) => Buffer): Buffer {
 	const entries = zipEntries(bytes);
 	expect(entries.some((entry) => entry.name === name)).toBe(true);
@@ -114,7 +104,7 @@ async function rewriteWorksheet(rewrite: (xml: string) => string): Promise<File>
 }
 
 describe('student workbook headers', () => {
-	test('exports the agreed limits and preserves workbook row numbers', async () => {
+	test('uses the agreed limits and preserves workbook row numbers', async () => {
 		expect(MAX_IMPORT_BYTES).toBe(2 * 1024 * 1024);
 		expect(MAX_IMPORT_ROWS).toBe(100);
 		expect(await parseRows([studentRow()])).toEqual({ students: [{ row: 2, ...valid }], issues: [] });

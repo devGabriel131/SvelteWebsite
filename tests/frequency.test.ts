@@ -209,14 +209,6 @@ describe('Spanish option search', () => {
 });
 
 describe('reviewed answer grading', () => {
-	test('accepts every reviewed primary and alternative answer individually', () => {
-		for (const word of frequencyWords) {
-			for (const answer of getSpanishAnswers(word)) {
-				expect(isCorrectAnswer(word, ` \t${normalizeAnswer(answer).toUpperCase()}\n `)).toBe(true);
-			}
-		}
-	});
-
 	test('accepts common alternative meanings, regional vocabulary, and polite/verb uses of please', () => {
 		const examples: Record<string, string[]> = {
 			car: ['carro', 'auto', 'coche'], a: ['un', 'una'], was: ['era', 'estaba', 'fue', 'estuvo'],

@@ -3,18 +3,20 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import type { Handle } from '@sveltejs/kit/hooks';
 import { getIP } from 'better-auth/api';
 import { eq, inArray } from 'drizzle-orm';
-import { assertLocalDatabaseUrl, verifyLocalDatabase } from '../scripts/db/local-target';
+import { openLocalDatabase } from '../scripts/db/local-target';
 import { migrateDatabase } from '../scripts/db/migrate';
 import { getAdminPageState, getViewer } from '../src/lib/server/auth/access';
 import type { AuthConfig } from '../src/lib/server/auth/config';
 import { AUTH_IP_HEADER, createAuth, type Auth } from '../src/lib/server/auth/core';
-import type { AuthAudience } from '../src/lib/server/auth/credentials';
+import type { AuthAudience } from '../src/lib/auth-credentials';
 import { createAuthHandle } from '../src/lib/server/auth/handle';
 import { rateLimit, session, user } from '../src/lib/server/db/auth-schema';
-import { createDatabase, type DatabaseConnection } from '../src/lib/server/db/connection';
+import type { DatabaseConnection } from '../src/lib/server/db/connection';
 import { load as loadRootLayout } from '../src/routes/+layout.server';
-import { load as loadAdminPage } from '../src/routes/admin/+page.server';
-import { loadAdminRoster, readAdminRoster } from '../src/lib/server/admin-roster';
+import { loadAdminPage } from '../src/lib/server/admin-page';
+import { readAdminRoster } from '../src/lib/server/admin-roster';
+import { INVITATIONS_PAGE_SIZE } from '../src/lib/student-invitations';
+import { readAdminStudentInvitations } from '../src/lib/server/student-invitations';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const describeDatabase = databaseUrl ? describe : describe.skip;
@@ -54,9 +56,7 @@ describeDatabase('auth hook with real Better Auth and isolated PostgreSQL fixtur
 	const selectedAudiences: AuthAudience[] = [];
 
 	beforeAll(async () => {
-		const target = assertLocalDatabaseUrl(databaseUrl!, 'test');
-		connection = createDatabase(databaseUrl!);
-		await verifyLocalDatabase(connection, target);
+		connection = await openLocalDatabase(databaseUrl, 'test');
 		await migrateDatabase(connection.db);
 		auth = createAuth(connection.db, config);
 		adminAuth = createAuth(connection.db, config, 'admin');
@@ -256,7 +256,7 @@ describeDatabase('auth hook with real Better Auth and isolated PostgreSQL fixtur
 			expectAnonymous(locals);
 			expect(getViewer(locals)).toBeNull();
 			expect(getAdminPageState(locals)).toEqual({ isAdmin: false });
-			return Response.json(await loadAdminPage({ locals, url: new URL('/admin', config.baseURL) } as Parameters<typeof loadAdminPage>[0]));
+			return Response.json(await loadAdminPage(locals, new URL('/admin', config.baseURL), () => { throw new Error('Anonymous page must not open database'); }));
 		});
 		expect(response.status).toBe(200);
 		expect(await response.json()).toEqual({ isAdmin: false, localAdmin: false, students: [], invitations: [], invitationPage: 1, hasMoreInvitations: false });
@@ -276,7 +276,8 @@ describeDatabase('auth hook with real Better Auth and isolated PostgreSQL fixtur
 		}, '/');
 		await expect(client.request('/admin', { cookie }, async ({ locals }) => {
 			expect(locals.user?.role).toBe('student');
-			return Response.json(await loadAdminPage({ locals } as Parameters<typeof loadAdminPage>[0]));
+			const url = new Proxy(new URL('/admin', config.baseURL), { get() { throw new Error('Student page must not read URL parameters'); } });
+			return Response.json(await loadAdminPage(locals, url, () => { throw new Error('Student page must not open database'); }));
 		})).rejects.toMatchObject({ status: 303, location: '/' });
 		expect((await sessionsFor(fixture.id)).map(({ id }) => id)).toEqual([storedSession.id]);
 	});
@@ -311,9 +312,17 @@ describeDatabase('auth hook with real Better Auth and isolated PostgreSQL fixtur
 				expect(layoutHeaders.get('cache-control')).toBe('private, no-store');
 				expect(getAdminPageState(locals)).toEqual({ isAdmin: true });
 				if (path === '/admin') {
-					expect(await loadAdminRoster(locals, () => connection.db)).toEqual({
-											isAdmin: true, localAdmin: false, students: await readAdminRoster(connection.db)
-										});
+					const invitations = await readAdminStudentInvitations(connection.db, 1);
+					let databaseCalls = 0;
+					expect(await loadAdminPage(locals, new URL('/admin', config.baseURL), () => {
+						databaseCalls++;
+						return connection.db;
+					})).toEqual({
+						isAdmin: true, localAdmin: false, students: await readAdminRoster(connection.db),
+						invitations: invitations.slice(0, INVITATIONS_PAGE_SIZE), invitationPage: 1,
+						hasMoreInvitations: invitations.length > INVITATIONS_PAGE_SIZE
+					});
+					expect(databaseCalls).toBe(1);
 				}
 				expect(locals.session?.id).toBe(storedSession.id);
 			}, path);
@@ -355,7 +364,8 @@ describeDatabase('auth hook with real Better Auth and isolated PostgreSQL fixtur
 		}, '/');
 		await expect(client.request('/admin', { cookie }, async ({ locals }) => {
 			expect(locals.user?.role).toBe('student');
-			return Response.json(await loadAdminPage({ locals } as Parameters<typeof loadAdminPage>[0]));
+			const url = new Proxy(new URL('/admin', config.baseURL), { get() { throw new Error('Demoted page must not read URL parameters'); } });
+			return Response.json(await loadAdminPage(locals, url, () => { throw new Error('Demoted page must not open database'); }));
 		})).rejects.toMatchObject({ status: 303, location: '/' });
 		const { response } = await client.request('/admin/auth/sign-in/email', {
 			body: { email: fixture.email, password: 'Admin!42' }

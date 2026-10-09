@@ -121,8 +121,13 @@ export function validateSignature(value: unknown): string {
 			const index = y * stride + x;
 			const left = x >= channels ? pixels[index - channels] : 0;
 			const up = y ? pixels[index - stride] : 0;
-			const upperLeft = y && x >= channels ? pixels[index - stride - channels] : 0;
-			const prediction = [0, left, up, Math.floor((left + up) / 2), paeth(left, up, upperLeft)][filter];
+			let prediction = 0;
+			switch (filter) {
+				case 1: prediction = left; break;
+				case 2: prediction = up; break;
+				case 3: prediction = Math.floor((left + up) / 2); break;
+				case 4: prediction = paeth(left, up, y && x >= channels ? pixels[index - stride - channels] : 0); break;
+			}
 			pixels[index] = (raw[y * (stride + 1) + x + 1] + prediction) & 255;
 		}
 		for (let x = 0; x < width; x++) {

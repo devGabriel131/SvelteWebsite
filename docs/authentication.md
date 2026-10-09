@@ -6,12 +6,13 @@ This worktree uses the open-source `better-auth` and `@better-auth/drizzle-adapt
 
 - Students sign in at `/login` using email + PIN through `/api/auth`. Admins sign in only through the `/admin` UI and its `/admin/auth` API, using email + an **8–128-character password**, with no mandatory case/symbol rules. Both entry points use the real Better Auth HTTP handler, not server-API form actions.
 - A PIN is **exactly four ASCII digits, sent as a string**. `"0042"` is valid; `42`, `"042"`, whitespace, letters, and non-ASCII numerals are not. The PIN is passed in Better Auth's `password` field, never coerced to a number or trimmed.
+- `src/lib/auth-credentials.ts` owns the client-safe `AuthAudience`, `isValidPin`, and `isValidCredential` policy used by sign-in forms, server authentication, invitations, and spreadsheet string-PIN validation. Spreadsheet numeric PIN conversion remains parser-owned; the guarded local-admin exception remains separate.
 - Better Auth owns the default salted scrypt hashing and verification. Only its hash goes in `auth_account.password`; there is no PIN field on a student profile or custom hashing implementation.
 - Public signup and credential/profile mutation, recovery, email verification, social login, and account-linking endpoints are disabled. The existing roster seed creates **no login accounts**. The separate, opt-in `db:seed:admin` command creates a local-development admin with Better Auth's salted hash; it refuses hosted/production database targets. There is no public account-provisioning endpoint.
 - `auth_user.role` is a server-controlled `student`/`admin` value. Both the database and Better Auth default it to `student`; clients cannot set it. Sign-in validates the stored role against the server-selected entry point, not password length, submitted flags, or email naming conventions. Wrong audience, unknown email, and invalid credentials use generic errors.
-- `/admin` shows the login form to anonymous visitors, redirects signed-in students to `/`, and shows the existing console only to verified admins. This page guard is not authorization for future APIs/actions: each future protected operation must enforce its own server-side access check.
+- `/admin` shows separate sign-in to anonymous visitors, redirects signed-in students to `/`, and renders `AdminShell` for verified admins, including nested bootcamp pages. `StudentShell` wraps every non-admin route, including login/enrollment/errors. Shells are presentation, not authorization: each protected read/action/API checks its caller server-side.
 - Clicking the admin logo opens the regular student dashboard at `/` with the **same admin account/session**, not an impersonated student. Only admins see the dedicated **Back to admin** link. Signing out from either view revokes that same database session. English/Spanish forms, errors, labels, and metadata use `src/lib/i18n/translations.ts`; raw library errors are not rendered.
-- Student demo pages remain publicly viewable. When [Google Drive archiving](google-drive.md) is enabled, IST and attendance report actions require a verified student or admin session before generating/uploading PDFs; anonymous submissions receive a localized `401` without an upload. Without Drive configuration, those report actions retain their public download-only behavior. The admin [Excel import and invitation workflow](student-import.md) provisions linked student accounts and collects required profile fields through invitation-only onboarding. Recovery and game persistence remain separate work; payment and grade-report tools still use fictional, in-memory previews.
+- Public learning tools remain viewable without a new global profile/status gate. When [Google Drive archiving](google-drive.md) is enabled, IST/attendance actions require a verified student or admin session before PDF generation/upload; without it, download-only generation remains public. [Excel intake/invitations](student-import.md), roster editing, and [bootcamp operations](bootcamps.md) are persistent authorized workflows. Only root-console payment/grade-report panels remain fictional in-memory demos. Recovery, coordinated email changes, and game persistence remain pending.
 
 ## Server-only configuration
 
@@ -47,15 +48,15 @@ When all auth variables are absent, public pages still work and auth requests re
 | `auth_verification` | Better Auth's standard verification storage; recovery/verification flows are not enabled. |
 | `auth_rate_limit` | Shared, atomic request limits with a unique key. |
 
-`drizzle/0004_better_auth.sql` introduced the auth tables. `drizzle/0005_auth_account_roles.sql` adds the non-null role and its allowed-value constraint; **existing accounts become students**, never automatic admins. The new snapshot and journal entry use the existing migration pipeline; migrations `0000`–`0004` remain unchanged. Apply explicitly against your intended database:
+`drizzle/0004_better_auth.sql` introduced auth storage; `0005_auth_account_roles.sql` adds the constrained non-null role and defaults existing accounts to student, never admin. Apply all committed migrations explicitly against the intended database:
 
 ```sh
 bun run db:migrate
 ```
 
-Do not run Better Auth's standalone migrator or `drizzle-kit push`. Future schema changes must generate an additional versioned Drizzle migration. Account/session rows cascade with their auth user. Migration `0010_student_invitations` adds a unique, nullable `students.auth_user_id` relationship with restricted auth-user deletion and student-bound invitation records. Imported students are linked atomically; existing profiles are not matched or linked merely by email.
+Do not run Better Auth's standalone migrator or `drizzle-kit push`. Schema corrections use new versioned Drizzle migrations; account/session rows cascade with their auth user. Roster identity is owned by `student_accounts`, not an auth-ID field on `students` or a bootcamp-only link. Imported students gain that association atomically, with no inference from matching email. Its one-to-one restrictions/provenance and `0011`/`0012` conflict-safe cutover belong to [database schema](database-schema.md#canonical-account-association). `students.status` is the sole lifecycle field; invited linked profiles intentionally exist before completion.
 
-**Production account setup remains a separate step:** this migration creates no users, passwords, or admin assignment. Before a production admin can log in, a trusted server-side provisioning process must create that identity with `role: 'admin'` and an 8–128-character credential hashed by Better Auth. Do not merely promote a four-digit student account: it must get a suitable credential, and existing sessions must be revoked when changing account privileges. No public provisioning or role-edit endpoint is enabled.
+**Production admin setup remains separate:** migrations create no admin or credential. A trusted server-side process must create `role: 'admin'` with a compliant Better Auth-hashed password. Do not merely promote a four-digit student account: assign a suitable credential and revoke existing sessions when privileges change. No public provisioning/role-edit endpoint is enabled. Student account provisioning is implemented through the authorized [intake workflow](student-import.md).
 
 ### Local admin login
 
@@ -91,9 +92,11 @@ These call the real HTTP handler and its rate limiter. **Do not implement a form
 
 `src/hooks.server.ts` composes the existing language hook with `src/lib/server/auth/handle.ts`. Better Auth's official `svelteKitHandler` serves the API. Normal server requests with a session cookie verify it against Better Auth and populate nullable `event.locals.user` and `event.locals.session`; invalid/revoked/expired cookies never become an identity. Session-cookie renewal and deletion headers are propagated, and session-aware responses are not publicly cacheable. Database failures do not become successful authentication.
 
-Locals are server-only. The root layout sends language plus a minimal `viewer` projection (`id`, `name`, `email`, `role`), **never raw session tokens or credential records**; its responses are private/no-store. `src/lib/server/auth/access.ts` provides the projection and the `/admin` page check. Populating locals alone does not authorize future actions. The cookie cache is disabled, so revocations and current roles are checked against PostgreSQL on server requests. Cookies are HttpOnly, SameSite=Lax, and Secure on HTTPS; CSRF and Origin checks remain enabled in every environment, including tests.
+Locals are server-only. The root layout sends language plus a minimal `viewer` projection (`id`, `name`, `email`, `role`), **never raw session tokens or credential records**; its responses are private/no-store. `src/lib/server/auth/access.ts` provides the projection and the `/admin` page check. Its `requireActionViewer` gate checks a matching user/session first (`401` when absent), then the required role and exact request Origin (`403` on mismatch), before enrollment, import, or roster-edit actions read a body or acquire dependencies. Bootcamp and report operations retain their own feature-specific gates. The cookie cache is disabled, so revocations and current roles are checked against PostgreSQL on server requests. Cookies are HttpOnly, SameSite=Lax, and Secure on HTTPS; CSRF and Origin checks remain enabled in every environment, including tests.
 
 Two lazily created instances of the same configuration share the secret, database, cookie name/path, and session policy. Only the API base path and accepted credential audience differ. Browser forms make same-origin HTTP requests and perform full navigation after sign-in/out, refreshing the server-owned viewer rather than inventing a client identity. JavaScript is required for the auth controls; it is not a prerequisite for rendering public pages or building the project.
+
+`src/lib/server/auth/config.ts` owns exact-origin validation and guarded local-admin enablement; invitation URLs reuse that same origin predicate. General HTTP loopback allowance includes 127/8, while the short-password exception remains limited to the exact local-admin hosts above and development/non-Railway execution. `getAuth(audience)` explicitly selects one of the two cached audience instances; no default audience or alternate local-admin policy module is exposed.
 
 ## Rate limiting and PIN risk
 
@@ -105,7 +108,7 @@ The built-in database limiter is explicitly enabled, including during developmen
 
 The hook overwrites `x-auth-client-ip` using SvelteKit's `event.getClientAddress()`; browser-supplied `x-auth-client-ip`, `x-forwarded-for`, or `x-real-ip` must not select the limiter bucket. The selected production adapter and trusted proxy configuration must make `getClientAddress()` authoritative. Do not trust arbitrary forwarded headers or expose an origin that bypasses your trusted proxy. If the adapter cannot supply an address, auth requests fail rather than accept a client-selected address. Better Auth groups IPv6 addresses by `/64` by default.
 
-**A four-digit PIN has only 10,000 possible values.** Slow salted hashing does not make it resistant to an offline exhaustive search after a credential-database leak. IP-based limits also cannot stop distributed guessing across many source addresses, and can affect students sharing a network. This initial integration follows the requested credential format; review stronger credentials/MFA, per-account abuse controls, and network policies before exposing student data. The admin-page guard does not make the still-unimplemented student-data and admin-operation endpoints production-ready.
+**A four-digit PIN has only 10,000 possible values.** Slow salted hashing does not prevent offline exhaustive guessing after a credential leak. IP limits cannot stop distributed guesses and can affect shared networks. Review stronger credentials/MFA, per-account abuse controls, and network policy before exposing sensitive student data. Implemented roster/intake/bootcamp gates do not resolve those risks or approve future game/profile APIs; recovery remains undecided.
 
 ## Compatibility and validation
 
@@ -114,7 +117,6 @@ Better Auth 1.7.7's optional SvelteKit peer range still advertises `^2.0.0`. Its
 ```sh
 bun test tests/auth.test.ts tests/auth-hook.test.ts tests/database-local-admin.test.ts
 bun run check
-bun run db:check
 bun run build
 bun run db:test:up
 bun run db:test

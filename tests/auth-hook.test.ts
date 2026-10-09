@@ -4,7 +4,7 @@ import type { Handle } from '@sveltejs/kit/hooks';
 import { AUTH_IP_HEADER, createAuth, type Auth } from '../src/lib/server/auth/core';
 import { createAuthHandle } from '../src/lib/server/auth/handle';
 import { createDatabase, type DatabaseConnection } from '../src/lib/server/db/connection';
-import { load as loadAdminPage } from '../src/routes/admin/+page.server';
+import { loadAdminPage } from '../src/lib/server/admin-page';
 
 type HookEvent = Parameters<Handle>[0]['event'];
 const baseURL = 'https://auth-hook.example.test';
@@ -62,7 +62,8 @@ describe('auth hook without database I/O', () => {
 			event.locals.user = null;
 			event.locals.session = null;
 			event.locals.localAdmin = localAdmin;
-			expect(await loadAdminPage(event as Parameters<typeof loadAdminPage>[0])).toEqual({
+			const url = new Proxy(new URL('/admin', baseURL), { get() { throw new Error('Anonymous page must not read URL parameters'); } });
+			expect(await loadAdminPage(event.locals, url, () => { throw new Error('Anonymous page must not open database'); })).toEqual({
 				isAdmin: false, localAdmin, students: [], invitations: [], invitationPage: 1, hasMoreInvitations: false
 			});
 		});

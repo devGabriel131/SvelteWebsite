@@ -1,17 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import {
-	attendanceNameSlug,
-	attendanceSchedule,
-	presentAttendanceCertificate,
-	shortAttendanceName,
-	titleAttendanceName,
-	type AttendanceDocument
-} from '../src/lib/attendance/presentation';
-import {
-	attendanceNameSlug as sharedAttendanceNameSlug,
-	shortAttendanceName as sharedShortAttendanceName,
-	titleAttendanceName as sharedTitleAttendanceName
-} from '../src/lib/attendance/names';
+import { attendanceSchedule, presentAttendanceCertificate, type AttendanceDocument } from '../src/lib/attendance/presentation';
+import { attendanceNameSlug, shortAttendanceName, titleAttendanceName } from '../src/lib/attendance/names';
 import {
 	attendanceClassTimes, attendanceFields,
 	type AttendanceCertificate, type AttendanceInput
@@ -48,12 +37,6 @@ function makeDocument(language: Language, overrides: Partial<AttendanceInput> = 
 }
 
 describe('legacy attendance name presentation', () => {
-	test('re-exports the shared name helpers without changing the presentation API', () => {
-		expect(titleAttendanceName).toBe(sharedTitleAttendanceName);
-		expect(shortAttendanceName).toBe(sharedShortAttendanceName);
-		expect(attendanceNameSlug).toBe(sharedAttendanceNameSlug);
-	});
-
 	for (const [raw, expected] of [
 		['  MARÍA SOFÍA PAGÁN CRUZ  ', 'María Sofía Pagán Cruz'],
 		["ANA-MARÍA O'NEILL DEL RÍO", "Ana-María O'Neill Del Río"],

@@ -1,22 +1,22 @@
 import { Buffer } from 'node:buffer';
+import type { RequestEvent } from '@sveltejs/kit';
+import type { Language } from '../i18n/translations';
 import { getViewer } from './auth/access';
 import type { GetReportArchive, ReportFiles } from './drive/archive';
 import { DriveError } from './drive/client';
 
-type ReportFailure = {
-	ok: false;
-	status: 401 | 503;
-	serverError: boolean;
-	archiveError: 'signIn' | 'unavailable' | null;
-	archived: false;
-};
+type ReportFailure =
+	| { ok: false; status: 401; failure: 'signIn' }
+	| { ok: false; status: 503; failure: 'unavailable' | 'generation' };
 
 type ReportSuccess = {
 	ok: true;
-	serverError: false;
-	archiveError: null;
 	archived: boolean;
-	reports: { en: string; es: string };
+	reports: Record<Language, string>;
+};
+
+export type ReportActionEvent = Pick<RequestEvent, 'request' | 'setHeaders'> & {
+	locals: Pick<App.Locals, 'user' | 'session'>;
 };
 
 export async function generateReportDownloads({ getArchive, locals, signal, generate }: {
@@ -30,10 +30,10 @@ export async function generateReportDownloads({ getArchive, locals, signal, gene
 		archive = getArchive();
 	} catch (error) {
 		logArchiveError(error);
-		return { ok: false, status: 503, serverError: false, archiveError: 'unavailable', archived: false };
+		return { ok: false, status: 503, failure: 'unavailable' };
 	}
 	if (archive && !getViewer(locals)) {
-		return { ok: false, status: 401, serverError: false, archiveError: 'signIn', archived: false };
+		return { ok: false, status: 401, failure: 'signIn' };
 	}
 
 	let files: ReportFiles;
@@ -41,18 +41,18 @@ export async function generateReportDownloads({ getArchive, locals, signal, gene
 		files = await generate();
 	} catch {
 		console.error('Unable to generate report PDFs');
-		return { ok: false, status: 503, serverError: true, archiveError: null, archived: false };
+		return { ok: false, status: 503, failure: 'generation' };
 	}
 	if (archive) {
 		try {
 			await archive(files, signal);
 		} catch (error) {
 			logArchiveError(error);
-			return { ok: false, status: 503, serverError: false, archiveError: 'unavailable', archived: false };
+			return { ok: false, status: 503, failure: 'unavailable' };
 		}
 	}
 	return {
-		ok: true, serverError: false, archiveError: null, archived: Boolean(archive),
+		ok: true, archived: Boolean(archive),
 		reports: { en: Buffer.from(files.en.bytes).toString('base64'), es: Buffer.from(files.es.bytes).toString('base64') }
 	};
 }

@@ -1,10 +1,9 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { randomBytes } from 'node:crypto';
 import { hashPassword, verifyPassword } from 'better-auth/crypto';
-import { readAuthConfig, type AuthEnvironment } from '../src/lib/server/auth/config';
+import { isAuthOrigin, readAuthConfig, type AuthEnvironment } from '../src/lib/server/auth/config';
 import { AUTH_IP_HEADER, createAuth, type Auth } from '../src/lib/server/auth/core';
-import { isValidPin } from '../src/lib/server/auth/pin';
-import { isValidCredential } from '../src/lib/server/auth/credentials';
+import { isValidCredential, isValidPin } from '../src/lib/auth-credentials';
 import { createDatabase, type DatabaseConnection } from '../src/lib/server/db/connection';
 
 const secret = randomBytes(32).toString('hex');
@@ -58,6 +57,7 @@ describe('authentication configuration', () => {
 		'http://[::1]:5173'
 	]) {
 		test(`accepts an exact HTTPS or HTTP loopback origin: ${origin}`, () => {
+			expect(isAuthOrigin(origin)).toBe(true);
 			expect(readAuthConfig({ ...configuredEnvironment, BETTER_AUTH_URL: origin })).toEqual({
 				secret, baseURL: origin, trustedOrigins: [origin]
 			});
@@ -76,6 +76,7 @@ describe('authentication configuration', () => {
 		'https://AUTH.example.test', 'https://auth.example.test:443'
 	]) {
 		test(`rejects an unsafe or non-exact origin: ${JSON.stringify(origin)}`, () => {
+			expect(isAuthOrigin(origin)).toBe(false);
 			expect(() => readAuthConfig({
 				...configuredEnvironment, BETTER_AUTH_URL: origin
 			})).toThrow(/BETTER_AUTH_URL.*exact HTTPS origin/);
@@ -115,7 +116,7 @@ describe('local admin configuration', () => {
 		NODE_ENV: 'development'
 	};
 
-	for (const origin of ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://[::1]:5173']) {
+	for (const origin of ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://[::1]:5173', 'https://localhost:5173', 'https://127.0.0.1:5173', 'https://[::1]:5173']) {
 		test(`enables the explicit development opt-in on ${origin}`, () => {
 			expect(readAuthConfig({ ...localEnvironment, BETTER_AUTH_URL: origin })?.localAdmin).toBe(true);
 		});
@@ -125,6 +126,7 @@ describe('local admin configuration', () => {
 		{ LOCAL_ADMIN_ENABLED: undefined }, { LOCAL_ADMIN_ENABLED: 'false' }, { LOCAL_ADMIN_ENABLED: 'TRUE' },
 		{ NODE_ENV: undefined }, { NODE_ENV: 'production' }, { NODE_ENV: 'test' },
 		{ BETTER_AUTH_URL: 'https://auth.example.test' },
+		{ BETTER_AUTH_URL: 'http://127.10.20.30:5173' },
 		{ RAILWAY_PROJECT_ID: 'project' }, { RAILWAY_ENVIRONMENT_ID: 'environment' }
 	] satisfies AuthEnvironment[]) {
 		test(`does not enable the local login with ${JSON.stringify(overrides)}`, () => {

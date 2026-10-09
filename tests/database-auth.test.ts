@@ -3,13 +3,13 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { getIP } from 'better-auth/api';
 import { verifyPassword } from 'better-auth/crypto';
 import { eq, inArray } from 'drizzle-orm';
-import { assertLocalDatabaseUrl, verifyLocalDatabase } from '../scripts/db/local-target';
+import { openLocalDatabase } from '../scripts/db/local-target';
 import { migrateDatabase } from '../scripts/db/migrate';
 import type { AuthConfig } from '../src/lib/server/auth/config';
 import { AUTH_IP_HEADER, createAuth, type Auth } from '../src/lib/server/auth/core';
-import type { AuthAudience } from '../src/lib/server/auth/credentials';
+import type { AuthAudience } from '../src/lib/auth-credentials';
 import { account, rateLimit, session, user } from '../src/lib/server/db/auth-schema';
-import { createDatabase, type DatabaseConnection } from '../src/lib/server/db/connection';
+import type { DatabaseConnection } from '../src/lib/server/db/connection';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const describeDatabase = databaseUrl ? describe : describe.skip;
@@ -39,9 +39,7 @@ describeDatabase('real Better Auth with isolated PostgreSQL fixtures', () => {
 	const rateKeys = new Set<string>();
 
 	beforeAll(async () => {
-		const target = assertLocalDatabaseUrl(databaseUrl!, 'test');
-		connection = createDatabase(databaseUrl!);
-		await verifyLocalDatabase(connection, target);
+		connection = await openLocalDatabase(databaseUrl, 'test');
 		await migrateDatabase(connection.db);
 		auth = createAuth(connection.db, config);
 		secondAuth = createAuth(connection.db, config);

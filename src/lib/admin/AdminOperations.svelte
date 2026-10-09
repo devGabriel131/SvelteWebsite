@@ -1,8 +1,6 @@
 <script lang="ts">
 	import AdminIcon from '#lib/admin/AdminIcon.svelte';
-	import StudentInvitations from '#lib/admin/StudentInvitations.svelte';
-	import type { StudentInvitation } from '#lib/student-invitations.ts';
-	import { previewLink, type AdminSection } from '#lib/admin/demo.ts';
+	import { isAdminPreviewSection, type AdminSection } from '#lib/admin/navigation.ts';
 	import type { AdminStudent } from '#lib/admin/roster.ts';
 	import { useLanguage } from '#lib/i18n/language.svelte.ts';
 	import * as Alert from '#lib/components/ui/alert/index.js';
@@ -14,26 +12,18 @@
 	import { Label } from '#lib/components/ui/label/index.js';
 	import * as NativeSelect from '#lib/components/ui/native-select/index.js';
 
-	let { section, students, invitations, invitationPage, hasMoreInvitations }: {
-		section: AdminSection;
-		students: AdminStudent[];
-		invitations: StudentInvitation[];
-		invitationPage: number;
-		hasMoreInvitations: boolean;
-	} = $props();
+	let { section, students }: { section: AdminSection; students: AdminStudent[] } = $props();
 	const language = useLanguage();
 	const id = $props.id();
 	const messages = $derived(language.messages.admin);
 	const common = $derived(messages.common);
 	const currency = $derived(new Intl.NumberFormat(language.current, { style: 'currency', currency: 'USD' }));
 	const numbers = $derived(new Intl.NumberFormat(language.current, { maximumFractionDigits: 1 }));
-	const isOperation = $derived(section !== 'overview' && section !== 'students');
 
-	type Feedback = 'created' | 'copied' | 'copyFailed' | 'refundSuccess' | 'assigned' | 'invalidAmount' | 'invalidFile' | 'required';
+	type Feedback = 'created' | 'copied' | 'copyFailed' | 'refundSuccess' | 'invalidAmount' | 'invalidFile' | 'required';
 	let feedback = $state<{ section: AdminSection; key: Feedback } | null>(null);
 	const feedbackText = $derived(feedback ? (
 		feedback.key === 'refundSuccess' ? messages.payments.refundSuccess :
-		feedback.key === 'assigned' ? messages.events.assigned :
 		feedback.key === 'invalidAmount' ? messages.payments.invalidAmount :
 		feedback.key === 'invalidFile' ? messages.reports.invalidFile : common[feedback.key]
 	) : '');
@@ -42,8 +32,8 @@
 	interface PaymentPreview { id: number; name: string; amount: number; recipient: string; url: string }
 	let paymentName = $state('');
 	let paymentAmount = $state<number | undefined>(250);
-	let paymentStudent = $state('MM-001');
-	let paymentLinks = $state<PaymentPreview[]>([{ id: 1, name: '', amount: 250, recipient: 'Alex Rivera', url: previewLink('payment', 1) }]);
+	let paymentStudent = $state('');
+	let paymentLinks = $state<PaymentPreview[]>([{ id: 1, name: '', amount: 250, recipient: 'Alex Rivera', url: previewPaymentLink(1) }]);
 	let refundReviewed = $state(false);
 	let refundOpen = $state(false);
 	let refundTrigger: HTMLElement | null = null;
@@ -56,14 +46,10 @@
 		{ name: 'bravo-02-baseline.csv', rows: 4, state: 'pending' as const }
 	];
 
-	const sampleEvents = [
-		{ key: 'session' as const, type: 'briefing' as const, time: '18:00', cohort: 'Alpha 01 + Bravo 02' },
-		{ key: 'practice' as const, type: 'assessment' as const, time: '10:00', cohort: 'Alpha 01' },
-		{ key: 'checkIn' as const, type: 'coaching' as const, time: '16:30', cohort: 'Bravo 02' }
-	];
-	let assignmentEvent = $state<'session' | 'practice' | 'checkIn'>('session');
-	let assignmentStudent = $state('MM-001');
-	let assignment = $state<{ event: 'session' | 'practice' | 'checkIn'; name: string } | null>(null);
+
+	function previewPaymentLink(sequence: number): string {
+		return `https://preview.example.invalid/payment/demo-${String(sequence).padStart(3, '0')}`;
+	}
 
 	function notify(key: Feedback) { feedback = { section, key }; }
 
@@ -90,7 +76,7 @@
 		}
 		if (!student) { notify('required'); return; }
 		const nextId = paymentLinks.length + 1;
-		paymentLinks = [{ id: nextId, name: paymentName.trim(), amount: paymentAmount, recipient: student.name, url: previewLink('payment', nextId) }, ...paymentLinks];
+		paymentLinks = [{ id: nextId, name: paymentName.trim(), amount: paymentAmount, recipient: student.name, url: previewPaymentLink(nextId) }, ...paymentLinks];
 		notify('created');
 	}
 
@@ -134,17 +120,9 @@
 		link.click();
 		setTimeout(() => URL.revokeObjectURL(url), 1000);
 	}
-
-	function previewAssignment(event: SubmitEvent) {
-		event.preventDefault();
-		const student = students.find((student) => student.id === assignmentStudent);
-		if (!student) { notify('required'); return; }
-		assignment = { event: assignmentEvent, name: student.name };
-		notify('assigned');
-	}
 </script>
 
-{#if isOperation}
+{#if isAdminPreviewSection(section)}
 	<div class="operations-content">
 		{#if section === 'payments'}
 			<div class="operations-grid">
@@ -227,7 +205,7 @@
 				</Card.Root>
 			</section>
 			<Dialog.Root bind:open={refundOpen}>
-				<Dialog.Content closeLabel={common.close} class="admin-console-dialog bg-card" lang={language.current} interactOutsideBehavior="ignore" onCloseAutoFocus={restoreRefundFocus}>
+				<Dialog.Content closeLabel={common.close} class="admin-console-dialog bg-card" interactOutsideBehavior="ignore" onCloseAutoFocus={restoreRefundFocus}>
 					<Dialog.Title class="pr-12 text-[1.3rem] leading-normal font-bold">{messages.payments.refundTitle}</Dialog.Title>
 					<div class="refund-modal-summary">
 						<Card.Root class="gap-0 flex-row justify-between p-4"><strong>Daniel Torres</strong><span class="mono">{currency.format(250)}</span></Card.Root>
@@ -239,8 +217,6 @@
 					</div>
 				</Dialog.Content>
 			</Dialog.Root>
-		{:else if section === 'invitations'}
-			<StudentInvitations {invitations} {invitationPage} {hasMoreInvitations} />
 		{:else if section === 'reports'}
 			<div class="import-steps">
 				<Card.Root class="gap-0 p-0">
@@ -301,55 +277,6 @@
 					</ul>
 				</Card.Root>
 			</section>
-		{:else if section === 'events'}
-			<div class="placeholder-banner">
-				<Alert.Root role="note" class="flex items-center gap-4 px-6 py-[1.3rem] max-[40rem]:flex-wrap max-[40rem]:p-[1.1rem] text-warning bg-warning/10 border-warning/40">
-					<span class="placeholder-icon"><AdminIcon name="events" size={25} /></span>
-					<div class="placeholder-copy"><h2>{messages.events.placeholder}</h2><p>{messages.events.placeholderDescription}</p></div>
-					<Badge variant="outline" class="ml-auto max-[40rem]:ml-10 h-auto whitespace-normal font-mono text-[0.59rem] text-warning bg-warning/10 border-warning/40">{common.notConnected}</Badge>
-				</Alert.Root>
-			</div>
-			<div class="operations-grid">
-				<section aria-labelledby={`${id}-schedule-title`}>
-					<Card.Root class="gap-0 p-0 min-w-0">
-						<div class="panel-heading"><h2 class="panel-title" id={`${id}-schedule-title`}>{messages.events.scheduleTitle}</h2><Badge variant="outline" class="h-auto whitespace-normal font-mono text-[0.59rem] text-secondary bg-secondary/10 border-secondary/30">{common.sampleData}</Badge></div>
-						<ol class="schedule-list">{#each sampleEvents as event}<li><div class="schedule-date mono"><strong>{messages.events.dates[event.key]}</strong><span>{event.time}</span></div><div class="schedule-details"><p class="eyebrow">{messages.events[event.type]}</p><h3>{messages.events[event.key]}</h3><p><AdminIcon name="students" size={14} />{event.cohort}</p></div><span class="schedule-mark" aria-hidden="true">+</span></li>{/each}</ol>
-					</Card.Root>
-				</section>
-				<section aria-labelledby={`${id}-assignment-title`}>
-					<Card.Root class="gap-0 p-0 min-w-0">
-						<div class="panel-heading"><div><h2 class="panel-title" id={`${id}-assignment-title`}>{messages.events.assignmentTitle}</h2><p class="panel-subtitle">{messages.events.assignmentDescription}</p></div></div>
-						<form class="operation-form" onsubmit={previewAssignment}>
-							<div class="operation-field">
-								<Label class="text-muted-foreground text-[0.74rem]" id={`${id}-assign-event`}>{messages.events.event}</Label>
-								<div class="operation-choices" role="group" aria-labelledby={`${id}-assign-event`}>
-									{#each sampleEvents as event}
-										<Button type="button" size="sm" variant={assignmentEvent === event.key ? 'default' : 'outline'} aria-pressed={assignmentEvent === event.key} onclick={() => assignmentEvent = event.key}>{messages.events[event.key]}</Button>
-									{/each}
-								</div>
-							</div>
-							<div class="operation-field">
-								<Label class="text-muted-foreground text-[0.74rem]" for={`${id}-assign-student`}>{messages.events.student}</Label>
-								<NativeSelect.Root id={`${id}-assign-student`} bind:value={assignmentStudent} required>
-									<NativeSelect.Option value="">{common.selectStudent}</NativeSelect.Option>
-									{#each students as student (student.id)}<NativeSelect.Option value={student.id}>{student.name}</NativeSelect.Option>{/each}
-								</NativeSelect.Root>
-							</div>
-							<Button size="sm" class="justify-self-end mt-2" type="submit">{messages.events.assign}<AdminIcon name="arrow" size={16} /></Button>
-							{#if assignment}
-								<div class="assignment-preview"><AdminIcon name="check" size={17} /><span><strong>{assignment.name}</strong><small>{messages.events[assignment.event]}</small></span><Badge variant="outline" class="h-auto whitespace-normal font-mono text-[0.59rem] text-secondary bg-secondary/10 border-secondary/30">{common.preview}</Badge></div>
-							{/if}
-						</form>
-					</Card.Root>
-				</section>
-			</div>
-			<div class="attendance-panel">
-				<Card.Root class="relative gap-0 min-h-60 w-full items-center px-4 py-10">
-					<div class="attendance-grid" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span></div>
-					<AdminIcon name="target" size={30} /><h2>{messages.events.attendance}</h2><p>{messages.events.attendanceNote}</p>
-					<Badge variant="outline" class="h-auto whitespace-normal font-mono text-[0.59rem] text-secondary bg-secondary/10 border-secondary/30">{messages.reports.future}</Badge>
-				</Card.Root>
-			</div>
 		{/if}
 		<div class="operation-feedback" aria-live="polite" aria-atomic="true">
 			{#if feedback?.section === section}
@@ -370,8 +297,6 @@
 	.panel-heading > :global(svg) { flex-shrink: 0; color: var(--primary); }
 	.operation-form { display: grid; gap: 1.2rem; padding: 1.5rem; }
 	.operation-field { display: flex; flex-direction: column; gap: 0.5rem; min-width: 0; }
-	.operation-choices { display: flex; flex-wrap: wrap; gap: 0.5rem; min-width: 0; }
-	.operation-choices :global([data-slot="button"]) { max-width: 100%; flex: 1 1 auto; }
 	.amount-field { position: relative; display: flex; align-items: center; }
 	.amount-field > span:first-child { position: absolute; left: 0.85rem; color: var(--primary); }
 	.currency-label { position: absolute; right: 1rem; color: var(--muted-foreground); font-size: 0.65rem; }
@@ -388,7 +313,7 @@
 	.integration-note { padding: 1rem 1.5rem; border-top: 1px solid var(--border); }
 	.integration-note :global(svg) { flex-shrink: 0; margin-top: 0.2rem; color: var(--warning); }
 	.refund-modal-summary span { color: var(--warning); }
-	.preview-list, .report-history, .schedule-list { list-style: none; margin: 0; padding: 0; }
+	.preview-list, .report-history { list-style: none; margin: 0; padding: 0; }
 	.preview-list li { display: flex; align-items: center; gap: 1rem; padding: 1.4rem 1.5rem; border-bottom: 1px solid var(--border); }
 	.preview-list li:last-child, .report-history li:last-child { border-bottom: 0; }
 	.list-icon { display: grid; flex-shrink: 0; place-items: center; width: 2.7rem; height: 2.7rem; border: 1px solid #3f4e42; border-radius: 4px; background: #222d25; color: var(--primary); }
@@ -424,27 +349,6 @@
 	.schema-row strong { font-weight: 500; font-size: 0.75rem; } .schema-row small { display: block; margin-top: 0.3rem; color: var(--muted-foreground); font-size: 0.68rem; }
 	.report-history li { display: flex; align-items: center; gap: 1rem; padding: 1.3rem 1.5rem; border-bottom: 1px solid var(--border); }
 	.report-history h3 { margin: 0; font-size: 0.78rem; font-weight: 500; overflow-wrap: anywhere; } .report-history p { margin: 0.3rem 0 0; color: var(--muted-foreground); font-size: 0.69rem; }
-	.placeholder-icon :global(svg) { color: var(--warning); }
-	.placeholder-copy { min-width: 0; flex: 1; }
-	.placeholder-banner h2 { margin: 0; font-size: 0.9rem; }
-	.placeholder-banner p { margin: 0.4rem 0 0; color: var(--muted-foreground); font-size: 0.74rem; line-height: 1.8; }
-	.schedule-list { padding: 0 1.4rem; }
-	.schedule-list li { position: relative; display: flex; gap: 1.2rem; padding: 1.6rem 0; border-bottom: 1px solid var(--border); }
-	.schedule-list li:last-child { border-bottom: 0; }
-	.schedule-date { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.4rem; min-width: 4rem; height: 4rem; border: 1px solid #45513f; border-radius: 4px; color: var(--primary); background: #253025; }
-	.schedule-date strong { font-weight: 500; font-size: 0.73rem; } .schedule-date span { color: var(--muted-foreground); font-size: 0.62rem; }
-	.schedule-details .eyebrow { font-size: 0.52rem; } .schedule-details h3 { margin: 0.4rem 0; font-size: 0.85rem; }
-	.schedule-details > p:last-child { display: flex; align-items: center; gap: 0.4rem; margin: 0; color: var(--muted-foreground); font-size: 0.65rem; }
-	.schedule-mark { margin-left: auto; color: #7e9670; }
-	.assignment-preview { display: flex; align-items: center; gap: 0.6rem; padding-top: 1rem; border-top: 1px solid var(--border); color: var(--primary); }
-	.assignment-preview > :global(svg) { color: var(--primary); }
-	.assignment-preview > span:first-of-type { flex: 1; } .assignment-preview strong { font-size: 0.73rem; } .assignment-preview small { display: block; margin-top: 0.2rem; color: var(--muted-foreground); font-size: 0.62rem; }
-	.attendance-panel { min-width: 0; text-align: center; }
-	.attendance-panel :global([data-slot="card"] > svg) { color: var(--primary); }
-	.attendance-panel h2 { margin: 1rem 0 0; font-size: 1.1rem; }
-	.attendance-panel p { margin: 0.5rem 0 1rem; color: var(--muted-foreground); font-size: 0.76rem; }
-	.attendance-grid { position: absolute; inset: 1.2rem; display: grid; grid-template-columns: repeat(6, 1fr); pointer-events: none; opacity: 0.12; }
-	.attendance-grid span { border: 1px solid var(--primary); border-right: 0; } .attendance-grid span:last-child { border-right: 1px solid var(--primary); }
 	.operation-feedback { position: fixed; right: 1.5rem; bottom: 1.5rem; z-index: 20; width: min(30rem, calc(100vw - 2rem)); }
 	@media (max-width: 70rem) { .operations-grid { grid-template-columns: minmax(0, 1fr); } }
 	@media (max-width: 40rem) {
@@ -453,7 +357,6 @@
 		.link-actions { width: 100%; flex-direction: row; justify-content: space-between; align-items: center; }
 		.import-step-grid { grid-template-columns: minmax(0, 1fr); gap: 1rem; } .step-arrow { display: none; }
 		.report-history li { flex-wrap: wrap; gap: 0.7rem; padding: 1rem; } .report-history li > div { flex: 1; min-width: 0; }
-		.schedule-list { padding: 0 1rem; } .schedule-list li { gap: 0.8rem; } .schedule-mark { display: none; }
 		.refund-top { flex-wrap: wrap; } .refund-amount { width: 100%; margin-top: 0.4rem; }
 	}
 </style>

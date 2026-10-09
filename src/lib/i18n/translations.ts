@@ -1,6 +1,3 @@
-import { bootcampDocumentMessages } from '../bootcamp/document-messages';
-import { spanishBootcampLegal } from '../bootcamp/legal-templates';
-
 export type Language = 'en' | 'es';
 
 export const defaultLanguage: Language = 'en';
@@ -23,7 +20,7 @@ export function formatMessage(message: string, values: Record<string, string | n
 
 const englishCoursesPreview = {
 	pageTitle: 'Topic library preview | Masterminds ASVAB', description: 'Browse grouped course topics and lesson placeholders in the topic library preview.',
-	title: 'Topic library', label: 'Courses', preview: 'Layout preview only · No lessons or progress are saved.',
+	label: 'Courses',
 
 	part: 'Part 1 of 15', course: 'Fractions and Mixed Numbers', intro: 'Build the foundations, work through mixed numbers, then practice.',
 	foundations: 'Fraction foundations', mixed: 'Mixed numbers', review: 'Practice & review',
@@ -34,7 +31,7 @@ const englishCoursesPreview = {
 };
 const spanishCoursesPreview: typeof englishCoursesPreview = {
 	pageTitle: 'Vista previa de la biblioteca de temas | Masterminds ASVAB', description: 'Explora temas de cursos agrupados y espacios de muestra para lecciones en la biblioteca de temas.',
-	title: 'Biblioteca de temas', label: 'Cursos', preview: 'Solo una propuesta de diseño · No se guardan lecciones ni progreso.',
+	label: 'Cursos',
 
 	part: 'Parte 1 de 15', course: 'Fracciones y números mixtos', intro: 'Aprende los fundamentos, trabaja con números mixtos y luego practica.',
 	foundations: 'Fundamentos de fracciones', mixed: 'Números mixtos', review: 'Práctica y repaso',
@@ -59,74 +56,40 @@ const englishAdmin = {
 			abbreviations: { ar: 'AR', pc: 'PC', wk: 'WK', mk: 'MK' },
 			subjects: { ar: 'Arithmetic Reasoning', pc: 'Paragraph Comprehension', wk: 'Word Knowledge', mk: 'Mathematics Knowledge' }
 		},
-	console: 'Command console', workspace: 'Program operations', operator: 'Admin', role: 'Mission control',
+	console: 'Command console', workspace: 'Program operations',
 	navigation: 'Admin navigation', backToStudents: 'Student workspace', topLabel: 'Administration',
-	prototype: 'Design preview', prototypeNote: 'Simulation mode. Fictional data. Changes stay in this session; no messages, charges, or refunds are sent.',
+	prototype: 'Design preview',
 	footer: 'Masterminds / Operations', version: 'Prototype v0.1',
-	sections: { overview: 'Overview', students: 'Students', payments: 'Payments', invitations: 'Invitations', reports: 'Grade reports', events: 'Events' },
+	sections: { overview: 'Overview', students: 'Students', payments: 'Payments', invitations: 'Invitations', reports: 'Grade reports' },
 	intro: {
 		overview: { eyebrow: 'Your program. In full view.', title: 'Command center', description: 'A clear picture of your students. Every next move within reach.' },
 		students: { eyebrow: 'Personnel / 01', title: 'Student roster', description: 'View your database-backed students and their subject scores.' },
 		payments: { eyebrow: 'Finance / 02', title: 'Payment operations', description: 'Preview payment links and refund workflows. No real transactions.' },
 		invitations: { eyebrow: 'Recruitment / 03', title: 'Program invitations', description: 'Give your next students a clear route into the program.' },
-		reports: { eyebrow: 'Intelligence / 04', title: 'Grade reports', description: 'A staging area for student results. Preview a CSV before the real import is connected.' },
-		events: { eyebrow: 'Scheduling / 05', title: 'Upcoming operations', description: 'A preview of how sessions and student assignments will come together.' }
+		reports: { eyebrow: 'Intelligence / 04', title: 'Grade reports', description: 'A staging area for student results. Preview a CSV before the real import is connected.' }
 	},
 	common: {
-		preview: 'Preview', sampleData: 'Sample data', notConnected: 'Not connected', localOnly: 'Local preview only',
-		cancel: 'Cancel', close: 'Close', save: 'Save preview', create: 'Create preview', copy: 'Copy link',
+		sampleData: 'Sample data', localOnly: 'Local preview only',
+		cancel: 'Cancel', close: 'Close', copy: 'Copy link',
 		copied: 'Preview link copied. It is not a working program link.', copyFailed: 'Clipboard unavailable. Select and copy the preview link below.',
-		created: 'Preview created. Nothing was sent or saved to a server.', updated: 'Preview updated. Changes reset when you reload this page.',
-		viewAll: 'View all', student: 'Student', cohort: 'Cohort', status: 'Status', actions: 'Actions',
-		justNow: 'Just now', minutesAgo: '{count} min ago', hoursAgo: '{count} hr ago', daysAgo: '{count} days ago', never: 'Not yet',
-		statusLabels: { active: 'Active', invited: 'Invited', paused: 'Paused' },
-		allStudents: 'All students', selectStudent: 'Select a student', required: 'Complete the required fields.',
+		created: 'Preview created. Nothing was sent or saved to a server.', actions: 'Actions',
+		selectStudent: 'Select a student', required: 'Complete the required fields.',
 		notAvailable: '—', usd: 'USD', demoLink: 'Nonfunctional preview link',
 	},
 	overview: {
-		addStudent: 'Add student', quickActions: 'Quick actions', createPayment: 'Payment link', inviteStudent: 'Invite student', uploadGrades: 'Upload grades',
-		metrics: { total: 'Total students', active: 'Active students', average: 'Average score', attention: 'Need attention' },
-		metricHints: { total: 'Students in the demo roster', active: 'Currently in training', average: 'Across graded students', attention: 'Low score or paused training' },
-		activityTitle: 'Training activity', activitySubtitle: 'Student sessions over time', chartLabel: 'Sample student sessions',
-		week: '7 days', month: '30 days', periodLabel: 'Activity period', sessions: 'Sessions', activityChange: '+18% vs. previous period',
-		chartDescription: 'Fictional student-session trend for the selected period. Session values are listed below the chart.',
-		days: { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat', sun: 'Sun' },
-		monthStart: 'Day 1', monthMiddle: 'Day 15', monthEnd: 'Day 30',
-		readinessTitle: 'Readiness radar', readinessSubtitle: 'Average demo score', target: 'Target score', focus: 'Keep the momentum.', readinessNote: 'A visual training indicator, not an official readiness assessment.',
-		feedTitle: 'Activity log', feedSubtitle: 'Latest sample signals',
-		feed: { assessment: 'Completed a practice assessment', lesson: 'Finished a word knowledge lesson', invitation: 'Program invitation staged', report: 'Grade report ready for review' },
-		feedTime: { assessment: '4 min ago', lesson: '12 min ago', invitation: '28 min ago', report: '1 hr ago' },
-		eventTitle: 'Next on the radar', eventName: 'ASVAB strategy session', eventType: 'Group briefing', eventTime: 'Oct 08 · 18:00', eventCohort: 'Alpha 01 + Bravo 02', eventNote: 'Sample schedule · events are not connected',
-		viewSchedule: 'Preview schedule', attentionTitle: 'A little course correction', attentionDescription: '{count} students could use a check-in. Review low scores and paused training.', reviewStudents: 'Review students',
+		quickActions: 'Quick actions', createPayment: 'Payment link', inviteStudent: 'Invite student', uploadGrades: 'Upload grades',
 		systems: 'System connections', database: 'Student database', billing: 'Payment provider', scheduling: 'Event scheduling', awaiting: 'Awaiting integration'
-	},
-	students: {
-		title: 'Student roster', subtitle: 'People behind the progress', search: 'Search name, email, or cohort', searchLabel: 'Search students',
-		filterLabel: 'Filter by student status', all: 'All statuses', score: 'Score', progress: 'Progress', lastActive: 'Last active',
-		add: 'Add student', edit: 'Edit student', editLabel: 'Edit {name}', empty: 'No students match these filters.', count: '{count} students',
-		name: 'Full name', email: 'Email address', cohort: 'Cohort', status: 'Student status',
-		addTitle: 'Add a student', editTitle: 'Student details', formNote: 'This edits the fictional roster only. No invitation is sent.',
-		namePlaceholder: 'Student full name', emailPlaceholder: 'student@example.com', cohortPlaceholder: 'e.g. Alpha 01',
-		scoreLabel: 'Practice score (0–100)', progressLabel: 'Program progress (0–100%)', noScore: 'No score yet',
-		saved: 'Student saved in the demo roster. No database record was created.',
-		validation: 'Enter a name, valid email, cohort, and values between 0 and 100.',
 	},
 	payments: {
 		createTitle: 'Create a payment link', createDescription: 'Set up a preview of a program payment. Real checkout will be connected later.',
 		label: 'Payment name', labelPlaceholder: 'e.g. ASVAB preparation program', amount: 'Amount (USD)', amountPlaceholder: '250.00',
 		generate: 'Generate preview link', linksTitle: 'Payment links', linksDescription: 'Preview links are intentionally nonfunctional.',
-		empty: 'Your preview payment links will appear here.', sampleName: 'ASVAB preparation program', draft: 'Preview only',
+		sampleName: 'ASVAB preparation program', draft: 'Preview only',
 		refundsTitle: 'Refund queue', refundsDescription: 'A sample request to explore the review flow.', refundReason: 'Student requested cancellation',
 		refundRequested: 'Requested', refundReviewed: 'Reviewed in preview', reviewRefund: 'Review request',
 		refundTitle: 'Review a refund', refundNote: 'This marks a fictional request as reviewed. It does not issue a refund or contact a payment provider.',
 		confirmRefund: 'Mark reviewed in preview', refundSuccess: 'Demo request reviewed. No money was refunded.',
-		invalidAmount: 'Enter a payment name and an amount between $1 and $10,000.', recipient: 'Recipient', amountLabel: 'Amount',
-	},
-	invitations: {
-		createTitle: 'Invite to the program', createDescription: 'Prepare an invitation preview. Nothing is emailed and no enrollment is created.',
-		name: 'Student name', email: 'Student email', cohort: 'Assigned cohort', expires: 'Link expires after', sevenDays: '7 days', thirtyDays: '30 days',
-		generate: 'Generate invitation preview', linksTitle: 'Invitation links', linksDescription: 'Preview invitations for your next intake.',
-		empty: 'Create your first invitation preview.', queued: 'Not sent', sampleName: 'Emma Wilson', expiresIn: '{count}-day expiry preview',
+		invalidAmount: 'Enter a payment name and an amount between $1 and $10,000.', recipient: 'Recipient',
 	},
 	studentImport: {
 		pageTitle: 'Student invitations | Masterminds ASVAB',
@@ -186,22 +149,13 @@ const englishAdmin = {
 		dropTitle: 'Your next report starts here', dropDescription: 'CSV files up to 5 MB · local file selection only', choose: 'Choose a CSV', inputLabel: 'Select a student grade CSV for preview',
 		formatTitle: 'Suggested file format', formatDescription: 'An illustrative format, not a database contract. Final columns will follow the new schema.',
 		template: 'Download sample CSV', fileName: 'masterminds-grades-sample.csv',
-		selected: 'File staged locally', noFile: 'No file selected', remove: 'Remove file', size: 'File size',
+		selected: 'File staged locally', remove: 'Remove file', size: 'File size',
 		notImported: 'Not imported. CSV validation, student matching, and persistence will be wired up later.', invalidFile: 'Choose a .csv file no larger than 5 MB.',
 		historyTitle: 'Report history', historyDescription: 'Sample uploads to show the future review experience.',
-		file: 'Report', rows: 'Student rows', state: 'Import status', reviewed: 'Sample reviewed', pending: 'Sample awaiting review',
+		rows: 'Student rows', reviewed: 'Sample reviewed', pending: 'Sample awaiting review',
 		columns: { student: 'Student ID', score: 'Practice score', date: 'Assessment date' },
 		steps: { one: 'Select a report', two: 'Validate & match students', three: 'Review & import' }, future: 'Future integration',
 	},
-	events: {
-		placeholder: 'Scheduling module / coming next', placeholderDescription: 'Events are not built yet. This is a visual placeholder for sessions, assignments, and attendance.',
-		scheduleTitle: 'Sample flight plan', session: 'ASVAB strategy session', practice: 'Timed practice assessment', checkIn: 'Student progress check-in',
-		briefing: 'Group briefing', assessment: 'Practice assessment', coaching: 'Coaching session',
-		dates: { session: 'Oct 08', practice: 'Oct 10', checkIn: 'Oct 12' },
-		assignmentTitle: 'Preview an assignment', assignmentDescription: 'Explore the assignment control without creating a real event.',
-		event: 'Sample event', student: 'Student', assign: 'Preview assignment', assigned: 'Assignment previewed. No event was created and no student was notified.',
-		attendance: 'Attendance tracking', attendanceNote: 'Will appear here when events are connected.',
-	}
 };
 
 const spanishAdmin: typeof englishAdmin = {
@@ -219,74 +173,40 @@ const spanishAdmin: typeof englishAdmin = {
 			abbreviations: { ar: 'AR', pc: 'PC', wk: 'WK', mk: 'MK' },
 			subjects: { ar: 'Razonamiento aritmético', pc: 'Comprensión de párrafos', wk: 'Conocimiento de palabras', mk: 'Conocimiento matemático' }
 		},
-	console: 'Consola de mando', workspace: 'Operaciones del programa', operator: 'Admin', role: 'Control de misión',
+	console: 'Consola de mando', workspace: 'Operaciones del programa',
 	navigation: 'Navegación administrativa', backToStudents: 'Espacio del estudiante', topLabel: 'Administración',
-	prototype: 'Vista previa del diseño', prototypeNote: 'Modo simulación. Datos ficticios. Los cambios duran esta sesión; no se envían mensajes ni se realizan cobros o reembolsos.',
+	prototype: 'Vista previa del diseño',
 	footer: 'Masterminds / Operaciones', version: 'Prototipo v0.1',
-	sections: { overview: 'Resumen', students: 'Estudiantes', payments: 'Pagos', invitations: 'Invitaciones', reports: 'Informes de notas', events: 'Eventos' },
+	sections: { overview: 'Resumen', students: 'Estudiantes', payments: 'Pagos', invitations: 'Invitaciones', reports: 'Informes de notas' },
 	intro: {
 		overview: { eyebrow: 'Tu programa. A plena vista.', title: 'Centro de mando', description: 'Una vista clara de tus estudiantes. Cada próximo paso a tu alcance.' },
 		students: { eyebrow: 'Personal / 01', title: 'Registro estudiantil', description: 'Consulta tus estudiantes de la base de datos y sus puntuaciones por materia.' },
 		payments: { eyebrow: 'Finanzas / 02', title: 'Operaciones de pago', description: 'Explora enlaces de pago y reembolsos. Sin transacciones reales.' },
 		invitations: { eyebrow: 'Reclutamiento / 03', title: 'Invitaciones al programa', description: 'Dale a tus próximos estudiantes una ruta clara para entrar al programa.' },
-		reports: { eyebrow: 'Inteligencia / 04', title: 'Informes de notas', description: 'Un espacio para preparar resultados. Selecciona un CSV antes de conectar la importación real.' },
-		events: { eyebrow: 'Calendario / 05', title: 'Próximas operaciones', description: 'Una vista previa de cómo se organizarán las sesiones y asignaciones.' }
+		reports: { eyebrow: 'Inteligencia / 04', title: 'Informes de notas', description: 'Un espacio para preparar resultados. Selecciona un CSV antes de conectar la importación real.' }
 	},
 	common: {
-		preview: 'Vista previa', sampleData: 'Datos de ejemplo', notConnected: 'Sin conectar', localOnly: 'Solo vista previa local',
-		cancel: 'Cancelar', close: 'Cerrar', save: 'Guardar vista previa', create: 'Crear vista previa', copy: 'Copiar enlace',
+		sampleData: 'Datos de ejemplo', localOnly: 'Solo vista previa local',
+		cancel: 'Cancelar', close: 'Cerrar', copy: 'Copiar enlace',
 		copied: 'Enlace de ejemplo copiado. No es un enlace funcional del programa.', copyFailed: 'Portapapeles no disponible. Selecciona y copia el enlace de ejemplo.',
-		created: 'Vista previa creada. No se envió ni se guardó nada en un servidor.', updated: 'Vista previa actualizada. Los cambios se restablecen al recargar.',
-		viewAll: 'Ver todos', student: 'Estudiante', cohort: 'Grupo', status: 'Estado', actions: 'Acciones',
-		justNow: 'Ahora mismo', minutesAgo: 'Hace {count} min', hoursAgo: 'Hace {count} h', daysAgo: 'Hace {count} días', never: 'Aún no',
-		statusLabels: { active: 'Activo', invited: 'Invitado', paused: 'En pausa' },
-		allStudents: 'Todos los estudiantes', selectStudent: 'Selecciona un estudiante', required: 'Completa los campos requeridos.',
+		created: 'Vista previa creada. No se envió ni se guardó nada en un servidor.', actions: 'Acciones',
+		selectStudent: 'Selecciona un estudiante', required: 'Completa los campos requeridos.',
 		notAvailable: '—', usd: 'USD', demoLink: 'Enlace de ejemplo no funcional',
 	},
 	overview: {
-		addStudent: 'Añadir estudiante', quickActions: 'Acciones rápidas', createPayment: 'Enlace de pago', inviteStudent: 'Invitar estudiante', uploadGrades: 'Subir notas',
-		metrics: { total: 'Total de estudiantes', active: 'Estudiantes activos', average: 'Puntuación media', attention: 'Necesitan atención' },
-		metricHints: { total: 'Estudiantes del registro de ejemplo', active: 'En preparación actualmente', average: 'Entre estudiantes evaluados', attention: 'Puntuación baja o preparación pausada' },
-		activityTitle: 'Actividad de preparación', activitySubtitle: 'Sesiones de estudiantes a lo largo del tiempo', chartLabel: 'Sesiones estudiantiles de ejemplo',
-		week: '7 días', month: '30 días', periodLabel: 'Período de actividad', sessions: 'Sesiones', activityChange: '+18% frente al período anterior',
-		chartDescription: 'Tendencia ficticia de sesiones en el período seleccionado. Los valores se enumeran debajo de la gráfica.',
-		days: { mon: 'Lun', tue: 'Mar', wed: 'Mié', thu: 'Jue', fri: 'Vie', sat: 'Sáb', sun: 'Dom' },
-		monthStart: 'Día 1', monthMiddle: 'Día 15', monthEnd: 'Día 30',
-		readinessTitle: 'Radar de preparación', readinessSubtitle: 'Puntuación media de ejemplo', target: 'Puntuación objetivo', focus: 'Mantén el impulso.', readinessNote: 'Indicador visual de preparación; no es una evaluación oficial.',
-		feedTitle: 'Registro de actividad', feedSubtitle: 'Últimas señales de ejemplo',
-		feed: { assessment: 'Completó una evaluación de práctica', lesson: 'Terminó una lección de vocabulario', invitation: 'Invitación al programa preparada', report: 'Informe de notas listo para revisión' },
-		feedTime: { assessment: 'Hace 4 min', lesson: 'Hace 12 min', invitation: 'Hace 28 min', report: 'Hace 1 h' },
-		eventTitle: 'Próximo en el radar', eventName: 'Sesión de estrategia ASVAB', eventType: 'Sesión grupal', eventTime: '08 oct · 18:00', eventCohort: 'Alpha 01 + Bravo 02', eventNote: 'Calendario de ejemplo · eventos sin conectar',
-		viewSchedule: 'Ver calendario de ejemplo', attentionTitle: 'Un pequeño ajuste de rumbo', attentionDescription: '{count} estudiantes podrían necesitar seguimiento. Revisa las puntuaciones bajas y la preparación en pausa.', reviewStudents: 'Revisar estudiantes',
+		quickActions: 'Acciones rápidas', createPayment: 'Enlace de pago', inviteStudent: 'Invitar estudiante', uploadGrades: 'Subir notas',
 		systems: 'Conexiones del sistema', database: 'Base de datos estudiantil', billing: 'Proveedor de pagos', scheduling: 'Calendario de eventos', awaiting: 'Pendiente de integración'
-	},
-	students: {
-		title: 'Registro estudiantil', subtitle: 'Las personas detrás del progreso', search: 'Busca nombre, correo o grupo', searchLabel: 'Buscar estudiantes',
-		filterLabel: 'Filtrar por estado del estudiante', all: 'Todos los estados', score: 'Puntuación', progress: 'Progreso', lastActive: 'Última actividad',
-		add: 'Añadir estudiante', edit: 'Editar estudiante', editLabel: 'Editar a {name}', empty: 'Ningún estudiante coincide con estos filtros.', count: '{count} estudiantes',
-		name: 'Nombre completo', email: 'Correo electrónico', cohort: 'Grupo', status: 'Estado del estudiante',
-		addTitle: 'Añadir un estudiante', editTitle: 'Datos del estudiante', formNote: 'Esto solo modifica el registro ficticio. No se envía ninguna invitación.',
-		namePlaceholder: 'Nombre completo del estudiante', emailPlaceholder: 'estudiante@example.com', cohortPlaceholder: 'p. ej., Alpha 01',
-		scoreLabel: 'Puntuación de práctica (0–100)', progressLabel: 'Progreso del programa (0–100%)', noScore: 'Sin puntuación aún',
-		saved: 'Estudiante guardado en el registro de ejemplo. No se creó un registro en la base de datos.',
-		validation: 'Ingresa un nombre, correo válido, grupo y valores entre 0 y 100.',
 	},
 	payments: {
 		createTitle: 'Crear un enlace de pago', createDescription: 'Prepara un ejemplo de pago del programa. El cobro real se conectará más adelante.',
 		label: 'Nombre del pago', labelPlaceholder: 'p. ej., Programa de preparación ASVAB', amount: 'Importe (USD)', amountPlaceholder: '250.00',
 		generate: 'Generar enlace de ejemplo', linksTitle: 'Enlaces de pago', linksDescription: 'Los enlaces de ejemplo no son funcionales.',
-		empty: 'Tus enlaces de pago de ejemplo aparecerán aquí.', sampleName: 'Programa de preparación ASVAB', draft: 'Solo vista previa',
+		sampleName: 'Programa de preparación ASVAB', draft: 'Solo vista previa',
 		refundsTitle: 'Solicitudes de reembolso', refundsDescription: 'Una solicitud ficticia para explorar el proceso de revisión.', refundReason: 'El estudiante solicitó cancelar',
 		refundRequested: 'Solicitado', refundReviewed: 'Revisado en vista previa', reviewRefund: 'Revisar solicitud',
 		refundTitle: 'Revisar un reembolso', refundNote: 'Esto marca una solicitud ficticia como revisada. No emite un reembolso ni contacta un proveedor de pagos.',
 		confirmRefund: 'Marcar revisado en vista previa', refundSuccess: 'Solicitud de ejemplo revisada. No se reembolsó dinero.',
-		invalidAmount: 'Ingresa un nombre de pago y un importe entre $1 y $10,000.', recipient: 'Destinatario', amountLabel: 'Importe',
-	},
-	invitations: {
-		createTitle: 'Invitar al programa', createDescription: 'Prepara una invitación de ejemplo. No se envía ningún correo ni se crea una matrícula.',
-		name: 'Nombre del estudiante', email: 'Correo del estudiante', cohort: 'Grupo asignado', expires: 'El enlace vence después de', sevenDays: '7 días', thirtyDays: '30 días',
-		generate: 'Generar invitación de ejemplo', linksTitle: 'Enlaces de invitación', linksDescription: 'Invitaciones de ejemplo para tus próximos estudiantes.',
-		empty: 'Crea tu primera invitación de ejemplo.', queued: 'No enviada', sampleName: 'Emma Wilson', expiresIn: 'Vencimiento de ejemplo: {count} días',
+		invalidAmount: 'Ingresa un nombre de pago y un importe entre $1 y $10,000.', recipient: 'Destinatario',
 	},
 	studentImport: {
 		pageTitle: 'Invitaciones estudiantiles | Masterminds ASVAB',
@@ -346,22 +266,13 @@ const spanishAdmin: typeof englishAdmin = {
 		dropTitle: 'Tu próximo informe comienza aquí', dropDescription: 'Archivos CSV de hasta 5 MB · solo selección local', choose: 'Seleccionar un CSV', inputLabel: 'Seleccionar un CSV de notas para vista previa',
 		formatTitle: 'Formato sugerido', formatDescription: 'Un formato ilustrativo, no un contrato de base de datos. Las columnas definitivas seguirán el nuevo esquema.',
 		template: 'Descargar CSV de ejemplo', fileName: 'masterminds-notas-ejemplo.csv',
-		selected: 'Archivo preparado localmente', noFile: 'Ningún archivo seleccionado', remove: 'Quitar archivo', size: 'Tamaño del archivo',
+		selected: 'Archivo preparado localmente', remove: 'Quitar archivo', size: 'Tamaño del archivo',
 		notImported: 'No importado. La validación del CSV, la identificación de estudiantes y el guardado se conectarán más adelante.', invalidFile: 'Selecciona un archivo .csv de hasta 5 MB.',
 		historyTitle: 'Historial de informes', historyDescription: 'Cargas ficticias para mostrar la futura experiencia de revisión.',
-		file: 'Informe', rows: 'Filas de estudiantes', state: 'Estado de importación', reviewed: 'Ejemplo revisado', pending: 'Ejemplo pendiente de revisión',
+		rows: 'Filas de estudiantes', reviewed: 'Ejemplo revisado', pending: 'Ejemplo pendiente de revisión',
 		columns: { student: 'ID del estudiante', score: 'Puntuación de práctica', date: 'Fecha de evaluación' },
 		steps: { one: 'Seleccionar informe', two: 'Validar y vincular estudiantes', three: 'Revisar e importar' }, future: 'Integración futura',
 	},
-	events: {
-		placeholder: 'Módulo de calendario / próximamente', placeholderDescription: 'Los eventos aún no están creados. Este es un espacio visual para sesiones, asignaciones y asistencia.',
-		scheduleTitle: 'Plan de vuelo de ejemplo', session: 'Sesión de estrategia ASVAB', practice: 'Evaluación de práctica cronometrada', checkIn: 'Seguimiento del progreso estudiantil',
-		briefing: 'Sesión grupal', assessment: 'Evaluación de práctica', coaching: 'Sesión de orientación',
-		dates: { session: '08 oct', practice: '10 oct', checkIn: '12 oct' },
-		assignmentTitle: 'Explorar una asignación', assignmentDescription: 'Prueba el control de asignaciones sin crear un evento real.',
-		event: 'Evento de ejemplo', student: 'Estudiante', assign: 'Ver asignación de ejemplo', assigned: 'Asignación simulada. No se creó ningún evento ni se notificó al estudiante.',
-		attendance: 'Control de asistencia', attendanceNote: 'Aparecerá aquí cuando se conecten los eventos.',
-	}
 };
 
 const englishEnrollment = {
@@ -409,8 +320,6 @@ const englishAttendance = {
 	eyebrow: 'Employer documents',
 	title: 'Attendance certificate',
 	introduction: 'Create a letter for your employer explaining your participation in the ASVAB preparation program and requesting flexibility for your weekly classes.',
-	cardDescription: 'Prepare an employer letter with your program details and class schedule, then download it in English or Spanish.',
-	open: 'Create your attendance certificate',
 
 	studentDetails: 'Student details',
 	studentDetailsHint: 'Enter your full name as it should appear in the letter.',
@@ -471,8 +380,6 @@ const spanishAttendance: typeof englishAttendance = {
 	eyebrow: 'Documentos para tu patrono',
 	title: 'Certificado de asistencia',
 	introduction: 'Prepara una carta para tu patrono que explique tu participación en el programa de preparación ASVAB y solicite flexibilidad para asistir a tus clases semanales.',
-	cardDescription: 'Prepara una carta para tu patrono con tus datos del programa y horario de clases, y descárgala en inglés o español.',
-	open: 'Crear tu certificado de asistencia',
 
 	studentDetails: 'Datos del estudiante',
 	studentDetailsHint: 'Escribe tu nombre completo como debe aparecer en la carta.',
@@ -527,157 +434,15 @@ const spanishAttendance: typeof englishAttendance = {
 	}
 };
 
-const englishDesignPreview = {
-	pageTitle: 'Home design study | Masterminds ASVAB',
-	description: 'Compare three home page design directions using the Masterminds company colors.',
-	title: 'One home. Three directions.',
-	label: 'Design study',
-	chooseDirection: 'Choose a design direction',
-	back: 'Back to current home',
-	note: 'Design comparison. Focus is now the main home page. Tool links open the existing pages.',
-	recommendation: 'Recommended',
-	directions: {
-		focus: {
-			name: 'Focus',
-			summary: 'A calm, dark workspace. A sidebar keeps navigation familiar, with grades and practice up front and documents out of the way.',
-			tradeoff: 'Low effort · Reuses the current shell structure. Best for everyday use; the sidebar takes some desktop space.'
-		},
-		'field-notes': {
-			name: 'Field Notes',
-			summary: 'A warm, cream-colored study space. Big typography, a featured practice card, and an uncluttered resource list.',
-			tradeoff: 'Low–medium effort · Same components, light theme tokens. More distinctive, but the light palette would need checking on the other pages.'
-		},
-		launchpad: {
-			name: 'Launchpad',
-			summary: 'A compact, action-first home. No sidebar, no distractions: choose a tool and get started.',
-			tradeoff: 'Lowest effort · A header and a responsive card grid. Great on phones; less room for navigation as the site grows.'
-		}
-	},
-	workspace: 'Student workspace',
-	student: 'Student',
-	studentProfile: 'Student profile preview',
-	home: 'Home',
-	practice: 'Practice',
-	resources: 'Student resources',
-	allTools: 'Your toolkit',
-	openTool: 'Open tool',
-	footer: 'Small steps. Strong foundations.',
-	focus: {
-		eyebrow: 'ASVAB practice',
-		title: 'Your grades',
-		intro: 'Four core areas. One clear view.',
-		sectionHint: 'Choose a skill to work on.',
-		sampleData: 'Sample grades',
-		sampleNote: 'Preview only: sample practice percentages, not student records or official ASVAB scores.',
-		score: '{score}%',
-		scoreText: 'Sample practice grade: {score} percent',
-		subjects: {
-			wk: { code: 'WK', title: 'Word Knowledge' },
-			pc: { code: 'PC', title: 'Paragraph Comprehension' },
-			mk: { code: 'MK', title: 'Math Knowledge' },
-			ar: { code: 'AR', title: 'Arithmetic Reasoning' }
-		}
-	},
-	fieldNotes: {
-		eyebrow: 'A little practice goes a long way',
-		title: 'Prepare for your next chapter.',
-		intro: 'A quieter space for a bigger goal. Your ASVAB practice and student essentials, thoughtfully brought together.',
-		featured: 'A place to begin',
-		sectionHint: 'Everything you need, without the noise.'
-	},
-	launchpad: {
-		eyebrow: 'Less searching. More doing.',
-		title: 'What will you work on today?',
-		intro: 'Pick a tool. Take the next step.'
-	},
-	tools: {
-		math: { title: 'Speed Math', description: 'Build speed and accuracy with timed arithmetic practice.', action: 'Practice math', category: 'Arithmetic' },
-		vocabulary: { title: 'English vocabulary', description: 'Practice frequent English words with Spanish translations.', action: 'Practice vocabulary', category: 'English' },
-		ist: { title: 'Physical readiness', description: 'Enter your IST results, check readiness, and download a report.', action: 'Open IST assessment', category: 'Readiness' },
-		attendance: { title: 'Attendance certificate', description: 'Create a letter for your employer with your class schedule.', action: 'Create certificate', category: 'Documents' }
-	}
-};
 
-const spanishDesignPreview: typeof englishDesignPreview = {
-	pageTitle: 'Propuestas de inicio | Masterminds ASVAB',
-	description: 'Compara tres propuestas para la página de inicio con los colores de Masterminds.',
-	title: 'Un inicio. Tres propuestas.',
-	label: 'Exploración de diseño',
-	chooseDirection: 'Elige una propuesta de diseño',
-	back: 'Volver al inicio actual',
-	note: 'Comparación de diseños. Enfoque es ahora la página de inicio. Los enlaces abren las herramientas existentes.',
-	recommendation: 'Recomendado',
-	directions: {
-		focus: {
-			name: 'Enfoque',
-			summary: 'Un espacio oscuro y tranquilo. La barra lateral mantiene la navegación familiar, con las notas y la práctica al frente y los documentos en segundo plano.',
-			tradeoff: 'Esfuerzo bajo · Reutiliza la estructura actual. Ideal para el uso diario; la barra lateral ocupa parte del espacio en computadoras.'
-		},
-		'field-notes': {
-			name: 'Cuaderno',
-			summary: 'Un espacio de estudio cálido en tonos crema. Tipografía grande, una tarjeta de práctica destacada y una lista sencilla de recursos.',
-			tradeoff: 'Esfuerzo bajo–medio · Los mismos componentes con un tema claro. Más distintivo, pero habría que revisar los colores en las demás páginas.'
-		},
-		launchpad: {
-			name: 'Punto de partida',
-			summary: 'Un inicio compacto que invita a actuar. Sin barra lateral ni distracciones: elige una herramienta y empieza.',
-			tradeoff: 'El menor esfuerzo · Un encabezado y tarjetas adaptables. Ideal para celulares; menos espacio de navegación a medida que crezca el sitio.'
-		}
-	},
-	workspace: 'Espacio del estudiante',
-	student: 'Estudiante',
-	studentProfile: 'Vista previa del perfil del estudiante',
-	home: 'Inicio',
-	practice: 'Práctica',
-	resources: 'Recursos del estudiante',
-	allTools: 'Tus herramientas',
-	openTool: 'Abrir herramienta',
-	footer: 'Pasos pequeños. Bases sólidas.',
-	focus: {
-		eyebrow: 'Práctica del ASVAB',
-		title: 'Tus notas',
-		intro: 'Cuatro áreas clave. Una vista clara.',
-		sectionHint: 'Elige una destreza para practicar.',
-		sampleData: 'Notas de ejemplo',
-		sampleNote: 'Solo una vista previa: porcentajes de práctica ficticios, no notas de estudiantes ni puntuaciones oficiales del ASVAB.',
-		score: '{score} %',
-		scoreText: 'Nota de práctica de ejemplo: {score} por ciento',
-		subjects: {
-			wk: { code: 'WK', title: 'Conocimiento de palabras' },
-			pc: { code: 'PC', title: 'Comprensión de párrafos' },
-			mk: { code: 'MK', title: 'Conocimiento matemático' },
-			ar: { code: 'AR', title: 'Razonamiento aritmético' }
-		}
-	},
-	fieldNotes: {
-		eyebrow: 'Un poco de práctica hace la diferencia',
-		title: 'Prepárate para tu próximo capítulo.',
-		intro: 'Un espacio tranquilo para una gran meta. Tu práctica del ASVAB y tus recursos de estudiante, juntos en un solo lugar.',
-		featured: 'Un punto de partida',
-		sectionHint: 'Todo lo que necesitas, sin distracciones.'
-	},
-	launchpad: {
-		eyebrow: 'Menos búsquedas. Más acción.',
-		title: '¿Qué vas a practicar hoy?',
-		intro: 'Elige una herramienta. Da el próximo paso.'
-	},
-	tools: {
-		math: { title: 'Matemáticas rápidas', description: 'Desarrolla rapidez y precisión con práctica de aritmética cronometrada.', action: 'Practicar matemáticas', category: 'Aritmética' },
-		vocabulary: { title: 'Vocabulario en inglés', description: 'Practica palabras frecuentes en inglés con traducciones al español.', action: 'Practicar vocabulario', category: 'Inglés' },
-		ist: { title: 'Preparación física', description: 'Ingresa tus resultados del IST, verifica tu preparación y descarga un informe.', action: 'Abrir evaluación IST', category: 'Preparación física' },
-		attendance: { title: 'Certificado de asistencia', description: 'Prepara una carta para tu patrono con tu horario de clases.', action: 'Crear certificado', category: 'Documentos' }
-	}
-};
 
 const englishBootcamp = {
-	documents: bootcampDocumentMessages.en as (typeof bootcampDocumentMessages)[Language],
 	registration: { begin: 'Begin registration', draft: 'Registration started. Complete and save your waiver to continue.' },
 	pageTitle: 'Bootcamps | Masterminds ASVAB',
 	description: 'Review bootcamp details, complete your documents, and manage your registration.',
 	title: 'Bootcamps', eyebrow: 'Prepare together', introduction: 'Your event, documents, and payment progress in one place.',
 	empty: 'No bootcamps are available right now.', notLinked: 'Your account is not linked to a student record. Contact an administrator to continue.',
-	backToAdmin: 'Back to administration', backToStudents: 'Student workspace',
-	common: { save: 'Save', saving: 'Saving…', success: 'Saved successfully.', yes: 'Yes', no: 'No', cancel: 'Cancel', unavailable: 'Not available', required: 'All fields are required unless marked optional.', languages: { en: 'English', es: 'Spanish' } },
+	common: { saving: 'Saving…', success: 'Saved successfully.', yes: 'Yes', no: 'No', cancel: 'Cancel', required: 'All fields are required unless marked optional.', languages: { en: 'English', es: 'Spanish' } },
 	errors: {
 		invalid: 'Check all required fields and try again.',
 		unavailable: 'This service is temporarily unavailable. Activating or opening registration requires configured payments and document backup, and a registration deadline that has not passed.',
@@ -705,7 +470,6 @@ const englishBootcamp = {
 		resetHint: 'Changing your information or the event revision clears all draft signatures. Review and sign again.'
 	},
 	waiver: {
-		legalText: spanishBootcampLegal,
 		title: 'Read and sign', introduction: 'Read each complete section, confirm you have read it, then sign in its signature box. All three signatures are required.',
 		spanishOnly: 'The legal agreements and signed waiver PDF are in Spanish, regardless of your interface language.',
 		sections: { agreement: 'Participation agreement', liability: 'Liability waiver', media: 'Media authorization' },
@@ -757,14 +521,13 @@ const englishBootcamp = {
 		activatePageTitle: 'Activate bootcamp | Masterminds ASVAB', activateDescription: 'Set the title, venue, date, and schedule. Activation opens registration immediately with standard Spanish agreements, when services are ready and the deadline has not passed. Only one event can have registration open.',
 		editPageTitle: 'Edit: {title} | Masterminds ASVAB', editDescription: 'Update bootcamp details without closing open registration unless the old or new registration deadline has passed. Closed events stay closed; saved documents remain unchanged.',
 		reportPageTitle: 'Registration report: {title} | Masterminds ASVAB', reportDescription: 'Review registrations, website payment balances, and saved documents for this bootcamp.',
-		backToEvents: 'Back to bootcamps',
 				classType: 'Class', classTypes: { basic: 'Basic', regular: 'Regular' },
 				coverage: 'Registration coverage', coverageFor: '{classType} registration coverage', started: 'Started', confirmed: 'Confirmed',
 				collected: 'Website payments', outstanding: 'Confirmed balances',
 				search: 'Search students', searchPlaceholder: 'Name or email', classFilters: 'Filter by class', allClasses: 'All classes',
 				registrationFilters: 'Filter registrations', allStudents: 'All students', notStarted: 'Not started', noMatches: 'No students match these filters.',
 				actions: 'Actions', tools: 'Report tools',
-		title: 'Bootcamp operations', introduction: 'Activate an event to open registration immediately and follow each student’s progress.',
+		title: 'Bootcamp operations',
 		connections: 'Service readiness', paymentReady: 'Payments configured', paymentMissing: 'Payments not configured', driveReady: 'Document backup configured', driveMissing: 'Document backup not configured',
 		events: 'Events', create: 'Activate bootcamp', edit: 'Edit event', editing: 'Edit: {title}', titleField: 'Event title', venue: 'Venue',
 		timeZone: 'Enter all dates and times in Puerto Rico local time (America/Puerto_Rico).',
@@ -779,9 +542,9 @@ const englishBootcamp = {
 		activationHint: 'Activation creates the event and opens registration immediately with the standard agreements. Payments and document backup must be configured, the deadline must be in the future, and no other event can have registration open.',
 		cutoffPassed: 'The registration deadline has passed. Choose a schedule with a future deadline to activate or open registration.',
 		open: 'Open registration', close: 'Close registration', activationGuard: 'Activation opens registration immediately. Activating or opening an event requires configured payments and document backup, a future registration deadline, and no other open event.',
-		report: 'Registration report', selectEvent: 'Select an event for its report', reportEmpty: 'There are no student rows for this event.',
-		reports: 'Reports', viewReport: 'View report', viewReportFor: 'View report for {title}', noReports: 'Reports will appear here once a bootcamp has been saved.',
-		csvAll: 'Download full CSV', csv: 'Download CSV', retryBackups: 'Retry document backups', reconcile: 'Reconcile payments',
+		report: 'Registration report', reportEmpty: 'There are no student rows for this event.',
+		viewReport: 'View report', viewReportFor: 'View report for {title}',
+		csvAll: 'Download full CSV', retryBackups: 'Retry document backups', reconcile: 'Reconcile payments',
 		name: 'Student', email: 'Email', eligibility: 'Eligibility', status: 'Registration status', paymentStatus: 'Payment status', paid: 'Website paid', remaining: 'Website remaining', documents: 'Documents and backup status', noDocuments: 'No saved documents',
 		eligibilities: { eligible: 'Eligible', underage: 'Underage', unknown: 'Not verified', inactive: 'Inactive' },
 		statuses: { not_started: 'Not started', waiver: 'Waiver step', letter: 'Employer letter step', payment: 'Payment step', confirmed: 'Confirmed' },
@@ -790,14 +553,12 @@ const englishBootcamp = {
 };
 
 const spanishBootcamp: typeof englishBootcamp = {
-	documents: bootcampDocumentMessages.es,
 	registration: { begin: 'Comenzar inscripción', draft: 'Inscripción iniciada. Completa y guarda tu relevo para continuar.' },
 	pageTitle: 'Bootcamps | Masterminds ASVAB',
 	description: 'Consulta los detalles de los bootcamps, completa tus documentos y administra tu inscripción.',
 	title: 'Bootcamps', eyebrow: 'Prepárate en equipo', introduction: 'Tu evento, documentos y progreso de pago en un solo lugar.',
 	empty: 'No hay bootcamps disponibles en este momento.', notLinked: 'Tu cuenta no está vinculada a un expediente estudiantil. Comunícate con un administrador para continuar.',
-	backToAdmin: 'Volver a administración', backToStudents: 'Espacio del estudiante',
-	common: { save: 'Guardar', saving: 'Guardando…', success: 'Se guardó correctamente.', yes: 'Sí', no: 'No', cancel: 'Cancelar', unavailable: 'No disponible', required: 'Todos los campos son obligatorios salvo que se indiquen como opcionales.', languages: { en: 'Inglés', es: 'Español' } },
+	common: { saving: 'Guardando…', success: 'Se guardó correctamente.', yes: 'Sí', no: 'No', cancel: 'Cancelar', required: 'Todos los campos son obligatorios salvo que se indiquen como opcionales.', languages: { en: 'Inglés', es: 'Español' } },
 	errors: {
 		invalid: 'Revisa todos los campos obligatorios e inténtalo de nuevo.',
 		unavailable: 'Este servicio no está disponible temporalmente. Para activar o abrir la inscripción se requieren pagos y respaldo de documentos configurados, y una fecha límite de inscripción que no haya pasado.',
@@ -825,7 +586,6 @@ const spanishBootcamp: typeof englishBootcamp = {
 		resetHint: 'Cambiar tu información o la revisión del evento borra todas las firmas en borrador. Revisa y firma de nuevo.'
 	},
 	waiver: {
-		legalText: spanishBootcampLegal,
 		title: 'Lee y firma', introduction: 'Lee cada sección completa, confirma que la leíste y firma en su recuadro. Las tres firmas son obligatorias.',
 		spanishOnly: 'Los acuerdos legales y el PDF del relevo firmado están en español, sin importar el idioma de la interfaz.',
 		sections: { agreement: 'Acuerdo de participación', liability: 'Relevo de responsabilidad', media: 'Autorización de uso de imagen' },
@@ -877,14 +637,13 @@ const spanishBootcamp: typeof englishBootcamp = {
 		activatePageTitle: 'Activar bootcamp | Masterminds ASVAB', activateDescription: 'Configura el título, lugar, fecha y horario. La activación abre la inscripción de inmediato con los acuerdos estándar en español, si los servicios están configurados y la fecha límite no ha pasado. Solo un evento puede tener la inscripción abierta.',
 		editPageTitle: 'Editar: {title} | Masterminds ASVAB', editDescription: 'Actualiza los detalles sin cerrar la inscripción abierta, salvo que la fecha límite anterior o nueva haya pasado. Los eventos cerrados siguen cerrados y los documentos guardados permanecen sin cambios.',
 		reportPageTitle: 'Informe de inscripción: {title} | Masterminds ASVAB', reportDescription: 'Consulta las inscripciones, los saldos según los pagos en la web y los documentos guardados de este bootcamp.',
-		backToEvents: 'Volver a bootcamps',
 				classType: 'Clase', classTypes: { basic: 'Básico', regular: 'Regular' },
 				coverage: 'Cobertura de inscripciones', coverageFor: 'Cobertura de inscripciones de {classType}', started: 'Iniciadas', confirmed: 'Confirmadas',
 				collected: 'Pagos en la web', outstanding: 'Saldos de inscripciones confirmadas',
 				search: 'Buscar estudiantes', searchPlaceholder: 'Nombre o correo', classFilters: 'Filtrar por clase', allClasses: 'Todas las clases',
 				registrationFilters: 'Filtrar inscripciones', allStudents: 'Todos los estudiantes', notStarted: 'Sin iniciar', noMatches: 'Ningún estudiante coincide con estos filtros.',
 				actions: 'Acciones', tools: 'Herramientas del informe',
-		title: 'Administración de bootcamps', introduction: 'Activa un evento para abrir la inscripción de inmediato y sigue el progreso de cada estudiante.',
+		title: 'Administración de bootcamps',
 		connections: 'Disponibilidad de servicios', paymentReady: 'Pagos configurados', paymentMissing: 'Pagos sin configurar', driveReady: 'Respaldo de documentos configurado', driveMissing: 'Respaldo de documentos sin configurar',
 		events: 'Eventos', create: 'Activar bootcamp', edit: 'Editar evento', editing: 'Editar: {title}', titleField: 'Título del evento', venue: 'Lugar',
 		timeZone: 'Ingresa todas las fechas y horas en la hora local de Puerto Rico (America/Puerto_Rico).',
@@ -899,9 +658,9 @@ const spanishBootcamp: typeof englishBootcamp = {
 		activationHint: 'La activación crea el evento y abre la inscripción de inmediato con los acuerdos estándar. Los pagos y el respaldo de documentos deben estar configurados, la fecha límite debe estar en el futuro y ningún otro evento puede tener la inscripción abierta.',
 		cutoffPassed: 'La fecha límite de inscripción ya pasó. Elige un horario con una fecha límite futura para activar o abrir la inscripción.',
 		open: 'Abrir inscripción', close: 'Cerrar inscripción', activationGuard: 'La activación abre la inscripción de inmediato. Para activar o abrir un evento se requieren pagos y respaldo de documentos configurados, una fecha límite de inscripción futura y ningún otro evento abierto.',
-		report: 'Informe de inscripción', selectEvent: 'Selecciona un evento para ver su informe', reportEmpty: 'No hay filas de estudiantes para este evento.',
-		reports: 'Informes', viewReport: 'Ver informe', viewReportFor: 'Ver informe de {title}', noReports: 'Los informes aparecerán aquí una vez que se guarde un bootcamp.',
-		csvAll: 'Descargar CSV completo', csv: 'Descargar CSV', retryBackups: 'Reintentar respaldo de documentos', reconcile: 'Conciliar pagos',
+		report: 'Informe de inscripción', reportEmpty: 'No hay filas de estudiantes para este evento.',
+		viewReport: 'Ver informe', viewReportFor: 'Ver informe de {title}',
+		csvAll: 'Descargar CSV completo', retryBackups: 'Reintentar respaldo de documentos', reconcile: 'Conciliar pagos',
 		name: 'Estudiante', email: 'Correo', eligibility: 'Elegibilidad', status: 'Estado de inscripción', paymentStatus: 'Estado del pago', paid: 'Pagado en la web', remaining: 'Pendiente en la web', documents: 'Documentos y estado del respaldo', noDocuments: 'Sin documentos guardados',
 		eligibilities: { eligible: 'Elegible', underage: 'Menor de edad', unknown: 'Sin verificar', inactive: 'Inactivo' },
 		statuses: { not_started: 'Sin comenzar', waiver: 'Paso del relevo', letter: 'Paso de carta patronal', payment: 'Paso de pago', confirmed: 'Confirmado' },
@@ -909,47 +668,9 @@ const spanishBootcamp: typeof englishBootcamp = {
 	}
 };
 
-const englishBootcampMockups = {
-	pageTitle: 'Bootcamp design previews | Masterminds ASVAB', description: 'Three interactive previews: activation opens registration immediately, and edits preserve open registration unless the old or new deadline has passed.',
-	title: 'Bootcamp workspace', eyebrow: 'Design collection', demo: 'Demo', notice: 'Real roster · Fictional registrations and balances · Changes reset on refresh. No charges, documents, or signatures.',
-	back: 'Live bootcamps', designs: 'Choose a layout', editorial: 'Event desk', editorialHint: 'Spacious, event-first planning', board: 'Operations board', boardHint: 'A guided workflow with a persistent brief', ledger: 'Compact ledger', ledgerHint: 'Dense, table-first administration',
-	flow: 'Preview workflow', list: 'Events', activate: 'Activate', edit: 'Edit', report: 'Report',
-	listTitle: 'Your next bootcamp', activateTitle: 'Prepare the event', editTitle: 'Refine the details', reportTitle: 'Registration overview',
-	eventTitle: 'ASVAB intensive · November', venue: 'Centro de Convenciones, San Juan', event: 'Event', date: 'Date', location: 'Venue', start: 'Start time', end: 'End time', timezone: 'Puerto Rico time · AST',
-	classType: 'Class', classFilters: 'Filter by class', allClasses: 'All classes', basic: 'Basic', regular: 'Regular', classCoverage: '{classType} registration coverage',
-		registered: 'Registered', roster: 'Student roster', collected: 'Demo collected', balance: 'Demo balance', open: 'Registration open', closed: 'Registration closed',
-	create: 'Activate preview', save: 'Save changes', cancel: 'Cancel', viewReport: 'View report', editEvent: 'Edit event', openRegistration: 'Open preview registration', closeRegistration: 'Close preview registration',
-	brief: 'Event brief', fee: 'Event fee', deposit: 'Deposit', arrival: 'Check-in · 1 hour before start', deadline: 'Registration closes · 12 hours before start',
-		scheduleInvalid: 'Enter a valid date and an end time later than the start time on the same day.',
-	legal: 'Standard agreements · Spanish', legalNote: 'Read-only standard agreement preview. The live workflow includes these agreements automatically; this preview does not save legal documents.',
-	saved: 'Changes saved in the preview. Registration stays open unless the old or new deadline has passed; closed registration stays closed. No server changes.', activated: 'Preview activated. Registration is now open. No server changes.',
-	search: 'Search students', searchPlaceholder: 'Name or email', filters: 'Filter registrations', all: 'All students', unregistered: 'Not registered', student: 'Student', status: 'Registration', paid: 'Demo paid', remaining: 'Demo remaining', documents: 'Documents', noDocuments: 'Not generated', empty: 'No students match.', emptyRoster: 'No students in the roster.',
-	rosterNote: '{registered} of {total} students assigned a fictional registration.', count: '{count} students', progress: 'Registration coverage', reset: 'Reset preview', tools: 'Live report tools', toolsNote: 'CSV export, payment reconciliation, and document backups are available only in the live workflow.',
-	confirm: 'Confirmed · demo', payment: 'Deposit · demo', revision: 'Preview revision {revision}'
-};
-const spanishBootcampMockups: typeof englishBootcampMockups = {
-	pageTitle: 'Propuestas de diseño de bootcamp | Masterminds ASVAB', description: 'Tres vistas interactivas: la activación abre la inscripción de inmediato y los cambios la mantienen abierta, salvo que la fecha límite anterior o nueva haya pasado.',
-	title: 'Espacio de bootcamps', eyebrow: 'Colección de diseños', demo: 'Demo', notice: 'Lista real · Inscripciones y balances ficticios · Los cambios se reinician al recargar. Sin cobros, documentos ni firmas.',
-	back: 'Bootcamps reales', designs: 'Elige un diseño', editorial: 'Mesa de eventos', editorialHint: 'Planificación amplia centrada en el evento', board: 'Panel de operaciones', boardHint: 'Flujo guiado con resumen permanente', ledger: 'Registro compacto', ledgerHint: 'Administración concisa centrada en tablas',
-	flow: 'Flujo de muestra', list: 'Eventos', activate: 'Activar', edit: 'Editar', report: 'Informe',
-	listTitle: 'Tu próximo bootcamp', activateTitle: 'Prepara el evento', editTitle: 'Ajusta los detalles', reportTitle: 'Resumen de inscripciones',
-	eventTitle: 'Intensivo ASVAB · Noviembre', venue: 'Centro de Convenciones, San Juan', event: 'Evento', date: 'Fecha', location: 'Lugar', start: 'Hora de inicio', end: 'Hora de fin', timezone: 'Hora de Puerto Rico · AST',
-	classType: 'Clase', classFilters: 'Filtrar por clase', allClasses: 'Todas las clases', basic: 'Básico', regular: 'Regular', classCoverage: 'Cobertura de inscripciones de {classType}',
-		registered: 'Inscritos', roster: 'Lista de estudiantes', collected: 'Recaudación demo', balance: 'Balance demo', open: 'Inscripciones abiertas', closed: 'Inscripciones cerradas',
-	create: 'Activar muestra', save: 'Guardar cambios', cancel: 'Cancelar', viewReport: 'Ver informe', editEvent: 'Editar evento', openRegistration: 'Abrir inscripciones de muestra', closeRegistration: 'Cerrar inscripciones de muestra',
-	brief: 'Resumen del evento', fee: 'Costo del evento', deposit: 'Depósito', arrival: 'Llegada · 1 hora antes del inicio', deadline: 'Inscripciones cierran · 12 horas antes del inicio',
-		scheduleInvalid: 'Ingresa una fecha válida y una hora de fin posterior al inicio en el mismo día.',
-	legal: 'Acuerdos estándar · Español', legalNote: 'Vista previa de solo lectura de los acuerdos estándar. El flujo real los incluye automáticamente; esta muestra no guarda documentos legales.',
-	saved: 'Cambios guardados en la muestra. La inscripción sigue abierta, salvo que la fecha límite anterior o nueva haya pasado; la inscripción cerrada sigue cerrada. Sin cambios en el servidor.', activated: 'Muestra activada. La inscripción ya está abierta. Sin cambios en el servidor.',
-	search: 'Buscar estudiantes', searchPlaceholder: 'Nombre o correo', filters: 'Filtrar inscripciones', all: 'Todos los estudiantes', unregistered: 'Sin inscripción', student: 'Estudiante', status: 'Inscripción', paid: 'Pago demo', remaining: 'Balance demo', documents: 'Documentos', noDocuments: 'No generados', empty: 'Ningún estudiante coincide.', emptyRoster: 'No hay estudiantes en la lista.',
-	rosterNote: '{registered} de {total} estudiantes con inscripción ficticia.', count: '{count} estudiantes', progress: 'Cobertura de inscripciones', reset: 'Reiniciar muestra', tools: 'Herramientas del informe real', toolsNote: 'La exportación CSV, conciliación de pagos y respaldos de documentos solo están disponibles en el flujo real.',
-	confirm: 'Confirmado · demo', payment: 'Depósito · demo', revision: 'Revisión de muestra {revision}'
-};
 
 const english = {
-	bootcampMockups: englishBootcampMockups,
 	bootcamp: englishBootcamp,
-	designPreview: englishDesignPreview,
 		coursesPreview: englishCoursesPreview,
 	admin: englishAdmin,
 	enrollment: englishEnrollment,
@@ -957,6 +678,7 @@ const english = {
 	reportArchive: {
 		notice: 'When you generate a report, both the English and Spanish PDFs, including the personal details entered here, are saved in Masterminds’ Google Drive. Sign-in is required.',
 		saved: 'Both language versions were saved to Masterminds’ Google Drive.',
+		localOnly: 'PDFs are ready to download. Google Drive archiving is not configured.',
 		signIn: 'Sign in before generating a report and saving it to Google Drive. Your entries have been kept on this page.',
 		unavailable: 'We could not confirm that both PDFs were saved to Google Drive. The report is not complete. Your entries have been kept; please try again later or contact an administrator.'
 	},
@@ -1024,8 +746,6 @@ const english = {
 		eyebrow: 'Mental math practice',
 		title: 'Speed Math',
 		introduction: 'Race the clock, not your accuracy. Answer as many questions correctly as you can.',
-		cardDescription: 'Choose your operation and practice for 5, 10, or 15 minutes. How many can you get right?',
-		open: 'Practice Speed Math',
 		setupTitle: 'Set your challenge',
 		setupHint: 'One operation. One timer. A new question after every answer.',
 		duration: 'Choose your time',
@@ -1080,30 +800,39 @@ const english = {
 		brand: 'Masterminds',
 		brandDescription: 'Programa ASVAB',
 		brandLabel: 'Masterminds Programa ASVAB',
-		studentName: 'Student name',
-		studentDescription: 'Student information',
-		studentLabel: 'Student information placeholder'
+		student: 'Student',
+		tagline: 'Small steps. Strong foundations.'
 	},
 	navigation: {
 		label: 'Dashboard navigation',
-		dashboard: 'Dashboard',
-		features: 'Features',
-		featuresDescription: 'Your student tools.',
-		ist: 'IST · Physical readiness',
-				attendance: 'Attendance certificate',
-		speedMath: 'Speed Math',
-				frequency: 'English frequency deck'
+		home: 'Home', practice: 'Practice', resources: 'Student resources', workspace: 'Student workspace',
+		tools: {
+			math: { title: 'Speed Math', description: 'Build speed and accuracy with timed arithmetic practice.', action: 'Practice math', category: 'Arithmetic' },
+			vocabulary: { title: 'English vocabulary', description: 'Practice frequent English words with Spanish translations.', action: 'Practice vocabulary', category: 'English' },
+			ist: { title: 'Physical readiness', description: 'Enter your IST results, check readiness, and download a report.', action: 'Open IST assessment', category: 'Readiness' },
+			attendance: { title: 'Attendance certificate', description: 'Create a letter for your employer with your class schedule.', action: 'Create certificate', category: 'Documents' }
+		}
 	},
 	home: {
-		title: 'Student dashboard',
 		pageTitle: 'Student dashboard | Masterminds ASVAB',
 		description: 'Your Masterminds Programa ASVAB student dashboard.',
-		eyebrow: 'Your workspace',
-		introduction: 'One place for your student tools.',
-		emptyTitle: 'Initial Strength Test',
-				emptyDescription: 'Record your measurements and exercise results, check your readiness, and download your report.',
-				openIst: 'Start your IST assessment'
-			},
+		grades: {
+			eyebrow: 'ASVAB practice',
+			title: 'Your grades',
+			intro: 'Four core areas. One clear view.',
+			sectionHint: 'Choose a skill to work on.',
+			sampleData: 'Sample grades',
+			sampleNote: 'Preview only: sample practice percentages, not student records or official ASVAB scores.',
+			score: '{score}%',
+			scoreText: 'Sample practice grade: {score} percent',
+			subjects: {
+				wk: { code: 'WK', title: 'Word Knowledge' },
+				pc: { code: 'PC', title: 'Paragraph Comprehension' },
+				mk: { code: 'MK', title: 'Math Knowledge' },
+				ar: { code: 'AR', title: 'Arithmetic Reasoning' }
+			}
+		}
+	},
 frequency: {
 	pageTitle: 'English frequency deck | Masterminds ASVAB',
 	description: 'Practice 1,001 frequent English words with Spanish translations in adaptive 25-attempt rounds that give missed words more practice.',
@@ -1241,7 +970,6 @@ frequency: {
 					category: 'Category', result: 'Result', thresholds: 'Applicable thresholds', grade: 'Grade', outcome: 'Outcome',
 					minimum: 'Minimum', midpoint: 'Midpoint', referenceMaximum: 'Reference maximum',
 					greenLimit: 'Excellent: at or below', passingLimit: 'Passing limit: at or below', ceiling: 'Body-fat ceiling',
-					page: 'Page',
 					disclaimer: 'Results are self-reported and assessed against the program’s Army-based baseline. This assessment is not official military clearance or a medical evaluation.'
 				}
 			}
@@ -1250,9 +978,7 @@ frequency: {
 export type Messages = typeof english;
 
 const spanish: Messages = {
-	bootcampMockups: spanishBootcampMockups,
 	bootcamp: spanishBootcamp,
-	designPreview: spanishDesignPreview,
 		coursesPreview: spanishCoursesPreview,
 	admin: spanishAdmin,
 	enrollment: spanishEnrollment,
@@ -1260,6 +986,7 @@ const spanish: Messages = {
 	reportArchive: {
 		notice: 'Al generar un informe, los PDF en inglés y español, incluidos los datos personales ingresados aquí, se guardan en el Google Drive de Masterminds. Debes iniciar sesión.',
 		saved: 'Ambas versiones se guardaron en el Google Drive de Masterminds.',
+		localOnly: 'Los PDF están listos para descargar. El guardado en Google Drive no está configurado.',
 		signIn: 'Inicia sesión antes de generar un informe y guardarlo en Google Drive. Tus datos se han conservado en esta página.',
 		unavailable: 'No pudimos confirmar que ambos PDF se guardaran en Google Drive. El informe no está completo. Tus datos se han conservado; inténtalo más tarde o comunícate con un administrador.'
 	},
@@ -1327,8 +1054,6 @@ const spanish: Messages = {
 		eyebrow: 'Práctica de cálculo mental',
 		title: 'Matemáticas rápidas',
 		introduction: 'Compite contra el reloj sin sacrificar la precisión. Responde correctamente tantas preguntas como puedas.',
-		cardDescription: 'Elige tu operación y practica durante 5, 10 o 15 minutos. ¿Cuántas puedes acertar?',
-		open: 'Practicar matemáticas rápidas',
 		setupTitle: 'Prepara tu reto',
 		setupHint: 'Una operación. Un cronómetro. Una pregunta nueva después de cada respuesta.',
 		duration: 'Elige tu tiempo',
@@ -1383,30 +1108,39 @@ const spanish: Messages = {
 		brand: 'Masterminds',
 		brandDescription: 'Programa ASVAB',
 		brandLabel: 'Masterminds Programa ASVAB',
-		studentName: 'Nombre del estudiante',
-		studentDescription: 'Información del estudiante',
-		studentLabel: 'Espacio para la información del estudiante'
+		student: 'Estudiante',
+		tagline: 'Pasos pequeños. Bases sólidas.'
 	},
 	navigation: {
 		label: 'Navegación del panel',
-		dashboard: 'Panel',
-		features: 'Funciones',
-		featuresDescription: 'Tus herramientas de estudiante.',
-		ist: 'IST · Preparación física',
-				attendance: 'Certificado de asistencia',
-		speedMath: 'Matemáticas rápidas',
-				frequency: 'Tarjetas de inglés frecuente'
+		home: 'Inicio', practice: 'Práctica', resources: 'Recursos del estudiante', workspace: 'Espacio del estudiante',
+		tools: {
+			math: { title: 'Matemáticas rápidas', description: 'Desarrolla rapidez y precisión con práctica de aritmética cronometrada.', action: 'Practicar matemáticas', category: 'Aritmética' },
+			vocabulary: { title: 'Vocabulario en inglés', description: 'Practica palabras frecuentes en inglés con traducciones al español.', action: 'Practicar vocabulario', category: 'Inglés' },
+			ist: { title: 'Preparación física', description: 'Ingresa tus resultados del IST, verifica tu preparación y descarga un informe.', action: 'Abrir evaluación IST', category: 'Preparación física' },
+			attendance: { title: 'Certificado de asistencia', description: 'Prepara una carta para tu patrono con tu horario de clases.', action: 'Crear certificado', category: 'Documentos' }
+		}
 	},
 	home: {
-		title: 'Panel del estudiante',
 		pageTitle: 'Panel del estudiante | Masterminds ASVAB',
 		description: 'Tu panel de estudiante de Masterminds Programa ASVAB.',
-		eyebrow: 'Tu espacio de trabajo',
-		introduction: 'Todas tus herramientas de estudiante en un solo lugar.',
-		emptyTitle: 'Prueba de fuerza inicial',
-				emptyDescription: 'Registra tus medidas y resultados de ejercicio, verifica tu preparación y descarga tu informe.',
-				openIst: 'Comenzar tu evaluación IST'
-			},
+		grades: {
+			eyebrow: 'Práctica del ASVAB',
+			title: 'Tus notas',
+			intro: 'Cuatro áreas clave. Una vista clara.',
+			sectionHint: 'Elige una destreza para practicar.',
+			sampleData: 'Notas de ejemplo',
+			sampleNote: 'Solo una vista previa: porcentajes de práctica ficticios, no notas de estudiantes ni puntuaciones oficiales del ASVAB.',
+			score: '{score} %',
+			scoreText: 'Nota de práctica de ejemplo: {score} por ciento',
+			subjects: {
+				wk: { code: 'WK', title: 'Conocimiento de palabras' },
+				pc: { code: 'PC', title: 'Comprensión de párrafos' },
+				mk: { code: 'MK', title: 'Conocimiento matemático' },
+				ar: { code: 'AR', title: 'Razonamiento aritmético' }
+			}
+		}
+	},
 frequency: {
 	pageTitle: 'Tarjetas de inglés frecuente | Masterminds ASVAB',
 	description: 'Practica 1,001 palabras frecuentes en inglés con traducciones al español en rondas adaptativas de 25 intentos que refuerzan las palabras que te cuestan.',
@@ -1544,7 +1278,6 @@ frequency: {
 					category: 'Categoría', result: 'Resultado', thresholds: 'Umbrales aplicables', grade: 'Calificación', outcome: 'Resultado final',
 					minimum: 'Mínimo', midpoint: 'Punto medio', referenceMaximum: 'Máximo de referencia',
 					greenLimit: 'Excelente: igual o menor que', passingLimit: 'Límite para aprobar: igual o menor que', ceiling: 'Límite de grasa corporal',
-					page: 'Página',
 					disclaimer: 'Los resultados son autodeclarados y se evalúan según los criterios del programa basados en el Ejército. Esta evaluación no es una autorización militar oficial ni una evaluación médica.'
 				}
 			}

@@ -3,7 +3,7 @@
 	import { page } from '$app/state';
 	import type { Snippet } from 'svelte';
 	import AdminIcon from '#lib/admin/AdminIcon.svelte';
-	import { adminSections, resolveAdminSection } from '#lib/admin/navigation.ts';
+	import { adminSectionHref, adminSections, isAdminPreviewSection, resolveAdminSection } from '#lib/admin/navigation.ts';
 	import LanguageSelector from '#lib/components/LanguageSelector.svelte';
 	import SignOutButton from '#lib/components/SignOutButton.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
@@ -25,7 +25,7 @@
 	);
 </script>
 
-<div class="admin-console" lang={language.current}>
+<div class="admin-console">
 	<aside class="command-rail">
 		<a class="console-brand" href={resolve('/')} aria-label={language.messages.auth.studentWorkspace}>
 			<img src={asset('logo.png')} alt="" width="42" height="42" />
@@ -37,7 +37,7 @@
 				<Button
 					variant="ghost"
 					class="nav-control"
-					href={item === 'overview' ? resolve('/admin') : resolve('/admin') + '?section=' + item}
+					href={adminSectionHref(item, resolve('/admin'))}
 					aria-current={isAdminRoot && section === item ? 'page' : undefined}
 				>
 					<AdminIcon name={item} size={18} /><span>{messages.sections[item]}</span>
@@ -91,7 +91,7 @@
 				<span><span class="footer-cross" aria-hidden="true">+</span>{messages.footer}</span>
 				<Button variant="ghost" class="mobile-workspace-link" href={resolve('/')}><AdminIcon name="logout" size={14} />{messages.backToStudents}</Button>
 				{#if isAdminRoot}
-					<span>{section === 'overview' || section === 'students' ? messages.roster.connected : messages.common.localOnly}<span class="footer-cross" aria-hidden="true">+</span></span>
+					<span>{isAdminPreviewSection(section) ? messages.common.localOnly : messages.roster.connected}<span class="footer-cross" aria-hidden="true">+</span></span>
 				{/if}
 			</footer>
 		</main>
@@ -101,11 +101,7 @@
 <style>
 	.admin-console { display: grid; grid-template-columns: 14.5rem minmax(0, 1fr); }
 	.command-rail { position: sticky; top: 0; display: flex; flex-direction: column; align-self: start; min-width: 0; height: 100dvh; min-height: 42rem; padding: 1.7rem 1rem 1rem; border-right: 1px solid var(--border); background: #141b20; }
-	.console-brand { display: flex; align-items: center; gap: 0.6rem; margin: 0 0.35rem 2.6rem; color: var(--foreground); text-decoration: none; }
-	.console-brand img { flex-shrink: 0; width: 2.65rem; height: 2.65rem; object-fit: contain; }
-	.console-brand span { display: grid; gap: 0.4rem; }
-	.console-brand strong { font-family: var(--font-display); font-size: 0.7rem; letter-spacing: -0.04em; }
-	.console-brand small { color: var(--primary); font-family: var(--font-mono); font-size: 0.56rem; letter-spacing: 0.1em; text-transform: uppercase; }
+	.console-brand { margin: 0 0.35rem 2.6rem; }
 	.rail-divider { display: flex; justify-content: space-between; margin: 0 0.6rem 1rem; color: var(--muted-foreground); font-size: 0.54rem; letter-spacing: 0.1em; text-transform: uppercase; }
 	nav { display: grid; gap: 0.4rem; min-width: 0; }
 	nav :global(.nav-control) { position: relative; display: flex; justify-content: flex-start; gap: 0.8rem; width: 100%; min-height: 2.95rem; padding: 0.7rem 0.85rem; text-align: left; font-size: 0.78rem; }
@@ -141,16 +137,13 @@
 	@media (min-width: 110rem) { .admin-console { grid-template-columns: 16rem minmax(0, 1fr); } }
 	@media (max-width: 70rem) {
 		.admin-console { grid-template-columns: 12.5rem minmax(0, 1fr); }
-		.console-brand { gap: 0.4rem; } .console-brand strong { font-size: 0.6rem; }
-		.console-brand img { width: 2.2rem; height: 2.2rem; }
 		nav :global(.nav-control) { gap: 0.6rem; padding-inline: 0.65rem; font-size: 0.73rem; }
 		.header-controls { gap: 0.75rem; }
 	}
 	@media (max-width: 52rem) {
 		.admin-console { grid-template-columns: minmax(0, 1fr); }
 		.command-rail { position: static; height: auto; min-height: 0; padding: 1rem 1.25rem 0.8rem; border-right: 0; border-bottom: 1px solid var(--border); }
-		.console-brand { margin: 0 0 1rem; } .console-brand strong { font-size: 0.8rem; }
-		.console-brand img { width: 2.5rem; height: 2.5rem; }
+		.console-brand { margin: 0 0 1rem; }
 		.rail-divider, .rail-bottom { display: none; }
 		.console-footer :global(.mobile-workspace-link) { display: inline-flex; }
 		nav { display: flex; gap: 0.4rem; overflow-x: auto; padding-bottom: 0.3rem; }

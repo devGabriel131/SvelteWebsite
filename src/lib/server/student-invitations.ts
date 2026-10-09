@@ -1,14 +1,15 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { formatMessage, translations, type Language } from '../i18n/translations';
-import { INVITATIONS_PAGE_SIZE, MAX_IMPORT_ROWS, type EnrollmentData, type EnrollmentProfile, type StudentInvitation } from '../student-invitations';
-import { isValidPin } from './auth/pin';
+import { INVITATIONS_PAGE_SIZE, MAX_IMPORT_ROWS, type EnrollmentData, type EnrollmentProfile, type StudentImportOptions, type StudentInvitation } from '../student-invitations';
+import { isValidPin } from '../auth-credentials';
+import { isStudentId, isValidDateOfBirth, studentClassTypes, studentGenders, type StudentGender } from '../student';
+import { isAuthOrigin } from './auth/config';
 import { account, user } from './db/auth-schema';
 import type { Database } from './db/connection';
-import { studentInvitations, students } from './db/schema';
+import { studentAccounts, studentInvitations, students } from './db/schema';
 import { parseMailbox, type Email } from './gmail/message';
 import type { ImportedStudent } from './student-import-file';
-import type { StudentImportOptions } from './student-import-review';
 
 export const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const RESEND_COOLDOWN_MS = 60 * 1000;
@@ -23,7 +24,7 @@ export type InvitationDelivery = {
 	testMode: boolean;
 	send(email: Email, signal?: AbortSignal): Promise<string>;
 };
-export type PreparedInvitation = { studentId: string; token: string; tokenHash: string };
+export type PreparedInvitation = { studentId: string; token: string };
 type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 
 export function isInvitationToken(token: unknown): token is string {
@@ -38,11 +39,8 @@ function newInvitationToken() {
 }
 
 export function studentInvitationEmail(language: Language, name: string, email: string, token: string, baseURL: string): Email {
+	if (!isAuthOrigin(baseURL)) throw new StudentInvitationError('unavailable');
 	const origin = new URL(baseURL);
-	if (origin.origin !== baseURL || (origin.protocol !== 'https:' &&
-		!(origin.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname)))) {
-		throw new StudentInvitationError('unavailable');
-	}
 	if (!isInvitationToken(token)) throw new StudentInvitationError('invalid');
 	const url = new URL('/enroll', origin);
 	url.searchParams.set('token', token);
@@ -67,7 +65,7 @@ export async function findStudentImportConflicts(db: Database | Transaction, row
 }
 
 function validateImportedRows(rows: ImportedStudent[], options: StudentImportOptions) {
-	if (!rows.length || rows.length > MAX_IMPORT_ROWS || !['basic', 'regular'].includes(options.classType) ||
+	if (!rows.length || rows.length > MAX_IMPORT_ROWS || !studentClassTypes.includes(options.classType) ||
 		!['en', 'es'].includes(options.emailLanguage)) throw new StudentInvitationError('invalid');
 	const emails = new Set<string>();
 	for (const row of rows) {
@@ -86,7 +84,7 @@ export async function provisionImportedStudents(
 ): Promise<PreparedInvitation[]> {
 	validateImportedRows(rows, options);
 	// Hash before taking database locks, sequentially to bound scrypt memory for large batches.
-	const prepared: (PreparedInvitation & { row: ImportedStudent; userId: string; password: string })[] = [];
+	const prepared: (PreparedInvitation & { row: ImportedStudent; userId: string; password: string; tokenHash: string })[] = [];
 	for (const row of rows) {
 		prepared.push({ row, studentId: randomUUID(), userId: randomUUID(), password: await hashPin(row.pin), ...newInvitationToken() });
 	}
@@ -96,9 +94,10 @@ export async function provisionImportedStudents(
 		const now = new Date();
 		await tx.insert(user).values(prepared.map(({ row, userId }) => ({ id: userId, name: `${row.firstName} ${row.lastName}`, email: row.email, role: 'student' as const, emailVerified: false })));
 		await tx.insert(account).values(prepared.map(({ userId, password }) => ({ id: randomUUID(), userId, accountId: userId, providerId: 'credential', password, updatedAt: now })));
-		await tx.insert(students).values(prepared.map(({ row, studentId, userId }) => ({ id: studentId, authUserId: userId, firstName: row.firstName, lastName: row.lastName, email: row.email, classType: options.classType, status: 'invited' as const })));
+		await tx.insert(students).values(prepared.map(({ row, studentId }) => ({ id: studentId, firstName: row.firstName, lastName: row.lastName, email: row.email, classType: options.classType, status: 'invited' as const })));
+		await tx.insert(studentAccounts).values(prepared.map(({ userId, studentId }) => ({ userId, studentId, linkedBy: adminId, createdAt: now })));
 		await tx.insert(studentInvitations).values(prepared.map(({ row, studentId, tokenHash }) => ({ studentId, tokenHash, recipientEmail: row.email, language: options.emailLanguage, expiresAt: new Date(now.getTime() + INVITATION_TTL_MS), createdBy: adminId, testMode })));
-		return prepared.map(({ studentId, token, tokenHash }) => ({ studentId, token, tokenHash }));
+		return prepared.map(({ studentId, token }) => ({ studentId, token }));
 	});
 }
 
@@ -106,8 +105,10 @@ async function lockInvitedStudent(tx: Transaction, studentId: string) {
 	// All invitation mutations lock profile, then invitation, then identity in this order.
 	const [student] = await tx.select().from(students).where(eq(students.id, studentId)).for('update');
 	const [invitation] = await tx.select().from(studentInvitations).where(eq(studentInvitations.studentId, studentId)).for('update');
-	if (!student || !invitation || !student.authUserId) throw new StudentInvitationError('invitation');
-	const [identity] = await tx.select().from(user).where(eq(user.id, student.authUserId)).for('update');
+	if (!student || !invitation) throw new StudentInvitationError('invitation');
+	const [association] = await tx.select({ userId: studentAccounts.userId }).from(studentAccounts).where(eq(studentAccounts.studentId, studentId));
+	if (!association) throw new StudentInvitationError('invitation');
+	const [identity] = await tx.select().from(user).where(eq(user.id, association.userId)).for('update');
 	if (student.status !== 'invited' || invitation.acceptedAt || identity?.role !== 'student' ||
 		student.email.trim().toLowerCase() !== invitation.recipientEmail || identity.email.trim().toLowerCase() !== invitation.recipientEmail) {
 		throw new StudentInvitationError('invitation');
@@ -116,14 +117,15 @@ async function lockInvitedStudent(tx: Transaction, studentId: string) {
 }
 
 export async function sendPreparedStudentInvitation(db: Database, prepared: PreparedInvitation, delivery: InvitationDelivery, signal?: AbortSignal): Promise<boolean> {
-	const pending = and(eq(studentInvitations.studentId, prepared.studentId), eq(studentInvitations.tokenHash, prepared.tokenHash));
+	if (!isInvitationToken(prepared.token)) return false;
+	const tokenHash = hashInvitationToken(prepared.token);
+	const pending = and(eq(studentInvitations.studentId, prepared.studentId), eq(studentInvitations.tokenHash, tokenHash));
 	let email: Email;
 	let claimed = false;
 	try {
-		if (!isInvitationToken(prepared.token) || hashInvitationToken(prepared.token) !== prepared.tokenHash) return false;
 		email = await db.transaction(async (tx) => {
 			const { student, invitation } = await lockInvitedStudent(tx, prepared.studentId);
-			if (invitation.tokenHash !== prepared.tokenHash || invitation.deliveryState !== 'pending' || invitation.expiresAt <= new Date()) throw new StudentInvitationError('invitation');
+			if (invitation.tokenHash !== tokenHash || invitation.deliveryState !== 'pending' || invitation.expiresAt <= new Date()) throw new StudentInvitationError('invitation');
 			const message = studentInvitationEmail(invitation.language, `${student.firstName} ${student.lastName}`, invitation.recipientEmail, prepared.token, delivery.baseURL);
 			await tx.update(studentInvitations).set({ deliveryState: 'sending', lastAttemptAt: new Date(), testMode: delivery.testMode }).where(pending);
 			return message;
@@ -155,16 +157,16 @@ export async function sendImportedStudentInvitations(db: Database, invitations: 
 }
 
 export async function resendStudentInvitation(db: Database, adminId: string, studentId: string, delivery: InvitationDelivery) {
-	if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(studentId)) throw new StudentInvitationError('invalid');
+	if (!isStudentId(studentId)) throw new StudentInvitationError('invalid');
 	const prepared = await db.transaction(async (tx) => {
 		await requireStoredAdmin(tx, adminId);
 		const { invitation } = await lockInvitedStudent(tx, studentId);
 		const now = new Date();
 		if (invitation.lastAttemptAt && now.getTime() - invitation.lastAttemptAt.getTime() < RESEND_COOLDOWN_MS) throw new StudentInvitationError('invalid');
-		const next = { studentId, ...newInvitationToken() };
-		await tx.update(studentInvitations).set({ tokenHash: next.tokenHash, expiresAt: new Date(now.getTime() + INVITATION_TTL_MS), deliveryState: 'pending', sentAt: null, lastAttemptAt: now, testMode: delivery.testMode })
+		const { token, tokenHash } = newInvitationToken();
+		await tx.update(studentInvitations).set({ tokenHash, expiresAt: new Date(now.getTime() + INVITATION_TTL_MS), deliveryState: 'pending', sentAt: null, lastAttemptAt: now, testMode: delivery.testMode })
 			.where(eq(studentInvitations.studentId, studentId));
-		return next;
+		return { studentId, token };
 	});
 	return sendPreparedStudentInvitation(db, prepared, delivery, AbortSignal.timeout(30_000));
 }
@@ -187,20 +189,24 @@ export async function readAdminStudentInvitations(db: Database, page = 1): Promi
 export function isValidStudentName(value: string) {
 	return value.length > 0 && value.length <= 100 && value === value.trim() && !controls.test(value);
 }
+function validEnrollmentProfile(input: { firstName: string; lastName: string; dateOfBirth: string; gender: string }, today = new Date().toISOString().slice(0, 10)): EnrollmentProfile {
+	const firstName = input.firstName.trim(), lastName = input.lastName.trim();
+	const dateOfBirth = input.dateOfBirth.trim(), gender = input.gender.trim();
+	if (!isValidStudentName(firstName) || !isValidStudentName(lastName) || !studentGenders.includes(gender as StudentGender) ||
+		!isValidDateOfBirth(dateOfBirth, today)) throw new StudentInvitationError('invalid');
+	return { firstName, lastName, dateOfBirth, gender: gender as StudentGender };
+}
 export function parseEnrollmentProfile(form: FormData, today = new Date().toISOString().slice(0, 10)): EnrollmentProfile {
-	const text = (key: string) => { const value = form.get(key); return typeof value === 'string' ? value.trim() : ''; };
-	const firstName = text('firstName'), lastName = text('lastName'), dateOfBirth = text('dateOfBirth'), gender = text('gender');
-	if (!isValidStudentName(firstName) || !isValidStudentName(lastName) || !['male', 'female'].includes(gender) ||
-		!/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth) || dateOfBirth < '0001-01-01' || dateOfBirth > today || !Number.isFinite(Date.parse(dateOfBirth)) ||
-		new Date(dateOfBirth).toISOString().slice(0, 10) !== dateOfBirth) throw new StudentInvitationError('invalid');
-	return { firstName, lastName, dateOfBirth, gender: gender as EnrollmentProfile['gender'] };
+	const text = (key: string) => { const value = form.get(key); return typeof value === 'string' ? value : ''; };
+	return validEnrollmentProfile({ firstName: text('firstName'), lastName: text('lastName'), dateOfBirth: text('dateOfBirth'), gender: text('gender') }, today);
 }
 
-export async function readStudentEnrollment(db: Database, userId: string, token: string, now = new Date()): Promise<Pick<EnrollmentData, 'state' | 'student'>> {
+export async function readStudentEnrollment(db: Database, userId: string, token: string, now = new Date()): Promise<EnrollmentData> {
 	if (!isInvitationToken(token)) return { state: 'invalid', student: null };
 	const [row] = await db.select({ student: students, invitation: studentInvitations, identity: { email: user.email, role: user.role } })
 		.from(studentInvitations).innerJoin(students, eq(students.id, studentInvitations.studentId))
-		.innerJoin(user, eq(user.id, students.authUserId))
+		.innerJoin(studentAccounts, eq(studentAccounts.studentId, students.id))
+		.innerJoin(user, eq(user.id, studentAccounts.userId))
 		.where(and(eq(studentInvitations.tokenHash, hashInvitationToken(token)), eq(user.id, userId)));
 	if (!row || row.identity.role !== 'student' || row.student.email.trim().toLowerCase() !== row.invitation.recipientEmail ||
 		row.identity.email.trim().toLowerCase() !== row.invitation.recipientEmail) return { state: 'invalid', student: null };
@@ -212,9 +218,7 @@ export async function readStudentEnrollment(db: Database, userId: string, token:
 
 export async function completeStudentEnrollment(db: Database, userId: string, token: string, profile: EnrollmentProfile) {
 	if (!isInvitationToken(token)) throw new StudentInvitationError('invitation');
-	const form = new FormData();
-	for (const [field, value] of Object.entries(profile)) form.set(field, value);
-	const values = parseEnrollmentProfile(form);
+	const values = validEnrollmentProfile(profile);
 	return db.transaction(async (tx) => {
 		const tokenHash = hashInvitationToken(token);
 		const [found] = await tx.select({ studentId: studentInvitations.studentId }).from(studentInvitations).where(eq(studentInvitations.tokenHash, tokenHash));

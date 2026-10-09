@@ -1,23 +1,41 @@
 import {
-	BETTER_AUTH_SECRET, ATH_PUBLIC_TOKEN, ATH_PRIVATE_TOKEN, BOOTCAMP_PAYMENTS_ENABLED, BOOTCAMP_PAYMENT_KEY, BOOTCAMP_WORKER_SECRET,
-	GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, DRIVE_OAUTH_REFRESH_TOKEN, DRIVE_REPORTS_FOLDER_ID
+	BETTER_AUTH_SECRET, ATH_PUBLIC_TOKEN, ATH_PRIVATE_TOKEN, BOOTCAMP_PAYMENTS_ENABLED, BOOTCAMP_PAYMENT_KEY, BOOTCAMP_WORKER_SECRET
 } from '$app/env/private';
 import { getDatabase } from '../db';
-import { readDriveConfig } from '../drive/config';
-import { createDriveClient } from '../drive/client';
-import { createBootcampBackup } from './backup';
+import type { Database } from '../db/connection';
+import { getDrive, type DriveBinding } from '../drive';
+import { createBootcampBackup, type BootcampBackup } from './backup';
 import { createAthClient } from './ath';
-import { createPaymentService } from './payments';
-import { createRegistrationService } from './registration';
+import { createPaymentService, type PaymentService } from './payments';
+import { createRegistrationService, type RegistrationService } from './registration';
 
-export function bootcampServices() {
+export type BootcampServices = {
+	db: Database;
+	backup: BootcampBackup;
+	payment: PaymentService | null;
+	paymentEnabled: boolean;
+	driveEnabled: boolean;
+	registration: RegistrationService;
+};
+let services: BootcampServices | undefined;
+
+function createServices(): BootcampServices {
 	const db = getDatabase();
-	let driveConfig;
-	try { driveConfig = readDriveConfig({ GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, DRIVE_OAUTH_REFRESH_TOKEN, DRIVE_REPORTS_FOLDER_ID }); }
-	catch { driveConfig = null; }
-	const backup = createBootcampBackup(db, driveConfig ? createDriveClient(driveConfig) : null, driveConfig?.reportsFolderId);
-	const paymentEnabled = BOOTCAMP_PAYMENTS_ENABLED === 'true' && !!ATH_PUBLIC_TOKEN?.trim() && !!ATH_PRIVATE_TOKEN?.trim()
-		&& /^[a-f0-9]{64}$/i.test(BOOTCAMP_PAYMENT_KEY ?? '') && (BOOTCAMP_WORKER_SECRET?.length ?? 0) >= 32;
-	const payment = paymentEnabled ? createPaymentService(db, createAthClient({ publicToken: ATH_PUBLIC_TOKEN!, privateToken: ATH_PRIVATE_TOKEN! }), BOOTCAMP_PAYMENT_KEY!) : null;
-	return { db, backup, payment, paymentEnabled, driveEnabled: !!driveConfig, registration: createRegistrationService(db, backup.backupDocument, BETTER_AUTH_SECRET) };
+	let drive: DriveBinding | null;
+	try { drive = getDrive(); }
+	catch { drive = null; }
+	const backup = createBootcampBackup(db, drive);
+	let payment: PaymentService | null = null;
+	if (BOOTCAMP_PAYMENTS_ENABLED === 'true' && (BOOTCAMP_WORKER_SECRET?.length ?? 0) >= 32) {
+		try {
+			payment = createPaymentService(db, createAthClient({
+				publicToken: ATH_PUBLIC_TOKEN ?? '', privateToken: ATH_PRIVATE_TOKEN ?? ''
+			}), BOOTCAMP_PAYMENT_KEY ?? '');
+		} catch { payment = null; }
+	}
+	return { db, backup, payment, paymentEnabled: payment !== null, driveEnabled: drive !== null, registration: createRegistrationService(db, backup.backupDocument, BETTER_AUTH_SECRET) };
+}
+
+export function bootcampServices(): BootcampServices {
+	return services ??= createServices();
 }

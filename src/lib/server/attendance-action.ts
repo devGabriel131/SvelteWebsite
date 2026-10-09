@@ -1,25 +1,21 @@
 import { fail, type Actions } from '@sveltejs/kit';
 import { presentAttendanceCertificate } from '#lib/attendance/presentation.ts';
-import { attendanceFields, type AttendanceCertificate, type AttendanceFormValues } from '#lib/attendance/types.ts';
-import { readAttendanceFormData, validateAttendanceInput } from '#lib/attendance/validation.ts';
+import { attendanceFields, type AttendanceCertificate } from '#lib/attendance/types.ts';
+import { validateAttendanceInput } from '#lib/attendance/validation.ts';
+import { formValues, readFormFields } from '#lib/form-fields.ts';
 import { generateAttendancePdf } from './attendance-pdf';
 import type { GetReportArchive } from './drive/archive';
-import { generateReportDownloads } from './report-downloads';
+import { generateReportDownloads, type ReportActionEvent } from './report-downloads';
 
 export function createAttendanceActions(getArchive: GetReportArchive) {
 	return {
-		default: async ({ request, setHeaders, locals }) => {
+		default: async ({ request, setHeaders, locals }: ReportActionEvent) => {
 			setHeaders({ 'cache-control': 'no-store' });
-			const raw = readAttendanceFormData(await request.formData());
-			const values = Object.fromEntries(attendanceFields.map((field) => [
-				field, typeof raw[field] === 'string' ? raw[field] : ''
-			])) as AttendanceFormValues;
+			const raw = readFormFields(await request.formData(), attendanceFields);
+			const values = formValues(raw, attendanceFields);
 			const validation = validateAttendanceInput(raw);
 			if (!validation.valid) {
-				return fail(400, {
-					values, errors: validation.errors, certificate: null, reports: null,
-					serverError: false, archiveError: null, archived: false
-				});
+				return fail(400, { values, errors: validation.errors });
 			}
 
 			// Both downloads and archived copies share the same server-controlled issue date.
@@ -33,11 +29,10 @@ export function createAttendanceActions(getArchive: GetReportArchive) {
 					return { en: { bytes: en, filename: english.filename }, es: { bytes: es, filename: spanish.filename } };
 				}
 			});
-			const { serverError, archiveError, archived } = result;
 			if (!result.ok) {
-				return fail(result.status, { values, errors: {}, certificate: null, reports: null, serverError, archiveError, archived });
+				return fail(result.status, { values, failure: result.failure });
 			}
-			return { values, errors: {}, certificate, reports: result.reports, serverError, archiveError, archived };
+			return { values, certificate, reports: result.reports, archived: result.archived };
 		}
 	} satisfies Actions;
 }

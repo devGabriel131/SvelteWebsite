@@ -3,29 +3,24 @@
 	import XIcon from '@lucide/svelte/icons/x';
 	import { Button } from "#lib/components/ui/button/index.js";
 	import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
-	import * as Dialog from "./index.js";
+	import DialogOverlay from "./dialog-overlay.svelte";
 	import DialogPortal from "./dialog-portal.svelte";
 	import type { Snippet } from "svelte";
-	import type { ComponentProps } from "svelte";
 
 	let {
 		ref = $bindable(null),
 		class: className,
-		portalProps,
 		children,
 		closeLabel,
-		showCloseButton = true,
 		...restProps
 	}: WithoutChildrenOrChild<DialogPrimitive.ContentProps> & {
-		portalProps?: WithoutChildrenOrChild<ComponentProps<typeof DialogPortal>>;
 		children: Snippet;
 		closeLabel: string;
-		showCloseButton?: boolean;
 	} = $props();
 </script>
 
-<DialogPortal {...portalProps}>
-	<Dialog.Overlay />
+<DialogPortal>
+	<DialogOverlay />
 	<DialogPrimitive.Content
 		bind:ref
 		data-slot="dialog-content"
@@ -36,15 +31,13 @@
 		{...restProps}
 	>
 		{@render children?.()}
-		{#if showCloseButton}
-			<DialogPrimitive.Close data-slot="dialog-close">
-				{#snippet child({ props })}
-					<Button variant="ghost" class="absolute top-2 right-2" size="icon-sm" {...props}>
-						<XIcon class="text-secondary group-hover/button:text-primary" aria-hidden />
-						<span class="sr-only">{closeLabel}</span>
-					</Button>
-				{/snippet}
-			</DialogPrimitive.Close>
-		{/if}
+		<DialogPrimitive.Close data-slot="dialog-close">
+			{#snippet child({ props })}
+				<Button variant="ghost" class="absolute top-2 right-2" size="icon-sm" {...props}>
+					<XIcon class="text-secondary group-hover/button:text-primary" aria-hidden />
+					<span class="sr-only">{closeLabel}</span>
+				</Button>
+			{/snippet}
+		</DialogPrimitive.Close>
 	</DialogPrimitive.Content>
 </DialogPortal>

@@ -35,6 +35,9 @@
 	const locale = $derived(language.current === 'es' ? 'es-PR' : 'en-US');
 	const number = $derived(new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }));
 	const percent = $derived(new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 0 }));
+	const challengeLabel = $derived(session ? formatMessage(messages.challengeLabel, {
+		operation: messages.operations[session.operation], minutes: session.duration
+	}) : '');
 	const spokenQuestion = $derived(session ? formatMessage(messages.question, {
 		left: session.question.left, right: session.question.right,
 		operation: messages.spokenOperations[session.operation]
@@ -114,7 +117,7 @@
 	}
 </script>
 
-<div class="math-game" data-phase={phase}>
+<div class="math-game">
 	{#if !session}
 		<form class="setup-layout" onsubmit={(event) => { event.preventDefault(); start(); }}>
 			<Card.Root class="settings-panel panel">
@@ -127,7 +130,7 @@
 					<div class="operation-options">
 						{#each operations as choice (choice)}
 							<Label class={buttonVariants({ variant: 'outline', class: 'operation-choice relative min-w-0 cursor-pointer' })}>
-								<input class="visually-hidden" type="radio" name="operation" value={choice} bind:group={operation} />
+								<input class="sr-only" type="radio" name="operation" value={choice} bind:group={operation} />
 								<span class="operation-symbol" aria-hidden="true">{operationSymbols[choice]}</span>
 								<span class="choice-name">{messages.operations[choice]}</span>
 								<span class="choice-check" aria-hidden="true">{#if operation === choice}<Check size={14} />{/if}</span>
@@ -141,10 +144,10 @@
 					<div class="duration-options">
 						{#each durations as minutes (minutes)}
 							<Label class={buttonVariants({ variant: 'outline', class: 'duration-choice relative min-w-0 cursor-pointer' })}>
-								<input class="visually-hidden" type="radio" name="duration" value={minutes} bind:group={duration} />
+								<input class="sr-only" type="radio" name="duration" value={minutes} bind:group={duration} />
 								<span class="duration-number" aria-hidden="true">{number.format(minutes)}</span>
 								<span aria-hidden="true">{messages.minuteUnit}</span>
-								<span class="visually-hidden">{formatMessage(messages.minutes, { minutes })}</span>
+								<span class="sr-only">{formatMessage(messages.minutes, { minutes })}</span>
 							</Label>
 						{/each}
 					</div>
@@ -171,11 +174,9 @@
 			</aside>
 		</form>
 	{:else if session.status === 'running' && stats}
-		<section class="challenge-layout" aria-label={formatMessage(messages.challengeLabel, {
-			operation: messages.operations[session.operation], minutes: session.duration
-		})}>
+		<section class="challenge-layout" aria-label={challengeLabel}>
 			<div class="challenge-topline">
-				<div><p class="eyebrow"><span class="status-dot" aria-hidden="true"></span>{messages.live}</p><p class="challenge-label">{formatMessage(messages.challengeLabel, { operation: messages.operations[session.operation], minutes: session.duration })}</p></div>
+				<div><p class="eyebrow"><span class="status-dot" aria-hidden="true"></span>{messages.live}</p><p class="challenge-label">{challengeLabel}</p></div>
 				<Button variant="outline" class="px-4" type="button" onclick={finish}>{messages.end}</Button>
 			</div>
 			<Card.Root class="stats-panel panel">
@@ -185,7 +186,7 @@
 					<div class="timer-value"><span class="stat-label"><Timer size={14} aria-hidden="true" />{messages.timeRemaining}</span><strong role="timer" aria-live="off" aria-label={messages.timeRemaining}>{formatTime(stats.remainingSeconds)}</strong></div>
 				</div>
 				<div class="time-progress"><Progress class="h-1" aria-label={messages.timeRemaining} max={session.duration * 60} value={stats.remainingSeconds} /></div>
-				<p class="visually-hidden" role="status">{stats.remainingSeconds <= 30 ? messages.lowTime : ''}</p>
+				<p class="sr-only" role="status">{stats.remainingSeconds <= 30 ? messages.lowTime : ''}</p>
 				<dl class="live-stats">
 					<div><dt>{messages.correct}</dt><dd class="correct-count">{number.format(session.correct)}</dd></div>
 					<div><dt>{messages.incorrect}</dt><dd>{number.format(session.incorrect)}</dd></div>
@@ -212,14 +213,14 @@
 					{#if invalidAnswer}<p class="error" id="answer-error" role="alert">{messages.invalidAnswer}</p>{/if}
 				</form>
 				<div class="feedback" class:correct-feedback={feedback?.correct} class:incorrect-feedback={feedback && !feedback.correct} role="status" aria-atomic="true">
-					{#if feedback}<p>{feedbackMessage}</p><span class="visually-hidden">{spokenQuestion}</span>{/if}
+					{#if feedback}<p>{feedbackMessage}</p><span class="sr-only">{spokenQuestion}</span>{/if}
 				</div>
 			</Card.Root>
 		</section>
 	{:else if stats}
 		<section class="results-panel" aria-labelledby="results-title" tabindex="-1" bind:this={resultsElement}>
 			<Card.Root class="results-card panel">
-				<div class="results-heading"><span class="result-icon"><CircleCheck size={24} aria-hidden="true" /></span><p class="eyebrow">{session.endedAt === session.endsAt ? messages.timeUp : messages.ended}</p><h2 id="results-title">{messages.resultsTitle}</h2><p class="hint">{formatMessage(messages.challengeLabel, { operation: messages.operations[session.operation], minutes: session.duration })}</p></div>
+				<div class="results-heading"><span class="result-icon"><CircleCheck size={24} aria-hidden="true" /></span><p class="eyebrow">{session.endedAt === session.endsAt ? messages.timeUp : messages.ended}</p><h2 id="results-title">{messages.resultsTitle}</h2><p class="hint">{challengeLabel}</p></div>
 				<div class="result-summary">
 					<div class="score"><strong>{number.format(session.correct)}</strong><span>{messages.correctAnswers}</span></div>
 					<div><p class="results-message">{stats.total === 0 ? messages.noAnswers : formatMessage(messages.resultsMessage, { correct: session.correct, total: stats.total })}</p><p class="hint">{messages.resultsHint}</p></div>
@@ -317,7 +318,6 @@
 	.result-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1rem; padding-block: 1.5rem; border-block: 1px solid var(--border); }
 	.result-stats dd { margin-top: 0.4rem; }
 	.result-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1.5rem; }
-	.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 
 	@media (max-width: 75rem) and (min-width: 56.01rem), (max-width: 44rem) {

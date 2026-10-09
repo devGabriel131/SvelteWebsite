@@ -5,6 +5,7 @@
 	import { asset, resolve } from '$app/paths';
 
 	import AdminIcon from '#lib/admin/AdminIcon.svelte';
+	import { adminSectionHref } from '#lib/admin/navigation.ts';
 	import ChoiceGroup from '#lib/components/ChoiceGroup.svelte';
 	import * as Alert from '#lib/components/ui/alert/index.js';
 	import { Badge } from '#lib/components/ui/badge/index.js';
@@ -17,6 +18,7 @@
 	import { formatMessage } from '#lib/i18n/translations.ts';
 
 	import { MAX_IMPORT_BYTES, type StudentInvitation, type StudentImportResult, type InvitationActionData } from '#lib/student-invitations.ts';
+	import { studentClassTypes } from '#lib/student.ts';
 
 	let { invitations, invitationPage, hasMoreInvitations }: {
 		invitations: StudentInvitation[];
@@ -88,7 +90,7 @@
 	};
 
 	function invitationHref(nextPage: number) {
-		return resolve('/admin') + '?section=invitations&invitationPage=' + nextPage;
+		return adminSectionHref('invitations', resolve('/admin')) + '&invitationPage=' + nextPage;
 	}
 
 	function formatDate(value: string) {
@@ -105,7 +107,7 @@
 	</nav>
 {/snippet}
 
-<div class="student-invitations" lang={language.current}>
+<div class="student-invitations">
 	<section aria-labelledby={`${id}-upload-title`}>
 		<Card.Root class="gap-0 p-0 min-w-0">
 			<div class="panel-heading">
@@ -127,7 +129,7 @@
 					</div>
 					<div class="form-grid">
 						<ChoiceGroup id={`${id}-class`} name="classType" label={roster.classType} bind:value={classType} onchange={clearReview}
-							choices={[{ value: 'basic', label: roster.classes.basic }, { value: 'regular', label: roster.classes.regular }]} />
+							choices={studentClassTypes.map((value) => ({ value, label: roster.classes[value] }))} />
 						<ChoiceGroup id={`${id}-language`} name="emailLanguage" label={messages.emailLanguage} bind:value={emailLanguage} onchange={clearReview}
 							choices={[{ value: 'en', label: messages.languages.en }, { value: 'es', label: messages.languages.es }]} />
 					</div>

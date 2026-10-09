@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
-import { inflateSync } from 'node:zlib';
+import { readPdf, type PdfPage, type PdfText } from './pdf';
 import PDFDocument from 'pdfkit';
 import { translations, type Language } from '../src/lib/i18n/translations';
 import { assessIst } from '../src/lib/ist/assessment';
@@ -27,99 +27,8 @@ const normalize = (text: string) => text.replace(/\s+/g, ' ').trim();
 const compact = (text: string) => text.replace(/\s/g, '');
 const gradeColors = { green: '#17633d', yellow: '#795600', red: '#a32932' } as const;
 
-type PdfText = { text: string; x: number; baseline: number; size: number; font: string; color: string };
-type PdfFill = { left: number; right: number; top: number; bottom: number; color: string };
-type PdfPage = {
-	headerBottom: number;
-	texts: PdfText[];
-	fills: PdfFill[];
-	images: { name: string; width: number; height: number }[];
-	imageDraws: string[];
-};
 type LocatedText = PdfText & { page: number; order: number };
 
-// Read PDFKit's standard-font text, image references, and untransformed filled paths,
-// not a general-purpose PDF parser. No system PDF utilities or test dependency needed.
-function readPdf(pdf: Buffer): PdfPage[] {
-	const source = pdf.toString('latin1');
-	expect(source.startsWith('%PDF-1.3\n')).toBe(true);
-	expect(source.trimEnd().endsWith('%%EOF')).toBe(true);
-	const xrefOffset = Number(source.match(/startxref\n(\d+)\n/)?.[1]);
-	expect(source.slice(xrefOffset, xrefOffset + 4)).toBe('xref');
-	const objects = new Map([...source.matchAll(/(\d+) 0 obj\n([\s\S]*?)\nendobj/g)]
-		.map((match) => [Number(match[1]), match[2]]));
-	const decoder = new TextDecoder('windows-1252');
-	const pages: PdfPage[] = [];
-	for (const object of objects.values()) {
-		if (!/\/Type \/Page\b/.test(object)) continue;
-		expect(object).toContain('/MediaBox [0 0 612 792]');
-		const resources = objects.get(Number(object.match(/\/Resources (\d+) 0 R/)?.[1]))!;
-		const fonts = new Map([...resources.matchAll(/\/(F\d+) (\d+) 0 R/g)].map((match) => [
-			match[1], objects.get(Number(match[2]))!.match(/\/BaseFont \/([^\s]+)/)![1]
-		]));
-		for (const font of fonts.values()) expect(['Helvetica', 'Helvetica-Bold']).toContain(font);
-		const xObjects = resources.match(/\/XObject\s*<<([\s\S]*?)>>/)?.[1] ?? '';
-		const images = [...xObjects.matchAll(/\/(\S+) (\d+) 0 R/g)].flatMap((match) => {
-			const image = objects.get(Number(match[2]))!;
-			if (!/\/Subtype \/Image\b/.test(image)) return [];
-			expect(image).toContain('stream\n');
-			return [{ name: match[1], width: Number(image.match(/\/Width (\d+)/)?.[1]),
-				height: Number(image.match(/\/Height (\d+)/)?.[1]) }];
-		});
-		const content = objects.get(Number(object.match(/\/Contents (\d+) 0 R/)?.[1]))!;
-		expect(content).toContain('/Filter /FlateDecode');
-		const compressed = Buffer.from(content.match(/stream\n([\s\S]*?)\nendstream/)![1], 'latin1');
-		const commands = inflateSync(compressed).toString('latin1');
-		const texts: PdfText[] = [];
-		const fills: PdfFill[] = [];
-		const imageDraws: string[] = [];
-		const savedColors: string[] = [];
-		let color = '#000000';
-		let headerBottom = 0;
-		let points: number[][] = [];
-		for (const match of commands.matchAll(/BT\n([\s\S]*?)\nET|([^\n]+)/g)) {
-			if (match[1] !== undefined) {
-				const matrix = match[1].match(/1 0 0 1 ([\d.-]+) ([\d.-]+) Tm/)!;
-				const font = match[1].match(/\/(F\d+) ([\d.]+) Tf/)!;
-				const bytes = Buffer.concat([...match[1].matchAll(/<([\da-f]+)>/gi)]
-					.map((hex) => Buffer.from(hex[1], 'hex')));
-				texts.push({ text: decoder.decode(bytes), x: Number(matrix[1]),
-					baseline: 792 - Number(matrix[2]), size: Number(font[2]), font: fonts.get(font[1])!, color });
-				continue;
-			}
-			const command = match[2].trim();
-			if (command === 'q') savedColors.push(color);
-			if (command === 'Q') color = savedColors.pop() ?? '#000000';
-			const rgb = command.match(/^([\d.]+) ([\d.]+) ([\d.]+) scn$/);
-			if (rgb) color = '#' + rgb.slice(1).map((channel) =>
-				Math.round(Number(channel) * 255).toString(16).padStart(2, '0')).join('');
-			const draw = command.match(/^\/(\S+) Do$/);
-			if (draw) imageDraws.push(draw[1]);
-			const tokens = command.split(/\s+/);
-			const operator = tokens.at(-1);
-			const numbers = tokens.slice(0, -1).map(Number);
-			if (operator === 're') {
-				const [x, y, width, height] = numbers;
-				points.push([x, y], [x + width, y + height]);
-			} else if (operator === 'm' || operator === 'l' || operator === 'c') {
-				for (let index = 0; index < numbers.length; index += 2) points.push(numbers.slice(index, index + 2));
-			}
-			if (['f', 'f*', 'B', 'B*', 'b', 'b*'].includes(operator!) && points.length) {
-				fills.push({ left: Math.min(...points.map(([x]) => x)), right: Math.max(...points.map(([x]) => x)),
-					top: Math.min(...points.map(([, y]) => y)), bottom: Math.max(...points.map(([, y]) => y)), color });
-			}
-			if (!headerBottom && operator === 'S' && points.length === 2 && points[0][1] === points[1][1]) {
-				headerBottom = points[0][1];
-			}
-			if (['f', 'f*', 'B', 'B*', 'b', 'b*', 'S', 's', 'n'].includes(operator!)) points = [];
-		}
-		pages.push({ headerBottom, texts, fills, images, imageDraws });
-	}
-	const pageTree = [...objects.values()].find((object) => /\/Type \/Pages\b/.test(object))!;
-	expect(Number(pageTree.match(/\/Count (\d+)/)?.[1])).toBe(pages.length);
-	expect(pages.length).toBeGreaterThan(0);
-	return pages;
-}
 
 function pageText(page: PdfPage): string {
 	return normalize(page.texts.map(({ text }) => text).join(' '));
@@ -225,7 +134,7 @@ function expectLogoOnEveryPage(pages: PdfPage[]): void {
 	for (const [index, page] of pages.entries()) {
 		const logos = page.images.filter((image) => image.width === width && image.height === height);
 		expect(logos.length, `Page ${index + 1} has no logo image XObject`).toBeGreaterThan(0);
-		expect(page.imageDraws.some((name) => logos.some((logo) => logo.name === name)),
+		expect(page.imageDraws.some(({ name }) => logos.some((logo) => logo.name === name)),
 			`Page ${index + 1} does not draw its logo XObject with Do`).toBe(true);
 	}
 }
@@ -258,12 +167,12 @@ function expectGradeColors(pages: PdfPage[], report: IstReport): void {
 	}
 }
 
-function expectReadable(pages: PdfPage[], report: IstReport): void {
+function expectReadable(pages: PdfPage[]): void {
 	const metrics = new PDFDocument({ autoFirstPage: false });
 	try {
 		for (const [index, page] of pages.entries()) {
-			const footer = page.texts.filter(({ text }) => text === `${report.pageLabel} ${index + 1}`);
-			expect(footer).toHaveLength(0);
+			for (const font of page.fonts) expect(['Helvetica', 'Helvetica-Bold']).toContain(font);
+			expect(page.texts.filter(({ text }) => /^(?:Page|Página) \d+$/.test(text))).toHaveLength(0);
 			const boxes = page.texts.map((line) => {
 				metrics.font(line.font).fontSize(line.size);
 				return { line, left: line.x, right: line.x + metrics.widthOfString(line.text),
@@ -355,8 +264,10 @@ describe('IST report presentation', () => {
 		test(`${language} keeps decimals, the full accented name, all details, and a date-only assessment date`, () => {
 			const report = makeReport(language);
 			const messages = translations[language].ist;
-			expect(report.studentName).toBe('José María Muñoz');
-			expect(report.assessedAt).toBe(assessedAt);
+			expect(report.filename).toBe(`${language === 'es' ? 'informe-IST' : 'IST-report'}-2026-10-03.pdf`);
+			expect(report).not.toHaveProperty('studentName');
+			expect(report).not.toHaveProperty('assessedAt');
+			expect(report).not.toHaveProperty('pageLabel');
 			expect(report.details).toEqual([
 				{ label: messages.fields.studentName, value: 'José María Muñoz' },
 				{ label: messages.report.date, value: new Intl.DateTimeFormat(language === 'es' ? 'es-PR' : 'en-US',
@@ -431,7 +342,7 @@ describe('IST PDF generation', () => {
 			expectCardHeaders(pages[0], report);
 			expectSummaryBeforeCards(pages, report);
 			expectLogoOnEveryPage(pages);
-			expectReadable(pages, report);
+			expectReadable(pages);
 			expect(report).toEqual(original);
 		});
 
@@ -441,7 +352,7 @@ describe('IST PDF generation', () => {
 			const pages = readPdf(await generateIstPdf(report));
 			expectGradeColors(pages, report);
 			expectReportText(pages, report);
-			expectReadable(pages, report);
+			expectReadable(pages);
 		});
 
 		test(`${language} keeps passing readiness before the cards on one page with no below-baseline categories`, async () => {
@@ -454,7 +365,7 @@ describe('IST PDF generation', () => {
 			expectSummaryBeforeCards(pages, report);
 			expectLogoOnEveryPage(pages);
 			expectGradeColors(pages, report);
-			expectReadable(pages, report);
+			expectReadable(pages);
 		});
 
 		test(`${language} renders inability, failing grades, and outcomes for all four exercises`, async () => {
@@ -483,7 +394,7 @@ describe('IST PDF generation', () => {
 			expectReportText(pages, report);
 			expectSummaryBeforeCards(pages, report);
 			expectGradeColors(pages, report);
-			expectReadable(pages, report);
+			expectReadable(pages);
 		});
 
 		test(`${language} groups extra student details in pairs after the name/date, age/band/sex, and weight/waist groups`, async () => {
@@ -495,7 +406,7 @@ describe('IST PDF generation', () => {
 			expectDetailGroups(pages, report);
 			expectReportText(pages, report);
 			expectSummaryBeforeCards(pages, report);
-			expectReadable(pages, report);
+			expectReadable(pages);
 		});
 
 		test(`${language} preserves every character of a very long accented name and unbroken surname across pages`, async () => {
@@ -508,7 +419,7 @@ describe('IST PDF generation', () => {
 			expectReportText(pages, report);
 			expectSummaryBeforeCards(pages, report);
 			expectLogoOnEveryPage(pages);
-			expectReadable(pages, report);
+			expectReadable(pages);
 		});
 	}
 
@@ -530,7 +441,7 @@ describe('IST PDF generation', () => {
 		expectCardHeaders(pages[0], report);
 		expectSummaryBeforeCards(pages, report);
 		expect(report).toEqual(original);
-		expectReadable(pages, report);
+		expectReadable(pages);
 	});
 
 	test('embeds and draws the logo and brand header on every card-continuation page', async () => {
@@ -546,7 +457,7 @@ describe('IST PDF generation', () => {
 			renderedBlock([page], report.brandDescription);
 		}
 		expectReportText(pages, report);
-		expectReadable(pages, report);
+		expectReadable(pages);
 	});
 
 	test('splits an oversized Spanish card, including an unbroken threshold, with repeated three-column headers and no lost characters', async () => {
@@ -571,7 +482,7 @@ describe('IST PDF generation', () => {
 		expectReportText(pages, report);
 		expectSummaryBeforeCards(pages, report);
 		expectLogoOnEveryPage(pages);
-		expectReadable(pages, report);
+		expectReadable(pages);
 	});
 
 	test('paginates extra detail pairs and places the top summary before a whole single card without orphan headers', async () => {
@@ -594,7 +505,7 @@ describe('IST PDF generation', () => {
 		expectReportText(pages, report);
 		expectSummaryBeforeCards(pages, report);
 		expectLogoOnEveryPage(pages);
-		expectReadable(pages, report);
+		expectReadable(pages);
 	});
 
 	test('preserves oversized readiness, below-baseline, and disclaimer text, including unbroken words, across pages', async () => {
@@ -613,7 +524,7 @@ describe('IST PDF generation', () => {
 		expectReportText(pages, report);
 		expectSummaryBeforeCards(pages, report);
 		expectLogoOnEveryPage(pages);
-		expectReadable(pages, report);
+		expectReadable(pages);
 	});
 
 	test('paginates many English cards with repeated headers, preserves each whole normal card, and keeps readiness first', async () => {
@@ -648,6 +559,6 @@ describe('IST PDF generation', () => {
 		expectSummaryBeforeCards(pages, report);
 		expectLogoOnEveryPage(pages);
 		expectGradeColors(pages, report);
-		expectReadable(pages, report);
+		expectReadable(pages);
 	});
 });

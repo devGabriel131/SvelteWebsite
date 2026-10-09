@@ -1,12 +1,25 @@
-import { error, fail, redirect } from '@sveltejs/kit';
+import { error, fail, redirect, type Action } from '@sveltejs/kit';
 import { resolve } from '$app/paths';
 import { getViewer } from '../auth/access';
-import { translations } from '../../i18n/translations';
-import { BootcampError, type BootcampErrorCode } from './validation';
+import { translations, type Language } from '../../i18n/translations';
+import { BootcampError, readForm, type BootcampErrorCode } from './validation';
 import { PaymentError } from './payments';
 import { rateLimit } from '../db/auth-schema';
 import type { Database } from '../db/connection';
 import { sql } from 'drizzle-orm';
+import { getEvent } from './admin';
+import { bootcampServices, type BootcampServices } from './runtime';
+
+type ActionContext = {
+	services: BootcampServices;
+	viewerId: string;
+	form: FormData;
+	params: Record<string, string>;
+};
+const actionLimits = {
+	admin: { requests: 30, bytes: 400_000 },
+	student: { requests: 20, bytes: 2_300_000 }
+};
 
 export function requireViewer(locals: App.Locals, role?: 'admin' | 'student', page = false) {
 	const viewer = getViewer(locals);
@@ -16,6 +29,11 @@ export function requireViewer(locals: App.Locals, role?: 'admin' | 'student', pa
 	}
 	if (role && viewer.role !== role) error(403, translations[locals.language].bootcamp.errors.ineligible);
 	return viewer;
+}
+export async function requireAdminEvent(db: Database, eventId: unknown, language: Language) {
+	const event = await getEvent(db, eventId);
+	if (!event) error(404, translations[language].bootcamp.errors.invalid);
+	return event;
 }
 export function requireOrigin(request: Request) {
 	if (request.headers.get('origin') !== new URL(request.url).origin) throw new BootcampError('invalid');
@@ -33,6 +51,26 @@ export function errorCode(cause: unknown): BootcampErrorCode {
 export async function actionResult(run: () => Promise<unknown>) {
 	try { await run(); return { success: true }; }
 	catch (cause) { return fail(400, { error: errorCode(cause) }); }
+}
+export function bootcampAction(
+	role: 'admin' | 'student',
+	work: (context: ActionContext) => Promise<unknown>,
+	onSuccess?: () => never
+): Action {
+	return async ({ locals, request, params, setHeaders }) => {
+		setHeaders({ 'cache-control': 'private, no-store' });
+		const viewer = requireViewer(locals, role);
+		const result = await actionResult(async () => {
+			requireOrigin(request);
+			const services = bootcampServices();
+			const limits = actionLimits[role];
+			await limitRequest(services.db, `${role}:${viewer.id}`, limits.requests);
+			return work({ services, viewerId: viewer.id, form: await readForm(request, limits.bytes), params });
+		});
+		// Redirects must stay outside actionResult, which converts thrown values into failures.
+		if ('success' in result) onSuccess?.();
+		return result;
+	};
 }
 
 export async function limitRequest(db: Database, bucket: string, maximum: number) {

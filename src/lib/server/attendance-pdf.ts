@@ -1,7 +1,7 @@
-import { Buffer } from 'node:buffer';
-import PDFDocument from 'pdfkit';
+import type { Buffer } from 'node:buffer';
+import { renderPdf, wrapWords } from './pdf';
 import logo from '../../../static/logo.png?inline';
-import signature from './assets/attendance-signature.png?inline';
+import signature from './assets/organizer-signature.png?inline';
 import type { AttendanceDocument } from '../attendance/presentation';
 
 const pageWidth = 612;
@@ -28,33 +28,8 @@ function renderDocument(doc: PDFKit.PDFDocument, document: AttendanceDocument): 
 	let y = contentTop;
 
 
-	function wrap(text: string, width: number, style: TextStyle): TextLine[] {
-		doc.font(style.font).fontSize(style.size);
-		const lines: TextLine[] = [];
-		const push = (text: string) => lines.push({ ...style, text });
-		for (const paragraph of text.split(/\r\n|\r|\n/)) {
-			let line = '';
-			for (const word of paragraph.split(/\s+/).filter(Boolean)) {
-				const candidate = line ? `${line} ${word}` : word;
-				if (doc.widthOfString(candidate) <= width) {
-					line = candidate;
-					continue;
-				}
-				if (line) push(line);
-				line = '';
-				// Break oversized words by character, without inserting hyphens or dropping text.
-				for (const character of word) {
-					if (line && doc.widthOfString(line + character) > width) {
-						push(line);
-						line = '';
-					}
-					line += character;
-				}
-			}
-			push(line);
-		}
-		return lines;
-	}
+	const wrap = (text: string, width: number, style: TextStyle): TextLine[] =>
+		wrapWords(doc, text, width, style);
 
 	function drawLine(line: TextLine, top: number, rightAligned = false): void {
 		doc.font(line.font).fontSize(line.size).fillColor(line.color);
@@ -163,23 +138,10 @@ function renderDocument(doc: PDFKit.PDFDocument, document: AttendanceDocument): 
 
 /** Render an already-presented, immutable attendance snapshot without deriving letter content. */
 export function generateAttendancePdf(document: AttendanceDocument): Promise<Buffer> {
-	return new Promise((resolve, reject) => {
-		const doc = new PDFDocument({
-			size: 'LETTER', autoFirstPage: false, lang: document.language,
-			margins: { top: margin, left: margin, right: margin, bottom: margin },
-			info: { Title: document.title, Subject: document.title, Author: document.signature.name,
-				Keywords: document.signature.role }
-		});
-		const chunks: Buffer[] = [];
-		doc.on('data', (chunk: Buffer) => chunks.push(chunk));
-		doc.once('end', () => resolve(Buffer.concat(chunks)));
-		doc.once('error', reject);
-		try {
-			renderDocument(doc, document);
-			doc.end();
-		} catch (error) {
-			doc.destroy();
-			reject(error);
-		}
-	});
+	return renderPdf({
+		size: 'LETTER', autoFirstPage: false, lang: document.language,
+		margins: { top: margin, left: margin, right: margin, bottom: margin },
+		info: { Title: document.title, Subject: document.title, Author: document.signature.name,
+			Keywords: document.signature.role }
+	}, (doc) => renderDocument(doc, document));
 }

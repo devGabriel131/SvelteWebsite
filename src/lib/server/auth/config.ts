@@ -1,4 +1,4 @@
-import { isLocalAdminEnabled } from './local-admin';
+export const LOCAL_ADMIN_EMAIL = 'admin@local.example.test';
 
 export type AuthEnvironment = {
 	BETTER_AUTH_SECRET?: string;
@@ -17,27 +17,32 @@ export type AuthConfig = {
 	localAdmin?: boolean;
 };
 
-function readOrigin(value: string, name: string): string {
+function parseAuthOrigin(value: string): URL | null {
 	let url: URL;
-	try {
-		url = new URL(value);
-	} catch {
-		throw new Error(`${name} must be an exact HTTPS origin (HTTP is allowed only on loopback).`);
-	}
-
-	const isLoopback =
-		url.hostname === 'localhost' ||
-		url.hostname === '[::1]' ||
+	try { url = new URL(value); } catch { return null; }
+	const isLoopback = url.hostname === 'localhost' || url.hostname === '[::1]' ||
 		/^127(?:\.[0-9]{1,3}){3}$/.test(url.hostname);
-	if (
-		value !== url.origin ||
-		value.includes('*') ||
-		(url.protocol !== 'https:' && !(url.protocol === 'http:' && isLoopback))
-	) {
-		throw new Error(
-			`${name} must be an exact HTTPS origin (HTTP is allowed only on loopback), without credentials, paths, query strings, fragments, or wildcards.`
-		);
-	}
+	if (value !== url.origin || value.includes('*') ||
+		(url.protocol !== 'https:' && !(url.protocol === 'http:' && isLoopback))) return null;
+	return url;
+}
+
+export function isAuthOrigin(value: string): boolean {
+	return parseAuthOrigin(value) !== null;
+}
+
+export function isLocalAdminEnabled(env: AuthEnvironment): boolean {
+	if (env.LOCAL_ADMIN_ENABLED !== 'true' || env.NODE_ENV !== 'development' ||
+		env.RAILWAY_PROJECT_ID || env.RAILWAY_ENVIRONMENT_ID) return false;
+	const url = parseAuthOrigin(env.BETTER_AUTH_URL ?? '');
+	return url !== null && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+}
+
+function readOrigin(value: string, name: string): string {
+	const url = parseAuthOrigin(value);
+	if (!url) throw new Error(
+		`${name} must be an exact HTTPS origin (HTTP is allowed only on loopback), without credentials, paths, query strings, fragments, or wildcards.`
+	);
 	return url.origin;
 }
 

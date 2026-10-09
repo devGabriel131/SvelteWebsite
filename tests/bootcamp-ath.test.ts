@@ -102,6 +102,19 @@ describe('ATH creation', () => {
 		});
 	}
 
+	test('registration metadata stays nonblank text up to forty characters, not a UUID', async () => {
+		const association = 'fictional-registration'.padEnd(40, 'x');
+		const mock = transport(
+			envelope({ ecommerceId: reference, auth_token: authorizationToken }),
+			Response.json(receipt({ metadata2: association }))
+		);
+		const client = createAthClient(config, mock.fetch);
+		expect(await client.create({ ...createInput, registrationId: association })).toEqual({ reference, authorizationToken });
+		expect((await body(mock.requests[0])).metadata2).toBe(association);
+		expect(await client.verify({ ...input, registrationId: association })).toEqual({ status: 'completed', transactionId });
+		expect((await body(mock.requests[1])).metadata2).toBe(association);
+	});
+
 	for (const phone of ['7875550100', '+1 (787) 555-0100', '17875550100', '787.555.0100']) {
 		test(`normalizes ATH phone ${phone} to ten digits`, async () => {
 			const mock = transport(envelope({ ecommerceId: reference, auth_token: authorizationToken }));
@@ -114,6 +127,7 @@ describe('ATH creation', () => {
 		{ amountCents: 0 }, { amountCents: 1499 }, { amountCents: 1500.1 }, { amountCents: 3001 },
 		{ amountCents: NaN }, { amountCents: Infinity }, { amountCents: '1500' },
 		{ attemptId: '' }, { attemptId: 'not-a-uuid' }, { attemptId: `${attemptId} ` },
+		{ attemptId: attemptId.replace('-4111-', '-0111-') }, { attemptId: attemptId.replace('-8111-', '-7111-') },
 		{ registrationId: '' }, { registrationId: 'x'.repeat(41) }, { registrationId: ' association ' },
 		{ registrationId: 'line\nbreak' }, { phone: '' }, { phone: '+44 7875550100' },
 		{ phone: '7875550100 extension 2' }, { phone: '++17875550100' }, { phone: '787555010' }
@@ -304,7 +318,8 @@ describe('ATH verification and authorization', () => {
 		{ ecommerceId: '44444444-4444-4444-8444-444444444444' },
 		{ transactionType: 'PAYMENT' }, { transactionType: 'simulated' }, { transactionType: 'REFUND' },
 		{ status: 'CONFIRM' }, { status: 'OPEN' }, { status: 'completed' }, { status: 'UNKNOWN' },
-		{ referenceNumber: '' }, { referenceNumber: undefined }, { referenceNumber: ' padded ' },
+		{ referenceNumber: '' }, { referenceNumber: undefined }, { referenceNumber: null }, { referenceNumber: 1 },
+		{ referenceNumber: ' padded ' }, { referenceNumber: 'line\nbreak' },
 		{ totalRefundedAmount: undefined }, { totalRefundedAmount: -1 }, { totalRefundedAmount: 16 },
 		{ totalRefundedAmount: '0.001' }
 	]) {
@@ -378,6 +393,7 @@ describe('ATH verification and authorization', () => {
 
 	for (const change of [
 		{ reference: '' }, { reference: 'transaction-id-not-ecommerce-id' },
+		{ reference: reference.replace('-4333-', '-0333-') }, { reference: reference.replace('-8333-', '-7333-') },
 		{ authorizationToken: '' }, { authorizationToken: 'unsafe\nheader' },
 		{ authorize: 'true' }, { amountCents: 100 }, { registrationId: '' }, { attemptId: 'not-a-uuid' }
 	]) {

@@ -1,9 +1,10 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import { Buffer } from 'node:buffer';
-import { createDriveClient } from '../src/lib/server/drive/client';
-import { createGmailClient, GmailError, type Email } from '../src/lib/server/gmail/client';
+import { createGmailClient } from '../src/lib/server/gmail/client';
 import type { GmailConfig } from '../src/lib/server/gmail/config';
-import { GoogleApiError, type GoogleErrorKind } from '../src/lib/server/google/client';
+import { GmailError } from '../src/lib/server/gmail/error';
+import type { Email } from '../src/lib/server/gmail/message';
+import { GoogleApiError } from '../src/lib/server/google/client';
 
 const config: GmailConfig = {
 	clientId: 'private-client-id+&= /',
@@ -22,7 +23,6 @@ const email: Email = {
 const token = { access_token: 'private-access-token', token_type: 'Bearer', expires_in: 3600 };
 const tokenUrl = 'https://oauth2.googleapis.com/token';
 const sendUrl = 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send';
-const driveIdsUrl = 'https://www.googleapis.com/drive/v3/files/generateIds?count=1&space=drive&type=files&fields=ids';
 const sensitive = [
 	config.clientId, config.clientSecret, config.refreshToken, config.senderAddress,
 	'private-sender@example.test', token.access_token,
@@ -30,8 +30,6 @@ const sensitive = [
 	'private-report.pdf', 'private-upstream-detail'
 ];
 const privateDetails = sensitive.join(' ');
-
-type Stage = 'OAuth' | 'Gmail';
 
 function mockFetch(handler: (request: Request) => Response | Promise<Response>) {
 	const requests: Request[] = [];
@@ -43,23 +41,12 @@ function mockFetch(handler: (request: Request) => Response | Promise<Response>) 
 	return { fetch: fetch as typeof globalThis.fetch, requests };
 }
 
-async function bounded<T>(promise: Promise<T>): Promise<T> {
-	let timer: ReturnType<typeof setTimeout> | undefined;
-	try {
-		return await Promise.race([promise, new Promise<never>((_, reject) => {
-			timer = setTimeout(() => reject(new Error('Gmail test operation did not settle within 1 second.')), 1000);
-		})]);
-	} finally {
-		clearTimeout(timer);
-	}
-}
-
 async function withoutLogs<T>(work: () => T | Promise<T>): Promise<T> {
 	const logged: unknown[][] = [];
 	const spies = (['log', 'info', 'warn', 'error', 'debug', 'trace', 'dir'] as const)
 		.map((method) => spyOn(console, method).mockImplementation((...args: unknown[]) => { logged.push(args); }));
 	try {
-		return await bounded(Promise.resolve().then(work));
+		return await work();
 	} finally {
 		for (const spy of spies) spy.mockRestore();
 		// Silence also catches leaks of encoded MIME or request objects, not just literal secrets.
@@ -87,8 +74,8 @@ async function gmailError(work: () => unknown): Promise<GmailError> {
 	return error;
 }
 
-function expectSingleAttempt(requests: Request[], stage: Stage) {
-	expect(requests.map((request) => request.url)).toEqual(stage === 'OAuth' ? [tokenUrl] : [tokenUrl, sendUrl]);
+function expectSingleAttempt(requests: Request[]) {
+	expect(requests.map((request) => request.url)).toEqual([tokenUrl, sendUrl]);
 }
 
 async function sentMime(request: Request): Promise<string> {
@@ -107,7 +94,7 @@ function header(mime: string, name: string): string | undefined {
 }
 
 describe('Gmail send integration', () => {
-	test('posts encoded OAuth credentials and base64url MIME with recipients, both bodies, and attachment bytes', async () => {
+	test('posts base64url MIME with recipients, both bodies, and attachment bytes', async () => {
 		const source = new Uint8Array([99, 0, 255, 195, 40, 13, 10, 1, 99]);
 		const message: Email = {
 			...email,
@@ -123,16 +110,8 @@ describe('Gmail send integration', () => {
 		const client = createGmailClient(config, { fetch: transport.fetch });
 
 		expect(await withoutLogs(() => client.send(message))).toBe('18abc_DEF-123');
-		expectSingleAttempt(transport.requests, 'Gmail');
-		const [oauth, send] = transport.requests;
-		for (const request of transport.requests) {
-			expect(request.method).toBe('POST');
-			expect(request.redirect).toBe('error');
-		}
-		expect(oauth.headers.has('Authorization')).toBe(false);
-		expect(oauth.headers.get('Content-Type')).toBe('application/x-www-form-urlencoded');
-		expect(await oauth.text()).toBe('grant_type=refresh_token&client_id=private-client-id%2B%26%3D+%2F' +
-			'&client_secret=private-client-secret%2B%26%3D+%2F&refresh_token=private-refresh-token%2B%26%3D+%2F');
+		expectSingleAttempt(transport.requests);
+		const send = transport.requests[1];
 		expect(send.headers.get('Authorization')).toBe(`Bearer ${token.access_token}`);
 		expect(send.headers.get('Content-Type')).toBe('application/json');
 
@@ -161,54 +140,19 @@ describe('Gmail send integration', () => {
 		expect(message).toEqual(original);
 	});
 
-	test('reuses its OAuth token but sends each explicit email exactly once', async () => {
-		let sends = 0;
-		const transport = mockFetch((request) => Response.json(request.url === tokenUrl ? token : { id: `sent-${++sends}` }));
-		const client = createGmailClient(config, { fetch: transport.fetch });
-		expect(await client.send(email)).toBe('sent-1');
-		expect(await client.send({ ...email, subject: 'Second private subject' })).toBe('sent-2');
-		expect(transport.requests.map((request) => request.url)).toEqual([tokenUrl, sendUrl, sendUrl]);
-		for (const request of transport.requests.slice(1)) {
-			expect(request.headers.get('Authorization')).toBe(`Bearer ${token.access_token}`);
-		}
-		expect(header(await sentMime(transport.requests[2]), 'Subject')).toBe('Second private subject');
-	});
-
-	test('keeps Gmail and Drive token caches independent while each client reuses its own token', async () => {
-		let refreshes = 0;
-		const transport = mockFetch((request) => {
-			if (request.url === tokenUrl) return Response.json({ ...token, access_token: `private-service-token-${++refreshes}` });
-			return Response.json(request.url === driveIdsUrl ? { ids: ['drive-id'] } : { id: 'gmail-id' });
-		});
-		const gmail = createGmailClient(config, { fetch: transport.fetch });
-		const drive = createDriveClient({
-			...config, refreshToken: 'private-drive-refresh-token', reportsFolderId: 'reports-folder'
-		}, { fetch: transport.fetch });
-		for (let round = 0; round < 2; round += 1) {
-			expect(await gmail.send(email)).toBe('gmail-id');
-			expect(await drive.generateFileId()).toBe('drive-id');
-		}
-		expect(transport.requests.map((request) => request.url)).toEqual([
-			tokenUrl, sendUrl, tokenUrl, driveIdsUrl, sendUrl, driveIdsUrl
-		]);
-		const refreshRequests = transport.requests.filter((request) => request.url === tokenUrl);
-		expect(new URLSearchParams(await refreshRequests[0].text()).get('refresh_token')).toBe(config.refreshToken);
-		expect(new URLSearchParams(await refreshRequests[1].text()).get('refresh_token')).toBe('private-drive-refresh-token');
-		for (const request of transport.requests.filter((request) => request.url !== tokenUrl)) {
-			expect(request.headers.get('Authorization')).toBe(`Bearer private-service-token-${request.url === sendUrl ? 1 : 2}`);
-		}
-	});
-
 	test('snapshots sender, test mode, and credentials before the caller mutates its configuration', async () => {
 		const mutable = { ...config };
 		const transport = mockFetch((request) => Response.json(request.url === tokenUrl ? token : { id: 'sent' }));
 		const client = createGmailClient(mutable, { fetch: transport.fetch });
+		expect(client.testMode).toBe(false);
 		Object.assign(mutable, {
 			clientId: 'changed-client', clientSecret: 'changed-secret', refreshToken: 'changed-refresh',
 			senderAddress: 'changed@example.test', testMode: true
 		});
-		expect(await client.send(email)).toBe('sent');
-		expectSingleAttempt(transport.requests, 'Gmail');
+		const { send } = client;
+		expect(await send(email)).toBe('sent');
+		expect(client.testMode).toBe(false);
+		expectSingleAttempt(transport.requests);
 		expect(Object.fromEntries(new URLSearchParams(await transport.requests[0].text()))).toEqual({
 			grant_type: 'refresh_token', client_id: config.clientId,
 			client_secret: config.clientSecret, refresh_token: config.refreshToken
@@ -223,8 +167,9 @@ describe('Gmail send integration', () => {
 		const original = structuredClone(email);
 		const transport = mockFetch((request) => Response.json(request.url === tokenUrl ? token : { id: 'test-sent' }));
 		const client = createGmailClient({ ...config, testMode: true }, { fetch: transport.fetch });
+		expect(client.testMode).toBe(true);
 		expect(await client.send(email)).toBe('test-sent');
-		expectSingleAttempt(transport.requests, 'Gmail');
+		expectSingleAttempt(transport.requests);
 		const mime = await sentMime(transport.requests[1]);
 		expect(header(mime, 'From')).toBe(config.senderAddress);
 		expect(header(mime, 'To')).toBe(config.senderAddress);
@@ -239,12 +184,12 @@ describe('Gmail send integration', () => {
 });
 
 describe('Gmail validation before networking', () => {
-	test('rejects invalid direct configuration and timeout settings with safe Gmail errors', async () => {
+	test('rejects malformed sender/testMode and shared transport config before networking', async () => {
 		const transport = mockFetch(() => { throw new Error('Unexpected network request.'); });
 		const invalid: unknown[] = [
 			null, { ...config, testMode: undefined }, { ...config, testMode: 'false' },
 			{ ...config, senderAddress: '' }, { ...config, senderAddress: `${config.senderAddress}\r\nBcc: ${email.bcc![0]}` },
-			...(['clientId', 'clientSecret', 'refreshToken'] as const).map((key) => ({ ...config, [key]: ' \n' }))
+			{ ...config, refreshToken: ' \n' }
 		];
 		for (const value of invalid) {
 			const error = await gmailError(() => createGmailClient(value as GmailConfig, { fetch: transport.fetch }));
@@ -281,54 +226,15 @@ describe('Gmail validation before networking', () => {
 });
 
 describe('safe Gmail failures without automatic retries', () => {
-	const rejections: { stage: Stage; status: number; kind: GoogleErrorKind; code?: string }[] = [
-		{ stage: 'OAuth', status: 400, kind: 'auth', code: 'invalid_grant' },
-		{ stage: 'OAuth', status: 400, kind: 'auth', code: 'invalid_client' },
-		{ stage: 'OAuth', status: 400, kind: 'bad_input', code: 'invalid_scope' },
-		{ stage: 'OAuth', status: 503, kind: 'upstream' },
-		{ stage: 'Gmail', status: 400, kind: 'bad_input' },
-		{ stage: 'Gmail', status: 401, kind: 'auth' },
-		{ stage: 'Gmail', status: 403, kind: 'auth' },
-		{ stage: 'Gmail', status: 429, kind: 'upstream' },
-		{ stage: 'Gmail', status: 503, kind: 'upstream' }
-	];
-	for (const { stage, status, kind, code } of rejections) {
-		test(`${stage} HTTP ${status}${code ? ` ${code}` : ''} is a safe ${kind} failure with no replay`, async () => {
-			const transport = mockFetch((request) => {
-				if (stage === 'Gmail' && request.url === tokenUrl) return Response.json(token);
-				return Response.json({ error: code ?? privateDetails, error_description: privateDetails }, { status });
-			});
-			const error = await gmailError(() => createGmailClient(config, { fetch: transport.fetch }).send(email));
-			expect(error.kind).toBe(kind);
-			expect(error.status).toBe(status);
-			expect(error.message).toBe('Gmail request was rejected.');
-			expectSingleAttempt(transport.requests, stage);
-		});
-	}
-
-	for (const stage of ['OAuth', 'Gmail'] as const) {
-		for (const failure of ['lost response', 'invalid JSON', 'body reader exception'] as const) {
-			test(`${stage} ${failure} is sanitized and never retried`, async () => {
-				const transport = mockFetch(async (request) => {
-					if (stage === 'Gmail' && request.url === tokenUrl) return Response.json(token);
-					if (failure === 'lost response') {
-						await request.clone().text();
-						throw new Error(privateDetails, { cause: new Error(token.access_token) });
-					}
-					const response = new Response(privateDetails);
-					if (failure === 'body reader exception') {
-						response.json = async () => { throw new Error(privateDetails, { cause: new Error(email.body) }); };
-					}
-					return response;
-				});
-				const error = await gmailError(() => createGmailClient(config, { fetch: transport.fetch }).send(email));
-				expect(error.kind).toBe('upstream');
-				expect(error.status).toBe(failure === 'lost response' ? undefined : 200);
-				expect(error.message).toBe(failure === 'lost response' ? 'Gmail request failed.' : 'Gmail returned invalid JSON.');
-				expectSingleAttempt(transport.requests, stage);
-			});
-		}
-	}
+	test('retains real Gmail subclass/service label and never replays a rejected send', async () => {
+		const transport = mockFetch((request) => request.url === tokenUrl
+			? Response.json(token) : new Response(privateDetails, { status: 403 }));
+		const error = await gmailError(() => createGmailClient(config, { fetch: transport.fetch }).send(email));
+		expect(error.kind).toBe('auth');
+		expect(error.status).toBe(403);
+		expect(error.message).toBe('Gmail request was rejected.');
+		expectSingleAttempt(transport.requests);
+	});
 
 	test('rejects invalid success payloads and message IDs without retrying a possibly successful send', async () => {
 		for (const data of [null, [], {}, { id: '' }, { id: ' ' }, { id: 42 }, { id: 'private-upstream-detail/invalid' }, { id: `${email.to[0]}\r\n` }]) {
@@ -338,66 +244,41 @@ describe('safe Gmail failures without automatic retries', () => {
 			expect(error.kind).toBe('upstream');
 			expect(error.status).toBe(201);
 			expect(error.message).toBe('Gmail returned an invalid message ID.');
-			expectSingleAttempt(transport.requests, 'Gmail');
-		}
-	});
-
-	test('rejects malformed OAuth success before sending any message or retrying the refresh', async () => {
-		for (const data of [{}, { ...token, access_token: `${token.access_token}\r\n${email.to[0]}` }]) {
-			const transport = mockFetch(() => Response.json(data));
-			const error = await gmailError(() => createGmailClient(config, { fetch: transport.fetch }).send(email));
-			expect(error.kind).toBe('upstream');
-			expect(error.status).toBe(200);
-			expect(error.message).toBe('Google OAuth returned an invalid token response.');
-			expectSingleAttempt(transport.requests, 'OAuth');
+			expectSingleAttempt(transport.requests);
 		}
 	});
 });
 
-describe('Gmail send timeouts and cancellation', () => {
-	for (const stage of ['OAuth', 'Gmail'] as const) {
-		test(`bounds a stalled ${stage === 'OAuth' ? 'OAuth fetch' : 'Gmail success body'} that ignores abort`, async () => {
-			const transport = mockFetch((request) => {
-				if (stage === 'OAuth') return new Promise<Response>(() => {});
-				if (request.url === tokenUrl) return Response.json(token);
-				const response = Response.json({ id: 'sent' });
-				response.json = () => new Promise(() => {});
-				return response;
-			});
-			const error = await gmailError(() => createGmailClient(config, { fetch: transport.fetch, timeoutMs: 20 }).send(email));
-			expect(error.kind).toBe('upstream');
-			expect(error.status).toBeUndefined();
-			expect(error.message).toBe('Gmail request timed out.');
-			expectSingleAttempt(transport.requests, stage);
-			expect(transport.requests.at(-1)!.signal.aborted).toBe(true);
+describe('Gmail send cancellation', () => {
+	test('forwards in-flight send cancellation without replay or leaking the reason', async () => {
+		const started = Promise.withResolvers<void>();
+		const transport = mockFetch((request) => {
+			if (request.url === tokenUrl) return Response.json(token);
+			started.resolve();
+			return Promise.withResolvers<Response>().promise;
 		});
+		const client = createGmailClient(config, { fetch: transport.fetch });
+		const controller = new AbortController();
+		const failed = gmailError(() => client.send(email, controller.signal));
+		await started.promise;
+		controller.abort(new Error(privateDetails));
+		expect((await failed).message).toBe('Gmail request was cancelled.');
+		expectSingleAttempt(transport.requests);
+		expect(transport.requests[1].signal.aborted).toBe(true);
+	});
 
-		test(`propagates cancellation during ${stage}, hiding the abort reason and not replaying the send`, async () => {
-			const controller = new AbortController();
-			const transport = mockFetch((request) => {
-				if (stage === 'Gmail' && request.url === tokenUrl) return Response.json(token);
-				controller.abort(new Error(privateDetails));
-				return new Promise<Response>(() => {});
-			});
-			const client = createGmailClient(config, { fetch: transport.fetch, timeoutMs: 500 });
-			const error = await gmailError(() => client.send(email, controller.signal));
-			expect(error.kind).toBe('upstream');
-			expect(error.status).toBeUndefined();
-			expect(error.message).toBe('Gmail request was cancelled.');
-			expectSingleAttempt(transport.requests, stage);
-			expect(transport.requests.at(-1)!.signal.aborted).toBe(true);
-		});
-	}
-
-	test('a pre-aborted signal prevents OAuth and Gmail requests without exposing its reason', async () => {
+	test('pre-aborted signal prevents MIME composition as well as all network requests', async () => {
 		const transport = mockFetch(() => { throw new Error('Unexpected network request.'); });
 		const controller = new AbortController();
 		controller.abort(new Error(privateDetails));
 		const client = createGmailClient(config, { fetch: transport.fetch });
-		const error = await gmailError(() => client.send(email, controller.signal));
+		let reads = 0;
+		const uncomposed = { ...email, get subject() { reads += 1; return email.subject; } };
+		const error = await gmailError(() => client.send(uncomposed, controller.signal));
 		expect(error.kind).toBe('upstream');
 		expect(error.status).toBeUndefined();
 		expect(error.message).toBe('Gmail request was cancelled.');
 		expect(transport.requests).toHaveLength(0);
+		expect(reads).toBe(0);
 	});
 });

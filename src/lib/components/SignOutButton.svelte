@@ -30,7 +30,7 @@
 	}
 </script>
 
-<div class="sign-out" lang={language.current}>
+<div class="sign-out">
 	<Button variant="outline" class="px-[0.85rem] py-[0.6rem] text-[0.8125rem] font-bold"
 		type="button" onclick={signOut} disabled={pending} aria-busy={pending}
 		aria-describedby={error ? `${id}-error` : undefined}>

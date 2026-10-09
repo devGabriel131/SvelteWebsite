@@ -11,19 +11,17 @@ import {
 	unique,
 	uuid
 } from 'drizzle-orm/pg-core';
-import { roundSize } from '../../frequency/practice';
+import { answerOutcomes, roundSize } from '../../frequency/rules';
 import { operations } from '../../speed-math/game';
 import { students } from './schema';
 
-export const gameTypes = ['speed_math', 'frequency'] as const;
-export const vocabularyOutcomes = ['correct', 'incorrect', 'skipped'] as const;
 
 export const gameAttempts = pgTable(
 	'game_attempts',
 	{
 		id: uuid('id').defaultRandom().primaryKey(),
 		studentId: uuid('student_id').notNull().references(() => students.id, { onDelete: 'restrict' }),
-		gameType: text('game_type', { enum: gameTypes }).notNull(),
+		gameType: text('game_type', { enum: ['speed_math', 'frequency'] }).notNull(),
 		rulesVersion: text('rules_version').notNull(),
 		startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
 		endedAt: timestamp('ended_at', { withTimezone: true }),
@@ -125,7 +123,7 @@ export const vocabularyResponses = pgTable(
 		cardPosition: integer('card_position').notNull(),
 		poolId: text('pool_id').notNull(),
 		itemId: uuid('item_id').notNull(),
-		outcome: text('outcome', { enum: vocabularyOutcomes }).notNull(),
+		outcome: text('outcome', { enum: answerOutcomes }).notNull(),
 		answeredAt: timestamp('answered_at', { withTimezone: true }).notNull(),
 		createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull()
 	},
@@ -148,7 +146,3 @@ export const vocabularyResponses = pgTable(
 	]
 );
 
-export type GameAttempt = typeof gameAttempts.$inferSelect;
-export type NewGameAttempt = typeof gameAttempts.$inferInsert;
-export type SpeedMathResult = typeof speedMathResults.$inferSelect;
-export type VocabularyResponse = typeof vocabularyResponses.$inferSelect;

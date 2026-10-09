@@ -1,39 +1,45 @@
+<script lang="ts" module>
+	import { BookOpen, Dumbbell, FileText, Zap } from '@lucide/svelte';
+
+	export const studentTools = [
+		{ key: 'math', route: '/speed-math', icon: Zap },
+		{ key: 'vocabulary', route: '/frequency', icon: BookOpen },
+		{ key: 'ist', route: '/ist', icon: Dumbbell },
+		{ key: 'attendance', route: '/attendance', icon: FileText }
+	] as const;
+</script>
+
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { asset, resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { BookOpen, Dumbbell, FileText, House, UserRound, Zap } from '@lucide/svelte';
+	import { House, UserRound } from '@lucide/svelte';
 	import LanguageSelector from '#lib/components/LanguageSelector.svelte';
 	import SignOutButton from '#lib/components/SignOutButton.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { useLanguage } from '#lib/i18n/language.svelte.ts';
 
-	let {
-		children,
-		activePage = 'home',
-		preview = false
-	}: {
-		children: Snippet;
-		activePage?: 'home' | 'speed-math' | 'frequency' | 'ist' | 'attendance' | 'bootcamps' | 'courses' | 'enroll';
-		preview?: boolean;
-	} = $props();
+	let { children }: { children: Snippet } = $props();
 	const language = useLanguage();
-	const messages = $derived(language.messages.designPreview);
+	const messages = $derived(language.messages.navigation);
 	const viewer = $derived(page.data.viewer);
-	const homeHref = $derived(preview ? `${resolve('/design-preview')}?direction=focus` : resolve('/'));
-
-	const tools = $derived([
-		{ key: 'math', page: 'speed-math', href: resolve('/speed-math'), icon: Zap, ...messages.tools.math },
-		{ key: 'vocabulary', page: 'frequency', href: resolve('/frequency'), icon: BookOpen, ...messages.tools.vocabulary },
-		{ key: 'ist', page: 'ist', href: resolve('/ist'), icon: Dumbbell, ...messages.tools.ist },
-		{ key: 'attendance', page: 'attendance', href: resolve('/attendance'), icon: FileText, ...messages.tools.attendance }
-	]);
-	const pageTitle = $derived(activePage === 'enroll' ? language.messages.enrollment.navigation : activePage === 'courses' ? language.messages.coursesPreview.label : activePage === 'bootcamps' ? language.messages.bootcamp.title : tools.find((tool) => tool.page === activePage)?.title ?? messages.home);
+	const activeRoute = $derived(page.route.id);
+	const tools = $derived(studentTools.map((tool) => ({
+		...tool, href: resolve(tool.route), ...messages.tools[tool.key]
+	})));
+	const pageTitle = $derived(
+		activeRoute === '/' ? messages.home
+			: activeRoute === '/enroll' ? language.messages.enrollment.navigation
+			: activeRoute === '/courses-preview' ? language.messages.coursesPreview.label
+			: activeRoute === '/bootcamps' ? language.messages.bootcamp.title
+			: activeRoute === '/login' ? language.messages.auth.student.title
+			: tools.find((tool) => tool.route === activeRoute)?.title ?? messages.workspace
+	);
 </script>
 
-<div class="student-shell" data-preview={preview ? '' : undefined}>
+<div class="student-shell">
 	<aside class="sidebar">
-		<a class="brand" href={homeHref} aria-label={language.messages.auth.studentWorkspace}>
+		<a class="brand" href={resolve('/')} aria-label={language.messages.auth.studentWorkspace}>
 			<img src={asset('logo.png')} alt="" width="44" height="44" />
 			<span class="min-w-0">
 				<span class="brand-name">{language.messages.header.brand}</span>
@@ -41,34 +47,34 @@
 			</span>
 		</a>
 		<nav class="workspace-nav" aria-label={language.messages.navigation.label}>
-			<Button href={homeHref} variant="ghost" aria-current={activePage === 'home' ? 'page' : undefined} class="nav-home justify-start gap-3 px-3">
+			<Button href={resolve('/')} variant="ghost" aria-current={activeRoute === '/' ? 'page' : undefined} class="nav-home justify-start gap-3 px-3">
 				<House aria-hidden="true" />{messages.home}
 			</Button>
 			{#each tools as tool, index (tool.key)}
 				{#if index === 0 || index === 2}
 					<p class="nav-group">{index === 0 ? messages.practice : messages.resources}</p>
 				{/if}
-				<Button href={tool.href} variant="ghost" aria-current={activePage === tool.page ? 'page' : undefined} class="justify-start gap-3 px-3 text-left">
+				<Button href={tool.href} variant="ghost" aria-current={activeRoute === tool.route ? 'page' : undefined} class="justify-start gap-3 px-3 text-left">
 					<tool.icon aria-hidden="true" />{tool.title}
 				</Button>
 			{/each}
-			<Button href={resolve('/courses-preview')} variant="ghost" aria-current={activePage === 'courses' ? 'page' : undefined} class="justify-start gap-3 px-3 text-left">
-								<BookOpen aria-hidden="true" />{language.messages.coursesPreview.label}
-							</Button>
-			{#if activePage === 'enroll'}
+			<Button href={resolve('/courses-preview')} variant="ghost" aria-current={activeRoute === '/courses-preview' ? 'page' : undefined} class="justify-start gap-3 px-3 text-left">
+				<BookOpen aria-hidden="true" />{language.messages.coursesPreview.label}
+			</Button>
+			{#if activeRoute === '/enroll'}
 				<Button href={page.url.pathname + page.url.search} variant="ghost" aria-current="page" class="justify-start gap-3 px-3 text-left">
 					<UserRound aria-hidden="true" />{language.messages.enrollment.navigation}
 				</Button>
 			{/if}
 			{#if viewer?.role === 'student'}
-				<Button href={resolve('/bootcamps')} variant="ghost" aria-current={activePage === 'bootcamps' ? 'page' : undefined} class="justify-start gap-3 px-3 text-left">
+				<Button href={resolve('/bootcamps')} variant="ghost" aria-current={activeRoute === '/bootcamps' ? 'page' : undefined} class="justify-start gap-3 px-3 text-left">
 					<FileText aria-hidden="true" />{language.messages.bootcamp.title}
 				</Button>
 			{/if}
 		</nav>
 		<div class="sidebar-footer">
 			<span class="brand-mark" aria-hidden="true">M<span> / </span>M</span>
-			<p>{messages.footer}</p>
+			<p>{language.messages.header.tagline}</p>
 		</div>
 	</aside>
 
@@ -76,18 +82,18 @@
 		<header class="workspace-header">
 			<p class="text-sm text-muted-foreground">{messages.workspace}<span class="mx-3 opacity-40" aria-hidden="true">/</span><span class="text-foreground">{pageTitle}</span></p>
 			<div class="header-controls">
-				{#if !preview}<LanguageSelector />{/if}
+				<LanguageSelector />
 				<div class="account">
 					<svelte:element
-						this={!preview && !viewer ? 'a' : 'div'}
+						this={!viewer ? 'a' : 'div'}
 						class="student-identity"
-						href={!preview && !viewer ? resolve('/login') : undefined}
-						role={!preview && !viewer ? undefined : 'group'}
-						aria-label={!preview && !viewer ? language.messages.auth.student.title : viewer ? language.messages.auth.accountLabel : messages.studentProfile}
+						href={!viewer ? resolve('/login') : undefined}
+						role={!viewer ? undefined : 'group'}
+						aria-label={viewer ? language.messages.auth.accountLabel : language.messages.auth.student.title}
 					>
 						<span class="student-avatar" aria-hidden="true"><UserRound size={20} strokeWidth={1.5} /></span>
 						<div class="student-details">
-							<span class="student-name">{viewer?.name ?? messages.student}</span>
+							<span class="student-name">{viewer?.name ?? language.messages.header.student}</span>
 							<span class="student-description">{viewer?.email ?? language.messages.header.brandDescription}</span>
 						</div>
 					</svelte:element>
@@ -101,13 +107,13 @@
 			</div>
 		</header>
 
-		<div class="workspace-content">
+		<main id="main-content" tabindex="-1" class="workspace-content">
 			{@render children()}
 			<footer class="workspace-footer">
 				<span>{language.messages.header.brandLabel}</span>
-				<span>{messages.footer}</span>
+				<span>{language.messages.header.tagline}</span>
 			</footer>
-		</div>
+		</main>
 	</div>
 </div>
 
@@ -115,12 +121,11 @@
 	.student-shell {
 		display: grid;
 		grid-template-columns: 15.5rem minmax(0, 1fr);
-		min-height: 52rem;
+		min-height: 100dvh;
 		background: var(--background);
 		color: var(--foreground);
 	}
 
-	.student-shell:not([data-preview]) { min-height: 100dvh; }
 
 	.sidebar {
 		display: flex;
@@ -182,7 +187,6 @@
 	}
 
 	@media (max-width: 40rem) {
-		.student-shell[data-preview] { min-height: auto; }
 		.workspace-header, .workspace-content { padding: 1.25rem; }
 		.workspace-header { gap: 0.75rem; }
 		.workspace-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }

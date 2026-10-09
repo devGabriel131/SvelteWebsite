@@ -1,5 +1,5 @@
 <script lang="ts">
-	export type IconName = 'overview' | 'students' | 'payments' | 'invitations' | 'reports' | 'events' | 'arrow' | 'plus' | 'search' | 'close' | 'check' | 'copy' | 'upload' | 'edit' | 'pulse' | 'shield' | 'logout' | 'target';
+	export type IconName = 'overview' | 'students' | 'payments' | 'invitations' | 'reports' | 'events' | 'arrow' | 'plus' | 'close' | 'check' | 'copy' | 'upload' | 'shield' | 'logout';
 	let { name, size = 20 }: { name: IconName; size?: number } = $props();
 </script>
 
@@ -18,16 +18,12 @@
 		<rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 11h18M8 15h2M14 15h2" />
 	{:else if name === 'arrow'}<path d="M5 12h14M14 7l5 5-5 5" />
 	{:else if name === 'plus'}<path d="M12 5v14M5 12h14" />
-	{:else if name === 'search'}<circle cx="10.5" cy="10.5" r="6.5" /><path d="M16 16l5 5" />
 	{:else if name === 'close'}<path d="M6 6l12 12M18 6L6 18" />
 	{:else if name === 'check'}<path d="M5 12l4 4L19 6" />
 	{:else if name === 'copy'}<rect x="8" y="8" width="12" height="13" rx="2" /><path d="M16 8V3H3v13h5" />
 	{:else if name === 'upload'}<path d="M12 16V3M7 8l5-5 5 5M3 16v5h18v-5" />
-	{:else if name === 'edit'}<path d="M16 3l5 5M3 21l5-1L21 7l-5-5L3 15z" />
-	{:else if name === 'pulse'}<path d="M2 12h5l3-8 4 16 3-8h5" />
 	{:else if name === 'shield'}<path d="M12 2l8 4v6c0 5-8 10-8 10S4 17 4 12V6zM8 12l3 3 5-6" />
 	{:else if name === 'logout'}<path d="M9 3H3v18h6M10 12h11M17 8l4 4-4 4" />
-	{:else if name === 'target'}<circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="3" /><path d="M12 1v4M12 19v4M1 12h4M19 12h4" />
 	{/if}
 </svg>
 

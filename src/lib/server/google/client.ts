@@ -34,11 +34,11 @@ const tokenUrl = 'https://oauth2.googleapis.com/token';
 const defaultTimeoutMs = 30_000;
 const tokenExpiryBufferMs = 60_000;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+export function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function isNonblank(value: unknown): value is string {
+export function isNonblank(value: unknown): value is string {
 	return typeof value === 'string' && value.trim().length > 0;
 }
 

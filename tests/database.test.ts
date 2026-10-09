@@ -2,9 +2,9 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { eq, inArray } from 'drizzle-orm';
 import type { TransactionSql } from 'postgres';
-import { createDatabase, type DatabaseConnection } from '../src/lib/server/db/connection';
+import type { DatabaseConnection } from '../src/lib/server/db/connection';
 import { students, type NewStudent } from '../src/lib/server/db/schema';
-import { assertLocalDatabaseUrl, verifyLocalDatabase } from '../scripts/db/local-target';
+import { openLocalDatabase, verifyLocalDatabase } from '../scripts/db/local-target';
 import { migrateDatabase } from '../scripts/db/migrate';
 import { fictitiousStudents, seedStudents } from '../scripts/db/seed';
 
@@ -15,9 +15,7 @@ describeDatabase('isolated PostgreSQL student schema', () => {
 	let connection: DatabaseConnection;
 
 	beforeAll(async () => {
-		const target = assertLocalDatabaseUrl(databaseUrl!, 'test');
-		connection = createDatabase(databaseUrl!);
-		await verifyLocalDatabase(connection, target);
+		connection = await openLocalDatabase(databaseUrl, 'test');
 		await migrateDatabase(connection.db);
 	}, 30000);
 
@@ -43,16 +41,16 @@ describeDatabase('isolated PostgreSQL student schema', () => {
 			lastName: 'Del Río de Prueba',
 			email: `db-test-${randomUUID()}@example.test`,
 			classType: 'basic',
-			isActive: true,
+			status: 'active',
 			dateOfBirth: null,
 			gender: null,
 			...overrides
 		};
 		const [student] = await transaction`
 			INSERT INTO public.students
-				(first_name, last_name, email, class_type, is_active, date_of_birth, gender)
+				(first_name, last_name, email, class_type, status, date_of_birth, gender)
 			VALUES (${values.firstName}, ${values.lastName}, ${values.email}, ${values.classType},
-				${values.isActive}, ${values.dateOfBirth}, ${values.gender})
+				${values.status}, ${values.dateOfBirth}, ${values.gender})
 			RETURNING *, created_at::text AS creation_text, updated_at::text AS update_text
 		`;
 		return student;
@@ -80,7 +78,7 @@ describeDatabase('isolated PostgreSQL student schema', () => {
 			expect(student.id).toMatch(/^[0-9a-f-]{36}$/);
 			expect(student.first_name).toBe('María Elena');
 			expect(student.last_name).toBe('Del Río de Prueba');
-			expect(student.is_active).toBe(true);
+			expect(student.status).toBe('active');
 			expect(student.date_of_birth).toBeNull();
 			expect(student.gender).toBeNull();
 			expect(student.created_at).not.toBeNull();
@@ -109,7 +107,7 @@ describeDatabase('isolated PostgreSQL student schema', () => {
 	}
 
 	// postgres.js queries are lazy; convert them to promises before Bun's rejection matcher.
-	for (const column of ['first_name', 'last_name', 'email', 'class_type', 'is_active', 'created_at'] as const) {
+	for (const column of ['first_name', 'last_name', 'email', 'class_type', 'status', 'created_at'] as const) {
 		test(`requires ${column}`, async () => {
 			await withRollback(async (transaction) => {
 				const student = await insertRoster(transaction);
@@ -125,7 +123,7 @@ describeDatabase('isolated PostgreSQL student schema', () => {
 	test('email uniqueness includes inactive profiles and compares case-insensitively', async () => {
 		await withRollback(async (transaction) => {
 			const email = `MixedCase-${randomUUID()}@Example.Test`;
-			const student = await insertRoster(transaction, { email, isActive: false });
+			const student = await insertRoster(transaction, { email, status: 'inactive' });
 			expect(student.email).toBe(email);
 			await expect(insertRoster(transaction, { email: email.toLowerCase() })).rejects.toMatchObject({
 				code: '23505',
@@ -218,20 +216,31 @@ describeDatabase('isolated PostgreSQL student schema', () => {
 		});
 	});
 
-	test('deactivation and reactivation preserve the same roster identity and fields', async () => {
+	test('status is the sole lifecycle field and preserves roster identity and fields', async () => {
 		await withRollback(async (transaction) => {
 			const student = await insertRoster(transaction, { dateOfBirth: '2000-01-01', gender: 'female' });
-			for (const isActive of [false, true]) {
+			for (const status of ['inactive', 'invited', 'active']) {
 				const [updated] = await transaction`
-					UPDATE public.students SET is_active = ${isActive} WHERE id = ${student.id} RETURNING *
+					UPDATE public.students SET status = ${status} WHERE id = ${student.id} RETURNING *
 				`;
 				expect(updated.id).toBe(student.id);
 				expect(updated.first_name).toBe(student.first_name);
 				expect(updated.email).toBe(student.email);
 				expect(updated.date_of_birth).toEqual(student.date_of_birth);
 				expect(updated.gender).toBe(student.gender);
-				expect(updated.is_active).toBe(isActive);
+				expect(updated.status).toBe(status);
 			}
+			expect(await transaction`
+				SELECT column_name FROM information_schema.columns
+				WHERE table_schema = 'public' AND table_name = 'students' AND column_name = 'is_active'
+			`).toHaveLength(0);
+			expect(await transaction`
+				SELECT tgname FROM pg_trigger
+				WHERE tgrelid = 'public.students'::regclass AND tgname = 'students_sync_status'
+			`).toHaveLength(0);
+			await expect(Promise.resolve(transaction`
+				UPDATE public.students SET status = 'unknown' WHERE id = ${student.id}
+			`)).rejects.toMatchObject({ code: '23514', constraint_name: 'students_status_valid' });
 		});
 	});
 
@@ -242,16 +251,16 @@ describeDatabase('isolated PostgreSQL student schema', () => {
 	});
 
 	test('seeding is idempotent and never overwrites existing fixture records', async () => {
-		const inserted = await seedStudents(databaseUrl!);
+		const inserted = await seedStudents(databaseUrl);
 		try {
 			if (inserted.length) {
-				await connection.db.update(students).set({ isActive: false }).where(eq(students.id, inserted[0].id));
+				await connection.db.update(students).set({ status: 'inactive' }).where(eq(students.id, inserted[0].id));
 			}
 			const before = await connection.db.select().from(students).where(
 				inArray(students.id, fictitiousStudents.map((student) => student.id!))
 			);
 			expect(before).toHaveLength(fictitiousStudents.length);
-			expect(await seedStudents(databaseUrl!)).toHaveLength(0);
+			expect(await seedStudents(databaseUrl)).toHaveLength(0);
 			const after = await connection.db.select().from(students).where(
 				inArray(students.id, fictitiousStudents.map((student) => student.id!))
 			);

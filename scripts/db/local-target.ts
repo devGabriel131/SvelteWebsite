@@ -1,5 +1,5 @@
 import type { DatabaseConnection } from '../../src/lib/server/db/connection';
-import { requireDatabaseUrl } from '../../src/lib/server/db/connection';
+import { createDatabase, requireDatabaseUrl } from '../../src/lib/server/db/connection';
 
 type LocalDatabaseTarget = { database: string; username: string; port: string };
 
@@ -15,7 +15,7 @@ const testTarget: LocalDatabaseTarget = {
 };
 
 export function assertLocalDatabaseUrl(
-	databaseUrl: string,
+	databaseUrl: string | undefined,
 	purpose: 'seed' | 'test'
 ): LocalDatabaseTarget {
 	if (
@@ -55,5 +55,20 @@ export async function verifyLocalDatabase(
 	`;
 	if (identity.database !== target.database || identity.username !== target.username) {
 		throw new Error('Refusing to modify a database whose actual identity differs from its local URL.');
+	}
+}
+
+export async function openLocalDatabase(
+	databaseUrl: string | undefined,
+	purpose: 'seed' | 'test'
+): Promise<DatabaseConnection> {
+	const target = assertLocalDatabaseUrl(databaseUrl, purpose);
+	const connection = createDatabase(databaseUrl);
+	try {
+		await verifyLocalDatabase(connection, target);
+		return connection;
+	} catch (cause) {
+		try { await connection.client.end(); }
+		finally { throw cause; }
 	}
 }

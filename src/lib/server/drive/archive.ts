@@ -5,7 +5,7 @@ export type ReportFiles = Record<Language, { bytes: Uint8Array; filename: string
 export type ReportArchive = (files: ReportFiles, signal?: AbortSignal) => Promise<void>;
 export type GetReportArchive = () => ReportArchive | null;
 
-export function createReportArchive(client: DriveClient, parentFolderId: string): ReportArchive {
+export function createReportArchive(client: Pick<DriveClient, 'upload'>, parentFolderId: string): ReportArchive {
 	return async (files, signal) => {
 		// Pair both languages without overwriting another submission with the same filename.
 		const archiveId = crypto.randomUUID();

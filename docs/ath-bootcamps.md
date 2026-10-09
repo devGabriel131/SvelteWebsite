@@ -25,7 +25,7 @@ These sources distinguish customer **confirmation** from the merchant's subseque
 - REST combines expired and cancelled payments into `ecommerceStatus: "CANCEL"`. This adapter returns `cancelled` for both, never an inferred `expired`. No authoritative expiry timestamp is documented, so `expiresAt` is omitted. A local countdown cannot establish settlement or safely permit a replacement charge.
 - No webhook signature/header, verification key, replay defense, delivery ordering, retry schedule, query consistency guarantee, rate limit, creation idempotency key, or authorization idempotency guarantee is documented in these sources. Do not invent them. Ask Evertec about production limits and retry/reconciliation procedures.
 
-## Exact parent-facing interface
+## Raw adapter API
 
 ```ts
 createAthClient(
@@ -41,7 +41,6 @@ client.create({
 }): Promise<{
   reference: string;          // provider ecommerceId (ticket UUID), NOT referenceNumber
   authorizationToken: string; // secret auth_token returned by /payment
-  expiresAt?: Date;          // currently omitted: not documented in the response
 }>
 
 client.verify({
@@ -52,15 +51,17 @@ client.verify({
   amountCents,
   authorize?: boolean, // default true; false disables the debit POST for reconciliation
   beforeAuthorize?: () => Promise<void> // awaited immediately before an actual debit POST
-}): Promise<{
-  status: 'pending' | 'completed' | 'cancelled' | 'expired' | 'refunded';
-  transactionId?: string; // provider referenceNumber; always present for completed/refunded
-}>
+}): Promise<
+  | { status: 'completed' | 'refunded'; transactionId: string }
+  | { status: 'pending' | 'cancelled' }
+>
 ```
 
-**Required change from the proposed interface:** persist the returned `authorizationToken` alongside `reference`, and pass it to `verify`. Current REST requires this transaction capability to authorize the ticket. Hiding it in a process-local map would break across restarts/workers; packing it into a public reference would leak a debit capability. Store it as a protected/encrypted server secret, never in page data, logs, analytics, URLs, browser storage or webhook replies. The token is opaque; the adapter does not decode an unverified JWT or derive expiry from it.
+Persist `authorizationToken` alongside `reference` and supply it to `verify`. The REST transaction capability must survive restarts/workers; a process-local map loses it and a public reference leaks it. Store it encrypted server-side, never in page data, logs, analytics, URLs, browser storage, or webhook replies. The token is opaque; do not decode an unverified JWT or infer expiry. `AthPayment` has no expiry field; only completed/refunded verification outputs carry the required nonblank, control-free provider transaction ID. Pending/cancelled outputs carry none; unknown statuses are rejected.
 
-`authorize: false` is an optional extension for read-only reconciliation. `beforeAuthorize` is invoked only after a matching `CONFIRM` and immediately before `/authorization`; its rejection prevents the debit POST. It is not invoked for `OPEN`, a receipt recovered by Search, or read-only reconciliation. The durable service supplies it to commit authorization intent exactly once. `verify` is otherwise **not read-only**: it may debit a confirmed payment. All inputs to `verify` must be loaded from the durable server attempt, not copied from a browser or webhook. Callers may construct a new client on every request; there is no required in-memory state. Do not pass an injected fetch implementation that automatically retries POSTs.
+Raw `verify` defaults `authorize` to **true** and can debit a confirmed ticket. `authorize: false` disables that POST for read-only reconciliation. `beforeAuthorize` runs only after matching `CONFIRM`, immediately before `/authorization`; rejection prevents debit. It does not run for `OPEN`, recovered Search receipts, or read-only verification. The durable service commits its authorization intent there. Load every input from the stored server attempt, never browser/webhook data. The adapter is stateless; an injected fetch must not retry POSTs. One create invocation makes one request, not one request per UUID globally—calling it again can create another ticket.
+
+`AthError` exposes sanitized `kind`, optional `operation`, optional numeric HTTP `status`, and `outcomeUnknown`. Kinds are `configuration`, `bad_input`, `transport`, `provider`, `protocol`, `mismatch`, and `ambiguous`. Creation/authorization failures, and search failure after debit in that call, conservatively mark the outcome unknown. **False is not proof that no earlier call debited.** Never log original fetch errors, response bodies, tokens, or payer phone; no raw `cause` is attached and no retry policy is hidden.
 
 ### Metadata and payer identity
 
@@ -72,7 +73,7 @@ client.verify({
 
 ## Wire protocol
 
-All requests use HTTPS, POST, `Accept: application/json`, `Content-Type: application/json`, disabled redirects and no caching. Endpoints are fixed in the adapter; no request or webhook controls a URL. The merchant private token is sent only in Search's JSON body. Each HTTP request, including its body read, has a 15-second timeout and no automatic retries.
+All requests use HTTPS POST, JSON Accept/Content-Type, disabled redirects, and no caching. Fixed adapter URLs cannot be selected by request/webhook input. Merchant private token appears only in Search's JSON body. Each request/body read has a 15-second timeout and no automatic retry; verification can make four requests, roughly **60 seconds plus database work**, so it is not a browser-lifetime fulfillment guarantee.
 
 | Step | Endpoint | Authentication and body | Accepted evidence |
 | --- | --- | --- | --- |
@@ -93,6 +94,7 @@ const service = createPaymentService(db, athClient, encryptionKey);
 
 service.start(registrationId, amountCents, phone): Promise<PaymentState>
 service.reconcile(attemptId): Promise<PaymentState | null>
+service.reconcileLatest(registrationId): Promise<void>
 service.drain(eventId?, limit?): Promise<PaymentState[]>
 service.notify({ attemptId?, reference? }): Promise<void>
 
@@ -107,58 +109,49 @@ type PaymentState = {
 
 ### Checkout and authorization guarantees
 
-- `start` validates the amount, UUID and normalized ATH phone **before any database work**. It looks up the association, then locks **event → student → registration**, revalidating the association, active state, 21+ eligibility, approved/open registration, and deadlines using the database clock after locking. The saved waiver must identify the event, but may retain an older immutable revision; `letterChoice` must be a boolean (declining a letter is valid). The parent owns validated document creation and authenticated, active-student/registration ownership checks; the service does not accept a student identity or authenticate callers.
-- Pass the root `Database` connection, not an enclosing transaction: the attempt and authorization-intent commits must be durable before network side effects. Other registration/event writers should use the same lock order. Event edits close registration until reopened; they do not invalidate or overwrite previously submitted waivers. Once an attempt exists, its amount and association are immutable; later event closure does not stop settlement reconciliation.
+- `start` validates amount, UUID, and normalized phone **before database work**; discovers immutable associations, then locks **event → student → registration**. After waiting, database-clock checks revalidate association, `students.status='active'`, 21+ age, open registration, and deadlines. Waiver must identify this event but may preserve an older revision; `letterChoice` must be boolean (declining is valid). Routes authenticate and resolve canonical owned registrations before service calls; the service does not accept a student identity or authenticate callers.
+- Pass the root `Database`, not an enclosing transaction: attempt/authorization-intent commits must precede network effects. Other event/registration writers use the same lock order. Edits preserve open/closed state unless either old/new cutoff has passed, never reopen implicitly, and never overwrite signed evidence. Once created, an attempt's amount/association stays immutable; later closure does not stop reconciliation.
 - An existing non-cancelled attempt is returned unchanged; a $15 deposit never permits a $15 balance or $30 replacement checkout. The balance is collected outside this website checkout. The schema's partial unique index is the cross-worker backstop. A genuinely verified cancellation before any authorization can free the slot; an ambiguous/paid/refunded attempt cannot.
-- The `creating` attempt and creation lease are committed **before** the remote request. A failed request/token save becomes `uncertain`; a process crash leaves a durable `creating` attempt which reconciliation marks uncertain after its lease expires. No code path retries creation. Losing both the provider response and token requires manual provider reconciliation, not another ticket. If the database is unavailable, the service throws a sanitized storage error and the existing durable attempt still blocks a replacement.
+- Commit `creating` attempt/creation lease **before** its single remote create. Ambiguous request/token-save outcome becomes uncertain and blocks replacement; a crash is handled after lease expiry. No path retries creation. Losing response/token requires operator/Evertec investigation: metadata Search may locate eventual settlement but cannot prove a pending ticket never existed, and no documented ticket-recovery API exists. Database failure returns sanitized storage failure while the durable attempt still blocks checkout.
 - Reconciliation claims a two-minute lease using one conditional UPDATE. Lease timestamps use database-generated millisecond precision, so the returned timestamp is an exact CAS fence. Every result/intent write requires that same lease and an unexpired database-clock deadline. A stale worker cannot overwrite a newer worker's result; no extra lease-token schema column is needed.
 - The async `beforeAuthorize` hook commits `authorizationStarted = true` and `status = 'uncertain'` before the debit request. A losing CAS or failed persistence rejects the hook. An `OPEN` poll never marks this flag. Future workers always use `authorize: false` once marked, including crashes between the commit and the provider call. **This is deliberately at-most-once authorization intent, not exactly-once payment:** a crash before the request may leave an unpaid confirmed ticket requiring operator intervention. Do not clear the marker or automatically retry authorization.
-- Validated `completed`/`refunded` receipts set the provider `transactionId` on that same ledger row. Its global unique constraint prevents crediting the receipt twice; unique conflicts leave the uncredited attempt uncertain. No mutable paid total is incremented. The parent derives credit using `SUM(amount_cents) WHERE status = 'completed'`. Any verified positive refund removes that entire attempt from credit, including partial refunds; reconcile the exact financial amounts separately.
-- Lookup outages or stale pending/cancellation responses **preserve** existing completed/refunded status and set a safe error code. `PaymentState.uncertain` reports either uncertain status or a retained error flag. A refunded row never becomes completed again. After authorization intent, pending/cancel/expiry is uncertain rather than permission to start over. The service treats already-cancelled attempts as terminal and does not reopen them from unsigned notifications; exceptional late settlement of such a ticket requires manual review.
+- Completed/refunded receipts set the provider `transactionId` on that ledger row; global uniqueness prevents cross-registration/attempt double credit and leaves conflicts uncertain. `dailyTransactionId` resets and is **not** a uniqueness key; `ecommerceId` is the ticket, not settlement. Credit is derived only from completed amounts, never a mutable paid counter. Any verified positive refund removes the whole attempt from credit, including partial refunds; exact refund accounting is separate.
+- Lookup failures and stale pending/cancelled responses preserve completed/refunded state with a safe error flag. `PaymentState.uncertain` includes either uncertain status or retained error. Refunded never becomes completed again. After authorization intent, pending/cancelled is uncertain, not permission to charge again. Already-cancelled attempts are terminal even after unsigned notifications; exceptionally late settlement requires merchant/operator review. Pending/errors/cancelled/refunded never fulfill registration.
 
 ### Notification and worker contract
 
 - `notify` never calls ATH, creates an attempt, changes credentials, or credits payment. Valid hints only set `reconcileRequested = true` on an existing non-cancelled row. If both hints are supplied, **both must match the same row**. Empty/malformed/unknown hints are no-ops. `reference` here means the checkout `ecommerceId`, not a refund or settled transaction ID. The response does not disclose whether an attempt exists.
 - Notification writes coalesce and never move `nextCheckAt` forward or steal a lease. A request arriving during verification survives its result write. The application listener bounds actual request bytes, applies a database-backed ingress rate limit, and awaits durable enqueue before acknowledgement.
 - `reconcile(id)` attempts a due claim, otherwise returns safe current state (or null for a missing attempt). It cannot bypass a cooldown. Paid/refunded rows use read-only verification. Invalid IDs throw `PaymentError('invalid_input')`.
+- `reconcileLatest(registrationId)` validates the ID, selects the latest attempt by `createdAt DESC`, and calls `reconcile` if one exists. The student route first resolves `ownedRegistration(userId, eventId, false)`. Raw selector failure becomes fixed native `Error('Payment lookup failed.')` with no cause, so HTTP maps it to storage; actual reconcile `PaymentError` retains its existing payment/feature classification.
 - `drain()` processes due creating/pending attempts, recoverable uncertain attempts with saved credentials, and explicitly requested completed/refunded attempts. A lost-creation attempt without credentials is not repeatedly polled after its one failed reconciliation unless explicitly requested again.
 - **`drain(eventId, limit)` is an authenticated-admin refund sweep:** it queues completed/refunded rows for that event as well as ordinary unfinished work, without bypassing due dates or active leases. Do not expose this to unsigned webhooks or invoke it as the normal background polling path.
 - Checks have a 30-second cooldown following an ordinary result; uncertainty/errors use five minutes. These are application limits, **not provider-published allowances**. Each call acquires a durable lease, so browser polling and webhook jobs cannot each start another verification inside the interval. In-progress provider work is not assumed cancelled merely because a lease expires; stale results are fenced and durable intent prevents a second debit.
-- `drain` defaults to 10 attempts and accepts integer limits from 1 through 50, processing sequentially. Run it in a durable scheduled worker, **not inside the webhook request**. A verification can use about 60 seconds plus database time, so a batch may exceed a web-request budget; choose a smaller limit appropriate to the worker. Configure database statement/lock timeouts and monitor queue age, unresolved attempts, duplicate-transaction conflicts and capability errors. No timer, scheduler, route or retry daemon is installed by this module.
+- `drain` defaults to 10, accepts integer limits 1–50, and processes sequentially. It is durable worker work, not webhook-request authorization. The application `/api/bootcamps/work` runs smaller bounded batches; [bootcamp background setup](bootcamps.md#background-processing) owns scheduler/header/execution-budget instructions. Configure database statement/lock timeouts and monitor queue age, unresolved attempts, duplicate receipts, and capability errors. No provider polling allowance or scheduler is inferred.
 - `PaymentError` has fixed, non-sensitive messages and a `code` (`configuration`, `invalid_input`, `not_found`, `unavailable`, `prerequisites`, `ineligible`, `storage`, `token`, `lease_lost`). Provider failures normally return an uncertain state after recording a whitelisted error code. Neither raw SQL/provider errors nor their causes are logged, returned or stored.
 
 ### Encryption and launch constraints
 
 `createPaymentTokenVault(key)` exposes `seal(token, context)` and `open(ciphertext, context)`; `context` is `{ id, registrationId, amountCents, reference }`. The service uses AES-256-GCM, a fresh 12-byte nonce, a 16-byte authentication tag and versioned base64url encoding in the existing `authorizationToken` text column. Authenticated additional data binds every ciphertext to that exact attempt, amount, registration and ticket. Swapped/tampered tokens or wrong keys fail closed before contacting ATH. The phone is never stored by this service.
 
-Set **`BOOTCAMP_PAYMENT_KEY`** to a securely generated, private 32-byte key encoded as 64 hex characters; keep it separate from the database and ATH credentials and identical across workers. Back it up securely. Losing/replacing it makes existing capabilities unreadable. There is no automatic key rotation or plaintext-token fallback: an intentional rotation needs a controlled old-key/new-key re-encryption migration while workers are stopped. Keep schema constraints/migrations in place before enabling the service; no schema changes were needed or made here.
+Set **`BOOTCAMP_PAYMENT_KEY`** to a private random 32-byte key encoded as 64 hex characters, separate from the database/ATH credentials and identical across workers. Back it up securely: loss/replacement makes existing capabilities unreadable. No automatic rotation/plaintext fallback exists; controlled re-encryption needs old/new keys while workers are stopped. Keep schema constraints/migrations applied before launch.
 
-**Launch gates remain:** resolve the official API documentation gaps above; apply the migration to the intended application database; configure the private environment and schedule the authenticated worker endpoint described in `bootcamps.md`. The application now includes those routes and guards, and `tests/database-bootcamp.test.ts` also validates real isolated PostgreSQL concurrency/rollback behavior. Adapter/service unit tests continue to use mocked providers. No live ATH request was made. Separately approved real-money provider certification is still required.
+**Launch requires separate approval:** resolve official protocol gaps, configure private runtime values, apply migrations, schedule the authenticated worker, and obtain merchant/provider certification through an authorized real-money check. Application routes/tests are implemented, but synthetic transports and isolated PostgreSQL are not live ATH verification.
 
-## Durable attempts and duplicate-charge safety (integration responsibilities)
-
-The service implements the persistence/lease/credit rules below. Parent routes, workers, schema migrations, operational reconciliation and authentication remain responsible for using it consistently rather than calling the raw adapter for checkout.
-
-1. Authorize the signed-in user for the registration/event, compute the payable amount server-side, acquire a durable lock, and commit one attempt UUID plus expected amount/registration **before** calling `create`. Serialize creation across browser retries, tabs, workers and webhook jobs. Enforce one unresolved attempt per payable obligation.
-2. Call `create` once and durably store both returned values with the attempt. Do not let response loss or a database write failure create a fresh attempt automatically. ATH documents **no creation idempotency key**; `metadata1` is correlation only. The adapter makes exactly one creation request per invocation, **not one per UUID globally**. Calling `create` again can create a second ticket.
-3. If creation has an ambiguous outcome (timeout, connection loss, malformed response, provider error, or persistence failure), mark it for reconciliation and block new checkout for that obligation. If the reference/token was lost there is no documented ticket-recovery API in these sources. Escalate to an operator/Evertec; do not guess that a timeout means no charge or no ticket. Merchant search by metadata can help an operator locate an eventual settled payment, but cannot prove a pending ticket never existed.
-4. Serialize `verify` per attempt; do not overlap polling and webhook authorization. A verification may make four requests (up to roughly 60 seconds total). Keep polling bounded, rate-limited and durable rather than tying fulfillment to an open browser. No provider polling interval is documented. Do not automatically restart `verify` as a debit-capable operation after an uncertain authorization; use `authorize: false` for reconciliation. Escalate a persistently confirmed/ambiguous ticket rather than assuming the authorization POST is idempotent.
-5. Credit only `completed` with its `transactionId`. In one database transaction, enforce **UNIQUE(provider, transactionId)** across all registrations/attempts, bind it to the matching attempt/event/registration/expected amount, and apply the credit once. Repeated `completed` results/webhook replays are normal and must be no-ops, not repeat credits. `dailyTransactionId` resets and is not a uniqueness key; `ecommerceId` identifies a ticket, not the settled transaction. The stateless adapter rejects multiple search matches but cannot enforce global database uniqueness.
-6. `pending`, all exceptions, `cancelled`, `expired`, and `refunded` do not fulfill a registration. Once credited, a stale pending/cancellation event must not overwrite a settled ledger entry. Reconcile refunds and late settlement under the same lock with a separately defined accounting policy. Never reinterpret a network error as cancelled or automatically offer another charge.
-
-`AthError` exposes sanitized `kind`, `operation`, optional numeric HTTP `status`, and `outcomeUnknown`. Categories are `configuration`, `bad_input`, `transport`, `provider`, `protocol`, `mismatch`, and `ambiguous`. Errors from creation/authorization, and search errors after an authorization in the same call, are conservatively marked `outcomeUnknown: true`. **False is not a global guarantee that no previous debit occurred**: an earlier verification call may already have authorized the ticket. Never log the original fetch error, provider body, token or payer phone. Upstream errors have no attached raw `cause`. No retry policy is hidden in this adapter.
 
 ## Private operational configuration
 
-The parent integration must declare/read these as private server runtime variables and pass them explicitly:
+`src/env.ts` declares private runtime values; bootcamp runtime supplies them to validated constructors:
 
 | Variable | Purpose |
 | --- | --- |
 | `ATH_PUBLIC_TOKEN` | Public identifier of the receiving ATH Business merchant. |
 | `ATH_PRIVATE_TOKEN` | Private API credential for that same merchant, used by transaction Search and operational webhook subscription. |
-| `BOOTCAMP_PAYMENT_KEY` | Private 32-byte AES key encoded as 64 hex characters, supplied as the third `createPaymentService` argument. |
+| `BOOTCAMP_PAYMENT_KEY` | Encryption key for `createPaymentService`; encoding/loss/rotation policy is owned by the encryption section above. |
+| `BOOTCAMP_PAYMENTS_ENABLED` | Exact `true` expresses operator launch intent; absence/other values keep checkout disabled. |
+| `BOOTCAMP_WORKER_SECRET` | Private worker bearer secret, at least 32 characters; scheduler instructions belong to [bootcamp setup](bootcamps.md#background-processing). |
 
-Both must belong to the intended active merchant. Partial/blank configuration must disable checkout or fail configuration, never enable a simulated success. Keep credentials in private runtime secret configuration, not committed files or `PUBLIC_` variables. This change deliberately does not modify environment declarations or routes. Sending a payment request shares the payer phone, amount and opaque registration/attempt IDs with ATH Móvil; no student name/email is sent by this adapter.
+Both ATH tokens must belong to the intended active merchant. Payment assembly is gated by exact enable flag plus worker-secret length ≥32; only inside that gate are ATH client/vault/payment constructors attempted in a payment-only try/catch. Missing inputs are passed as empty strings for constructor validation, not weaker duplicate prechecks. Invalid credentials/key disable **payments only**, not admin pages or Drive backup; `paymentEnabled` derives from a nonnull service. This is configuration isolation, not an upstream health check or simulated payment success. Keep every value server-private, never committed/`PUBLIC_`. Checkout sends payer phone, amount, and opaque registration/attempt IDs to ATH, not student name/email.
 
 ## Webhooks: untrusted asynchronous wakeups only
 
@@ -174,14 +167,13 @@ Use ATH Móvil Business → Settings → Development → Webhooks, authenticate 
 
 For this integration subscribe to the three e-commerce events and `refundSentEvent`; ordinary payment/donation events are not bootcamp checkout receipts. Supply credentials privately and do not log the subscription body. This adapter neither registers a listener nor validates subscription delivery.
 
-### Listener/worker contract
+### Listener evidence and delivery limits
 
-- Bound JSON body size, validate shape, rate-limit, and durably enqueue/coalesce reconciliation for an **existing server attempt** before acknowledging receipt. Unknown/malformed notifications must never create attempts, change expected prices, replace saved references/tokens or cause fulfillment.
-- Treat metadata/ecommerce IDs only as lookup hints. Load the trusted reference, authorization token, immutable amount, event/registration and attempt ID from storage, then run `verify`. Do not pass webhook-reported totals, status or reference numbers through as verified state. A webhook claiming `COMPLETED`, `expired`, `REFUND` or `simulated` proves nothing.
-- Replayed/out-of-order notifications must converge on the same locked, idempotent ledger operation. The adapter has no webhook parser or payload-to-paid path.
-- Completed/cancelled examples include `ecommerceId`; the older expired example does not. Cancellation and expiry events are documented for **web** payments, not iOS/Android integration flows. Do not rely on notifications alone: retain bounded server-side polling and an operational reconciliation process.
-- The documented refund event identifies a **refund's** reference and may have empty metadata; it does not guarantee the original payment's ID. Never credit that reference or blindly map it to an original attempt. Recheck known original payments or use manual reconciliation when no safe association is available.
-- No signature, retry schedule, replay ID or ordering guarantee is documented. Confirm delivery/retention/rate limits with Evertec. Client/browser redirects and callbacks have the same lack of settlement authority.
+The installed `/api/bootcamps/ath/webhook` bounds/rate-limits JSON and only coalesces existing attempt hints through `notify`; [notification/service contract](#notification-and-worker-contract) owns durable writes and worker reconciliation. Browser callbacks and every reported status/amount/payer identity remain untrusted. Replay/out-of-order wakeups cannot create attempts, replace trusted expectations/capabilities, or grant credit.
+
+- Completed/cancelled examples include `ecommerceId`; the older expired example does not. Cancellation/expiry notifications are documented for **web** payments, not iOS/Android. Server polling/reconciliation must remain independent of delivery.
+- Refund events identify a **refund's** reference and may have empty metadata, not a guaranteed original payment ID. Never credit/map that reference blindly; reconcile known original attempts or investigate manually.
+- Official sources provide no signature, delivery/retry/order guarantee, or replay identifier. Confirm operational limits with Evertec. Webhook subscription and delivery have not been established merely by implementing a listener.
 
 ## Validation
 
@@ -189,4 +181,4 @@ For this integration subscribe to the three e-commerce events and `refundSentEve
 bun test tests/bootcamp-ath.test.ts tests/bootcamp-payments.test.ts
 ```
 
-The suite injects every HTTP implementation and covers exact request/authentication shapes, amount/metadata/ID binding, resumable authorization, private-token verification, third-party payers, refunds, unsupported responses, duplicate matches, cancellation/expiry ambiguity, secret-safe errors, timeouts and lack of automatic retries. Tests do not access credentials or payment endpoints. Mock conformance is not evidence that a live merchant account accepts the protocol assumptions identified above.
+Tests inject HTTP implementations and cover wire/auth shapes, amount/metadata/ID binding, private-token receipts, third-party payers/refunds, malformed/duplicate results, cancelled/expiry ambiguity, safe diagnostics, timeouts, no replay, and durable intent/lease/credit recovery. They use no real merchant credentials/endpoints. Raw adapter debit default is intentional; mock conformance does not certify a merchant account or resolve protocol assumptions.

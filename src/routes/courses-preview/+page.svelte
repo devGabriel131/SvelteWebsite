@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { BookOpen, ArrowRight, ArrowLeft } from '@lucide/svelte';
-	import StudentShell from '#lib/components/StudentShell.svelte';
 
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { useLanguage } from '#lib/i18n/language.svelte.ts';
@@ -8,7 +7,6 @@
 	const m = $derived(language.messages.coursesPreview);
 
 	let selected = $state<number | null>(null);
-	const current = $derived(selected ?? 0);
 	const groups = $derived([
 		{ title: m.foundations, start: 0, end: 3 },
 		{ title: m.mixed, start: 3, end: 7 },
@@ -27,14 +25,13 @@
 	<meta name="robots" content="noindex, nofollow" />
 </svelte:head>
 
-<StudentShell activePage="courses">
 	<section class="course">
 		<header class="course-heading"><p class="eyebrow">{m.part}</p><h1>{m.course}</h1><p>{m.intro}</p></header>
 		{#if selected === null}
 			<div class="library">
 				{#each groups as group}
 					<section class="topic-group">
-						<h3>{group.title}</h3>
+						<h2>{group.title}</h2>
 						{#each m.topics.slice(group.start, group.end) as topic, offset}
 							<button class="topic-card" onclick={() => openTopic(group.start + offset)}>
 								<span class="number">{String(group.start + offset + 1).padStart(2, '0')}</span>
@@ -48,16 +45,15 @@
 			<div class="lesson-column">
 					<Button variant="ghost" onclick={() => selected = null}><ArrowLeft aria-hidden="true" />{m.back}</Button>
 					<article class="lesson">
-						<p class="eyebrow">{m.lesson} · {String(current + 1).padStart(2, '0')}</p>
-						<h3 tabindex="-1" bind:this={lessonHeading}>{m.topics[current]}</h3>
-						<div class="document-placeholder"><BookOpen size={32} aria-hidden="true" /><h4>{m.placeholder}</h4><p>{m.body}</p><div class="skeleton" aria-hidden="true"><span></span><span></span><span></span></div></div>
+						<p class="eyebrow">{m.lesson} · {String(selected + 1).padStart(2, '0')}</p>
+						<h2 tabindex="-1" bind:this={lessonHeading}>{m.topics[selected]}</h2>
+						<div class="document-placeholder"><BookOpen size={32} aria-hidden="true" /><h3>{m.placeholder}</h3><p>{m.body}</p><div class="skeleton" aria-hidden="true"><span></span><span></span><span></span></div></div>
 						<aside class="interactive"><p class="eyebrow">{m.interactive}</p><p>{m.interactiveNote}</p></aside>
 					</article>
-					<div class="lesson-navigation"><Button variant="outline" disabled={current === 0} onclick={() => openTopic(current - 1)}><ArrowLeft aria-hidden="true" />{m.previous}</Button><Button variant="outline" disabled={current === m.topics.length - 1} onclick={() => openTopic(current + 1)}>{m.next}<ArrowRight aria-hidden="true" /></Button></div>
+					<div class="lesson-navigation"><Button variant="outline" disabled={selected === 0} onclick={openTopic.bind(null, selected - 1)}><ArrowLeft aria-hidden="true" />{m.previous}</Button><Button variant="outline" disabled={selected === m.topics.length - 1} onclick={openTopic.bind(null, selected + 1)}>{m.next}<ArrowRight aria-hidden="true" /></Button></div>
 			</div>
 		{/if}
 	</section>
-</StudentShell>
 
 <style>
 
@@ -69,7 +65,7 @@
 	h1 { font-size: clamp(1.75rem, 3vw, 2.75rem); font-weight: 700; letter-spacing: -0.04em; margin-block: 0.5rem; }
 	.course-heading > p:last-child { color: var(--muted-foreground); }
 	.library { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.25rem; }
-	.topic-group h3 { font-weight: 600; margin-bottom: 1rem; }
+	.topic-group h2 { font-weight: 600; margin-bottom: 1rem; }
 	.topic-card { display: flex; align-items: center; gap: 1rem; width: 100%; text-align: left; padding: 1.25rem; margin-bottom: 0.75rem; border: 1px solid var(--border); border-radius: 0.75rem; background: var(--card); min-height: 7rem; cursor: pointer; }
 	.topic-card:hover { border-color: var(--primary); background: var(--accent); }
 	.topic-card > span:nth-child(2) { flex: 1; }
@@ -79,10 +75,10 @@
 
 	.lesson-column { min-width: 0; }
 	.lesson { padding: clamp(1.25rem, 3vw, 2.5rem); border: 1px solid var(--border); background: var(--card); border-radius: 0.75rem; }
-	.lesson h3 { font-size: clamp(1.4rem, 2vw, 2rem); font-weight: 600; margin-top: 0.75rem; }
+	.lesson h2 { font-size: clamp(1.4rem, 2vw, 2rem); font-weight: 600; margin-top: 0.75rem; }
 	.document-placeholder { margin-block: 2.5rem; max-width: 40rem; }
 	.document-placeholder > :global(svg) { color: var(--muted-foreground); }
-	h4 { font-weight: 600; margin-block: 1rem 0.5rem; }
+	h3 { font-weight: 600; margin-block: 1rem 0.5rem; }
 	.document-placeholder p, .interactive > p:last-child { color: var(--muted-foreground); font-size: 0.9rem; line-height: 1.8; }
 	.skeleton { display: grid; gap: 0.75rem; margin-top: 2rem; }
 	.skeleton span { height: 0.5rem; background: var(--muted); border-radius: 1rem; }

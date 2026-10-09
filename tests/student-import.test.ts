@@ -5,8 +5,8 @@ import { drizzle } from 'drizzle-orm/pg-proxy';
 import ExcelJS from 'exceljs';
 import type { Database } from '../src/lib/server/db/connection';
 import { parseStudentImportOptions, resendInvitationAction, studentImportAction, type StudentImportDependencies } from '../src/lib/server/student-import';
-import { MAX_IMPORT_BYTES } from '../src/lib/server/student-import-file';
-import { createStudentImportReview, IMPORT_REVIEW_TTL_MS, verifyStudentImportReview, type StudentImportOptions } from '../src/lib/server/student-import-review';
+import { MAX_IMPORT_BYTES, type StudentImportOptions } from '../src/lib/student-invitations';
+import { createStudentImportReview, IMPORT_REVIEW_TTL_MS, verifyStudentImportReview } from '../src/lib/server/student-import-review';
 import { StudentInvitationError } from '../src/lib/server/student-invitations';
 
 const origin = 'https://students.example.test';
@@ -47,7 +47,7 @@ function dependencies(respond: (query: Query) => unknown[][] = () => []) {
 		database() { calls.database++; return db; },
 		async authentication() {
 			calls.authentication++;
-			return { secret, baseURL: origin, async hashPin() { calls.hash++; throw new Error('Preview must not hash PINs'); } };
+			return { secret, async hashPin() { calls.hash++; throw new Error('Preview must not hash PINs'); } };
 		},
 		delivery() {
 			calls.delivery++;
@@ -225,15 +225,6 @@ describe('student import actions', () => {
 			expect(canceled).toBe(true);
 			expect(Object.values(calls)).toEqual([0, 0, 0, 0, 0]);
 		}
-	});
-
-	test('mail/auth origin disagreement fails before hashing, account writes, or sends', async () => {
-		const { deps, calls, queries } = dependencies();
-		deps.delivery = () => ({ baseURL: 'https://different.example.test', testMode: true, async send() { throw new Error('Must not send'); } });
-		expect(await studentImportAction(locals('admin'), request(importForm(file)), 'preview', deps)).toMatchObject({ status: 503, data: { studentImport: { success: false, error: 'unavailable' } } });
-		expect(queries).toHaveLength(2);
-		expect(calls.hash).toBe(0);
-		expect(calls.send).toBe(0);
 	});
 
 	test('maps configuration, unique, and storage errors to safe codes without serializing secrets', async () => {

@@ -3,14 +3,17 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import ActionForm from '#lib/bootcamp/ActionForm.svelte';
 	import FormFeedback from '#lib/bootcamp/FormFeedback.svelte';
-	import { eventTimeZone, type ReportRow } from '#lib/bootcamp/types.ts';
-	import { classTypes, filterReport, summarizeReport, type ClassFilter, type ReportFilter } from '#lib/bootcamp/report.ts';
+	import { formatAdminEventTime, formatMoney } from '#lib/bootcamp/format.ts';
+	import type { ReportRow } from '#lib/bootcamp/types.ts';
+	import { filterReport, summarizeReport, type ClassFilter, type ReportFilter } from '#lib/bootcamp/report.ts';
+	import { studentClassTypes } from '#lib/student.ts';
 	import { useLanguage } from '#lib/i18n/language.svelte.ts';
 	import { formatMessage } from '#lib/i18n/translations.ts';
 	import type { PageProps } from './$types';
 	import '#lib/bootcamp/bootcamp.css';
 
 	let { data, form }: PageProps = $props();
+	let enhancedSubmission = $state(false);
 	const reportColumns = ['name', 'classType', 'eligibility', 'status', 'paymentStatus', 'paid', 'remaining', 'documents'] as const;
 	const language = useLanguage();
 	const messages = $derived(language.messages.bootcamp);
@@ -19,8 +22,6 @@
 	let registrationFilter = $state<ReportFilter>('all');
 	const summary = $derived(summarizeReport(data.report));
 	const visible = $derived(filterReport(data.report, search, classFilter, registrationFilter));
-	const money = (cents: number) => new Intl.NumberFormat(language.current === 'es' ? 'es-PR' : 'en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
-	const date = (value: string) => new Intl.DateTimeFormat(language.current === 'es' ? 'es-PR' : 'en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: eventTimeZone, hourCycle: 'h23' }).format(new Date(value));
 	function paymentStatus(row: ReportRow) {
 		const labels = messages.payment.statuses;
 		return row.paymentStatus && Object.hasOwn(labels, row.paymentStatus)
@@ -38,7 +39,7 @@
 	<meta name="robots" content="noindex" />
 </svelte:head>
 
-<div class="bootcamp bc-admin bc-ledger" lang={language.current}>
+<div class="bootcamp bc-ledger" onsubmitcapture={() => enhancedSubmission = true}>
 	<nav class="bc-ledger-nav" aria-label={messages.admin.title}>
 		<Button variant="ghost" href={resolve('/admin/bootcamps')}>{messages.admin.events}</Button>
 		<Button variant="ghost" href={resolve('/admin/bootcamps/[eventId]/edit', { eventId: data.event.id })}>{messages.admin.edit}</Button>
@@ -46,15 +47,15 @@
 	</nav>
 	<div class="bc-ledger-main">
 		<header class="bc-ledger-heading">
-			<div><p class="bc-eyebrow">{data.event.title}</p><h1>{messages.admin.report}</h1><p class="bc-hint">{date(data.event.startsAt)} · {data.event.venue}</p></div>
+			<div><p class="bc-eyebrow">{data.event.title}</p><h1>{messages.admin.report}</h1><p class="bc-hint">{formatAdminEventTime(data.event.startsAt, language.current)} · {data.event.venue}</p></div>
 			<Button size="sm" variant="outline" href={`${resolve('/admin/bootcamps/report')}?event=${encodeURIComponent(data.event.id)}&language=${language.current}`}>{messages.admin.csvAll}</Button>
 		</header>
-		<FormFeedback result={form} />
+		{#if !enhancedSubmission}<FormFeedback result={form} />{/if}
 		<dl class="bc-ledger-stats">
 			<div><dt>{messages.admin.started}</dt><dd>{summary.started}<small> / {summary.total}</small></dd></div>
 			<div><dt>{messages.admin.confirmed}</dt><dd>{summary.confirmed}</dd></div>
-			<div><dt>{messages.admin.collected}</dt><dd>{money(summary.paidCents)}</dd></div>
-			<div><dt>{messages.admin.outstanding}</dt><dd>{money(summary.remainingCents)}</dd></div>
+			<div><dt>{messages.admin.collected}</dt><dd>{formatMoney(summary.paidCents, language.current)}</dd></div>
+			<div><dt>{messages.admin.outstanding}</dt><dd>{formatMoney(summary.remainingCents, language.current)}</dd></div>
 		</dl>
 		<section class="bc-ledger-coverage" aria-label={messages.admin.coverage}>
 			{#each summary.classes as group (group.classType)}
@@ -69,7 +70,7 @@
 			<label class="bc-ledger-search"><span class="sr-only">{messages.admin.search}</span><input type="search" bind:value={search} placeholder={messages.admin.searchPlaceholder} /></label>
 			<div class="bc-actions" role="group" aria-label={messages.admin.classFilters}>
 				<Button size="sm" variant={classFilter === 'all' ? 'secondary' : 'ghost'} aria-pressed={classFilter === 'all'} onclick={() => classFilter = 'all'}>{messages.admin.allClasses}</Button>
-				{#each classTypes as classType}<Button size="sm" variant={classFilter === classType ? 'secondary' : 'ghost'} aria-pressed={classFilter === classType} onclick={() => classFilter = classType}>{messages.admin.classTypes[classType]}</Button>{/each}
+				{#each studentClassTypes as classType}<Button size="sm" variant={classFilter === classType ? 'secondary' : 'ghost'} aria-pressed={classFilter === classType} onclick={() => classFilter = classType}>{messages.admin.classTypes[classType]}</Button>{/each}
 			</div>
 		</div>
 		<div class="bc-actions bc-ledger-filters" role="group" aria-label={messages.admin.registrationFilters}>
@@ -87,8 +88,8 @@
 						<tr>
 							<th scope="row">{row.name}<span class="bc-document-status">{row.email}</span></th><td><span class="bc-status">{messages.admin.classTypes[row.classType]}</span></td><td>{messages.admin.eligibilities[row.eligibility]}</td><td><span class="bc-status" class:bc-status-open={row.status === 'confirmed'}>{messages.admin.statuses[row.status]}</span></td>
 							<td>{paymentStatus(row)}{#if row.paymentUncertain}<p class="bc-hint">{messages.payment.verificationAttention}</p>{/if}</td>
-							<td class="bc-ledger-money">{money(row.paidCents)}</td>
-							<td class="bc-ledger-money">{money(row.remainingCents)}{#if row.remainingCents > 0}<span class="bc-document-status">{messages.payment.remainingFlag}</span>{/if}</td>
+							<td class="bc-ledger-money">{formatMoney(row.paidCents, language.current)}</td>
+							<td class="bc-ledger-money">{formatMoney(row.remainingCents, language.current)}{#if row.remainingCents > 0}<span class="bc-document-status">{messages.payment.remainingFlag}</span>{/if}</td>
 							<td><ul class="bc-documents">
 								{#each row.documents as document (document.id)}
 									<li><a href={resolve('/bootcamps/documents/[id]', { id: document.id })}>{messages.event.documentKinds[document.kind]}</a><span class="bc-document-status">{formatMessage(messages.admin.backup, { status: backupStatus(document.backupStatus) })}</span></li>
@@ -103,10 +104,10 @@
 			<summary>{messages.admin.tools}</summary>
 			<div class="bc-actions">
 				<ActionForm action="?/retryBackups">
-					{#snippet children(pending)}<input type="hidden" name="eventId" value={data.event.id} /><Button size="sm" type="submit" variant="outline" disabled={pending || !data.driveEnabled}>{messages.admin.retryBackups}</Button>{/snippet}
+					{#snippet children(pending)}<Button size="sm" type="submit" variant="outline" disabled={pending || !data.driveEnabled}>{messages.admin.retryBackups}</Button>{/snippet}
 				</ActionForm>
 				<ActionForm action="?/reconcile">
-					{#snippet children(pending)}<input type="hidden" name="eventId" value={data.event.id} /><Button size="sm" type="submit" variant="outline" disabled={pending || !data.paymentEnabled}>{messages.admin.reconcile}</Button>{/snippet}
+					{#snippet children(pending)}<Button size="sm" type="submit" variant="outline" disabled={pending || !data.paymentEnabled}>{messages.admin.reconcile}</Button>{/snippet}
 				</ActionForm>
 			</div>
 		</details>

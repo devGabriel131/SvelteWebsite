@@ -1,22 +1,20 @@
 import { error, fail, type Actions } from '@sveltejs/kit';
-import { translations } from '#lib/i18n/translations.ts';
+import { formValues, readFormFields } from '#lib/form-fields.ts';
 import { assessIst } from '#lib/ist/assessment.ts';
 import { presentIstAssessment } from '#lib/ist/presentation.ts';
-import { exerciseKeys, istFields, type IstFormValues } from '#lib/ist/types.ts';
-import { readIstFormData, validateIstInput } from '#lib/ist/validation.ts';
+import { exerciseKeys, exerciseValueFields, istFields } from '#lib/ist/types.ts';
+import { validateIstInput } from '#lib/ist/validation.ts';
 import type { GetReportArchive } from './drive/archive';
 import { generateIstPdf } from './ist-pdf';
-import { generateReportDownloads } from './report-downloads';
+import { generateReportDownloads, type ReportActionEvent } from './report-downloads';
 
 export function createIstActions(getArchive: GetReportArchive) {
 	return {
-		default: async ({ request, setHeaders, locals }) => {
+		default: async ({ request, setHeaders, locals }: ReportActionEvent) => {
 			setHeaders({ 'cache-control': 'no-store' });
 			const data = await request.formData();
-			const raw = readIstFormData(data);
-			const values = Object.fromEntries(istFields.map((field) => [
-				field, typeof raw[field] === 'string' ? raw[field] : ''
-			])) as IstFormValues;
+			const raw = readFormFields(data, istFields);
+			const values = formValues(raw, istFields);
 
 			if (data.has('exerciseChoice')) {
 				const choices = data.getAll('exerciseChoice');
@@ -30,22 +28,14 @@ export function createIstActions(getArchive: GetReportArchive) {
 				const status = choice === `${exercise}Status:recorded` ? 'recorded' : 'unable_to_complete';
 				values[`${exercise}Status`] = status;
 				if (status === 'unable_to_complete') {
-					if (exercise === 'run' || exercise === 'plank') {
-						values[`${exercise}Minutes`] = '';
-						values[`${exercise}Seconds`] = '';
-					} else {
-						values[`${exercise}Value`] = '';
-					}
+					for (const field of exerciseValueFields[exercise]) values[field] = '';
 				}
-				return { values, errors: {}, assessment: null, reports: null, serverError: false, archiveError: null, archived: false };
+				return { values };
 			}
 
 			const validation = validateIstInput(raw);
 			if (!validation.valid) {
-				return fail(400, {
-					values, errors: validation.errors, assessment: null, reports: null,
-					serverError: false, archiveError: null, archived: false
-				});
+				return fail(400, { values, errors: validation.errors });
 			}
 
 			const assessment = assessIst(validation.input, new Date().toISOString());
@@ -53,22 +43,19 @@ export function createIstActions(getArchive: GetReportArchive) {
 				getArchive, locals, signal: request.signal,
 				generate: async () => {
 					// Generate both languages from this exact result: switching language never regrades it.
-					const [en, es] = await Promise.all([
-						generateIstPdf(presentIstAssessment(assessment, 'en')),
-						generateIstPdf(presentIstAssessment(assessment, 'es'))
-					]);
-					const date = assessment.assessedAt.slice(0, 10);
+					const english = presentIstAssessment(assessment, 'en');
+					const spanish = presentIstAssessment(assessment, 'es');
+					const [en, es] = await Promise.all([generateIstPdf(english), generateIstPdf(spanish)]);
 					return {
-						en: { bytes: en, filename: `${translations.en.ist.reportFilename}-${date}_en.pdf` },
-						es: { bytes: es, filename: `${translations.es.ist.reportFilename}-${date}_es.pdf` }
+						en: { bytes: en, filename: english.filename.replace(/\.pdf$/, '_en.pdf') },
+						es: { bytes: es, filename: spanish.filename.replace(/\.pdf$/, '_es.pdf') }
 					};
 				}
 			});
-			const { serverError, archiveError, archived } = result;
 			if (!result.ok) {
-				return fail(result.status, { values, errors: {}, assessment: null, reports: null, serverError, archiveError, archived });
+				return fail(result.status, { values, failure: result.failure });
 			}
-			return { values, errors: {}, assessment, reports: result.reports, serverError, archiveError, archived };
+			return { values, assessment, reports: result.reports, archived: result.archived };
 		}
 	} satisfies Actions;
 }

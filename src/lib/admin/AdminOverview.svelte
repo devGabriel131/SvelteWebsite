@@ -11,7 +11,7 @@
 		{ label: messages.total, value: students.length },
 		{ label: messages.statuses.active, value: students.filter((student) => student.status === 'active').length },
 		{ label: messages.statuses.inactive, value: students.filter((student) => student.status === 'inactive').length },
-				{ label: messages.statuses.invited, value: students.filter((student) => student.status === 'invited').length }
+		{ label: messages.statuses.invited, value: students.filter((student) => student.status === 'invited').length }
 	]);
 </script>
 <div class="overview-content">
@@ -21,7 +21,7 @@
 	<AdminStudents {students} />
 </div>
 <style>
-	.overview-content { display: grid; gap: 1.5rem; }
+	.overview-content { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.5rem; }
 	.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 1rem; }
 	@media (max-width: 40rem) { .metrics { grid-template-columns: 1fr; } }
 </style>

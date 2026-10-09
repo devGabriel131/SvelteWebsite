@@ -1,7 +1,15 @@
-import type { AdminSection } from './demo';
+export const adminSections = ['overview', 'students', 'payments', 'invitations', 'reports'] as const;
 
-export const adminSections = ['overview', 'students', 'payments', 'invitations', 'reports'] as const satisfies readonly AdminSection[];
+export type AdminSection = (typeof adminSections)[number];
 
 export function resolveAdminSection(value: string | null): AdminSection {
 	return adminSections.find((section) => section === value) ?? 'overview';
+}
+
+export function isAdminPreviewSection(section: AdminSection): boolean {
+	return section === 'payments' || section === 'reports';
+}
+
+export function adminSectionHref(section: AdminSection, adminPath: string): string {
+	return section === 'overview' ? adminPath : `${adminPath}?section=${section}`;
 }

@@ -1,16 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { hashPassword, verifyPassword } from 'better-auth/crypto';
 import { and, eq } from 'drizzle-orm';
-import { LOCAL_ADMIN_EMAIL } from '../../src/lib/server/auth/local-admin';
+import { LOCAL_ADMIN_EMAIL } from '../../src/lib/server/auth/config';
 import { account, user } from '../../src/lib/server/db/auth-schema';
-import { createDatabase, requireDatabaseUrl } from '../../src/lib/server/db/connection';
-import { assertLocalDatabaseUrl, verifyLocalDatabase } from './local-target';
+import { openLocalDatabase } from './local-target';
 
-export async function seedLocalAdmin(databaseUrl: string): Promise<{ created: boolean }> {
-	const target = assertLocalDatabaseUrl(databaseUrl, 'seed');
-	const connection = createDatabase(databaseUrl);
+export async function seedLocalAdmin(databaseUrl: string | undefined): Promise<{ created: boolean }> {
+	const connection = await openLocalDatabase(databaseUrl, 'seed');
 	try {
-		await verifyLocalDatabase(connection, target);
 		return await connection.db.transaction(async (tx) => {
 			const [created] = await tx.insert(user).values({
 				id: randomUUID(),
@@ -59,6 +56,6 @@ export async function seedLocalAdmin(databaseUrl: string): Promise<{ created: bo
 }
 
 if (import.meta.main) {
-	await seedLocalAdmin(requireDatabaseUrl(process.env.DATABASE_URL));
+	await seedLocalAdmin(process.env.DATABASE_URL);
 	console.info(`Local-development-only admin account ready: ${LOCAL_ADMIN_EMAIL} (password: admin).`);
 }

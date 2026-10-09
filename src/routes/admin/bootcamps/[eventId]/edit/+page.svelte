@@ -9,6 +9,7 @@
 	import '#lib/bootcamp/bootcamp.css';
 
 	let { data, form }: PageProps = $props();
+	let enhancedSubmission = $state(false);
 	const language = useLanguage();
 	const messages = $derived(language.messages.bootcamp);
 </script>
@@ -19,7 +20,7 @@
 	<meta name="robots" content="noindex" />
 </svelte:head>
 
-<div class="bootcamp bc-admin bc-ledger" lang={language.current}>
+<div class="bootcamp bc-ledger" onsubmitcapture={() => enhancedSubmission = true}>
 	<nav class="bc-ledger-nav" aria-label={messages.admin.title}>
 		<Button variant="ghost" href={resolve('/admin/bootcamps')}>{messages.admin.events}</Button>
 		<Button variant="secondary" href={resolve('/admin/bootcamps/[eventId]/edit', { eventId: data.event.id })} aria-current="page">{messages.admin.edit}</Button>
@@ -29,9 +30,7 @@
 		<header class="bc-ledger-heading">
 			<h1>{formatMessage(messages.admin.editing, { title: data.event.title })}</h1>
 		</header>
-		<FormFeedback result={form} />
-		{#key `${data.event.id}:${data.event.revision}`}
-			<EventEditor event={data.event} />
-		{/key}
+		{#if !enhancedSubmission}<FormFeedback result={form} />{/if}
+		<EventEditor event={data.event} />
 	</div>
 </div>

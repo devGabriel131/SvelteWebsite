@@ -2,7 +2,7 @@ import type { Handle } from '@sveltejs/kit/hooks';
 import { getSessionCookie } from 'better-auth/cookies';
 import { svelteKitHandler } from 'better-auth/svelte-kit';
 import { AUTH_IP_HEADER, type Auth } from './core';
-import type { AuthAudience } from './credentials';
+import type { AuthAudience } from '../../auth-credentials';
 
 export function createAuthHandle(getAuth: (audience: AuthAudience) => Auth | null, building: boolean): Handle {
 	return async ({ event, resolve }) => {

@@ -1,3 +1,4 @@
+import { readBoundedBody } from '../request-body';
 import { uuidPattern } from './validation';
 
 // The provider does not document signed notifications. These are lookup hints, never receipts.
@@ -14,17 +15,8 @@ export async function webhookBody(request: Request): Promise<unknown> {
 	if (!/^application\/json(?:;|$)/i.test(request.headers.get('content-type') ?? '')) return null;
 	const reader = request.body?.getReader();
 	if (!reader) return null;
-	let size = 0;
-	const chunks: Uint8Array[] = [];
 	try {
-		while (true) {
-			const { value, done } = await reader.read();
-			if (done) break;
-			size += value.byteLength;
-			if (size > 32_768) { await reader.cancel(); return null; }
-			chunks.push(value);
-		}
-		return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+		const body = await readBoundedBody(reader, 32_768);
+		return body === null ? null : JSON.parse(body.toString('utf8'));
 	} catch { return null; }
-	finally { reader.releaseLock(); }
 }

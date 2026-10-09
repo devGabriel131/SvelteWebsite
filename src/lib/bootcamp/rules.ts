@@ -1,8 +1,7 @@
 import { eventTimeZone, depositCents, priceCents, type BootcampEvent, type RegistrationStatus } from './types';
 
-export function parseEventLocalDate(raw: string): Date | null {
-	if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(raw)) return null;
-	const value = raw.length === 16 ? `${raw}:00` : raw;
+function eventLocalDate(date: string, time: string): Date | null {
+	const value = `${date}T${time}:00`;
 	const result = new Date(`${value}-04:00`);
 	if (!Number.isFinite(result.getTime()) || new Date(result.getTime() - 4 * 3600000).toISOString().slice(0, 19) !== value) return null;
 	return result;
@@ -13,8 +12,8 @@ const eventTimeRegex = new RegExp(`^${eventTimePattern}$`);
 
 export function parseEventSchedule(eventDate: string, startTime: string, endTime: string) {
 	if (!/^\d{4}-\d{2}-\d{2}$/.test(eventDate) || !eventTimeRegex.test(startTime) || !eventTimeRegex.test(endTime)) return null;
-	const startsAt = parseEventLocalDate(`${eventDate}T${startTime}`);
-	const endsAt = parseEventLocalDate(`${eventDate}T${endTime}`);
+	const startsAt = eventLocalDate(eventDate, startTime);
+	const endsAt = eventLocalDate(eventDate, endTime);
 	if (!startsAt || !endsAt || endsAt <= startsAt) return null;
 	return {
 		startsAt, endsAt,

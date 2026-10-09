@@ -1,16 +1,16 @@
 import { describe, expect, test } from 'bun:test';
-import { adminSections, resolveAdminSection } from '../src/lib/admin/navigation';
-import { translations } from '../src/lib/i18n/translations';
+import { adminSectionHref, adminSections, isAdminPreviewSection, resolveAdminSection } from '../src/lib/admin/navigation';
 
 describe('shared admin navigation', () => {
 	for (const section of adminSections) {
-		test(`deep links select ${section} and retain bilingual navigation and page titles`, () => {
-			const url = new URL(`https://example.test/admin?section=${section}`);
-			expect(resolveAdminSection(url.searchParams.get('section'))).toBe(section);
-			for (const language of ['en', 'es'] as const) {
-				expect(translations[language].admin.sections[section].trim()).not.toBe('');
-				expect(translations[language].admin.intro[section].title.trim()).not.toBe('');
+		test(`deep links select ${section} under the supplied admin base path`, () => {
+			for (const adminPath of ['/admin', '/school/admin']) {
+				const href = adminSectionHref(section, adminPath);
+				expect(href).toBe(section === 'overview' ? adminPath : `${adminPath}?section=${section}`);
+				const url = new URL(href, 'https://example.test');
+				expect(resolveAdminSection(url.searchParams.get('section'))).toBe(section);
 			}
+			expect(isAdminPreviewSection(section)).toBe(section === 'payments' || section === 'reports');
 		});
 	}
 

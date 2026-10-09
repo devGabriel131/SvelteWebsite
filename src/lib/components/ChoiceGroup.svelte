@@ -26,7 +26,7 @@
 
 <fieldset class="choice-group" role={submitName ? 'group' : 'radiogroup'} aria-required={submitName ? undefined : 'true'}
 	aria-invalid={error ? 'true' : undefined} aria-describedby={descriptions}>
-	<legend class:visually-hidden={hideLabel}>{label}</legend>
+	<legend class:sr-only={hideLabel}>{label}</legend>
 	{#snippet choiceContent(text: string)}
 		<span>{text}</span>
 		<svg class="selection-check hidden size-[0.9rem] group-has-[input:checked]/button:block group-aria-pressed/button:block" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" aria-hidden="true">
@@ -45,7 +45,7 @@
 			{:else}
 				<Label class={buttonVariants({ variant: 'outline', class: 'relative min-w-0 min-h-[3.25rem] gap-[0.35rem] p-[0.65rem] text-[0.8125rem] font-bold cursor-pointer' })}
 					aria-invalid={error ? 'true' : undefined}>
-					<input class="visually-hidden" type="radio" {name} value={choice.value}
+					<input class="sr-only" type="radio" {name} value={choice.value}
 						bind:group={value} {onchange} required aria-describedby={descriptions} />
 					{@render choiceContent(choice.label)}
 				</Label>
@@ -83,17 +83,6 @@
 		stroke-linejoin: round;
 	}
 
-	.visually-hidden {
-		position: absolute;
-		width: 1px;
-		height: 1px;
-		margin: -1px;
-		padding: 0;
-		overflow: hidden;
-		clip-path: inset(50%);
-		white-space: nowrap;
-		border: 0;
-	}
 
 	.hint, .error {
 		margin: 0.4rem 0 0;

@@ -4,7 +4,6 @@
 	line-height: 1.6;
 	min-width: 0;
 }
-.bootcamp.bc-admin { max-width: 88rem; margin-inline: auto; }
 .bootcamp h1, .bootcamp h2, .bootcamp h3 { line-height: 1.2; font-weight: 700; overflow-wrap: anywhere; }
 .bootcamp h1 { font-family: var(--font-display); font-size: clamp(1.8rem, 4vw, 2.8rem); }
 .bootcamp h2 { font-size: clamp(1.2rem, 2.5vw, 1.55rem); }
@@ -24,14 +23,13 @@
 .bootcamp .bc-details dd { font-weight: 600; overflow-wrap: anywhere; }
 .bootcamp .bc-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
 .bootcamp .bc-field { display: grid; align-content: start; gap: 0.4rem; min-width: 0; }
-.bootcamp .bc-field > span, .bootcamp .bc-field > label { font-size: 0.85rem; font-weight: 600; }
-.bootcamp input:not([type=hidden]):not([type=checkbox]), .bootcamp textarea {
+.bootcamp .bc-field > span { font-size: 0.85rem; font-weight: 600; }
+.bootcamp input:not([type=hidden]):not([type=checkbox]) {
 	width: 100%; min-width: 0; min-height: 2.8rem; padding: 0.65rem 0.8rem;
 	border: 1px solid var(--border); border-radius: 0.5rem; background: var(--background); color: var(--foreground); font: inherit;
 }
-.bootcamp textarea { resize: vertical; }
 .bootcamp input[readonly] { background: var(--muted); }
-.bootcamp :is(input, textarea, .bc-legal-text, canvas, .bc-table-scroll):focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
+.bootcamp :is(input, .bc-legal-text, canvas, .bc-table-scroll):focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
 .bootcamp fieldset { min-width: 0; border: 0; margin: 0; padding: 0; }
 .bootcamp fieldset[disabled] { opacity: 0.7; }
 .bootcamp legend { font-weight: 700; margin-bottom: 1rem; }
@@ -52,7 +50,6 @@
 .bootcamp .bc-preview iframe { width: 100%; height: 32rem; border: 1px solid var(--border); border-radius: 0.5rem; background: white; }
 .bootcamp .bc-table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 0.65rem; }
 .bootcamp table { width: 100%; border-collapse: collapse; font-size: 0.85rem; text-align: left; }
-.bootcamp caption { text-align: left; padding: 1rem; font-weight: 700; }
 .bootcamp th, .bootcamp td { padding: 0.9rem; vertical-align: top; border-bottom: 1px solid var(--border); }
 .bootcamp th { font-size: 0.75rem; background: var(--muted); }
 .bootcamp td { overflow-wrap: anywhere; min-width: 8rem; }
@@ -60,7 +57,7 @@
 .bootcamp .bc-documents a { text-decoration: underline; text-underline-offset: 0.2em; }
 .bootcamp .bc-document-status { display: block; color: var(--muted-foreground); font-size: 0.75rem; }
 /* The admin ledger stays inside the shared workspace shell. */
-.bootcamp.bc-ledger { display: grid; grid-template-columns: 11rem minmax(0, 1fr); border: 1px solid var(--border); border-radius: 0.75rem; background: var(--card); overflow: hidden; font-size: 0.85rem; }
+.bootcamp.bc-ledger { display: grid; grid-template-columns: 11rem minmax(0, 1fr); max-width: 88rem; margin-inline: auto; border: 1px solid var(--border); border-radius: 0.75rem; background: var(--card); overflow: hidden; font-size: 0.85rem; }
 .bootcamp .bc-ledger-nav { display: flex; flex-direction: column; gap: 0.25rem; padding: 1rem 0.65rem; border-right: 1px solid var(--border); background: var(--muted); }
 .bootcamp .bc-ledger-nav > a { justify-content: flex-start; height: auto; min-height: 2.25rem; white-space: normal; text-align: left; font-size: 0.75rem; }
 .bootcamp .bc-ledger-nav > [aria-current=page] { background: var(--card); color: var(--foreground); box-shadow: 0 1px 3px color-mix(in srgb, var(--foreground) 6%, transparent); }
@@ -78,8 +75,6 @@
 .bootcamp .bc-ledger-event-link:hover { text-decoration: underline; text-underline-offset: 0.2em; }
 .bootcamp .bc-ledger-money { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .bootcamp .bc-ledger-footer { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem; margin-top: 1rem; }
-.bootcamp .bc-ledger .bc-status { border-radius: 0.3rem; padding: 0.2rem 0.45rem; font-size: 0.68rem; }
-.bootcamp .bc-ledger .bc-actions { gap: 0.4rem; }
 .bootcamp .bc-ledger-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-block: 1px solid var(--border); margin: 1rem 0; padding: 1rem 0; }
 .bootcamp .bc-ledger-stats > div { padding-inline: 1rem; border-right: 1px solid var(--border); }
 .bootcamp .bc-ledger-stats > div:first-child { padding-left: 0; }
@@ -93,7 +88,6 @@
 .bootcamp .bc-ledger-coverage progress { display: block; width: 100%; height: 0.4rem; margin-block: 0.65rem; accent-color: var(--primary); }
 .bootcamp .bc-ledger-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-top: 1rem; }
 .bootcamp .bc-ledger-search { flex: 1 1 14rem; max-width: 26rem; }
-.bootcamp .bc-ledger input:not([type=hidden]):not([type=checkbox]) { min-height: 2.25rem; padding: 0.45rem 0.65rem; font-size: 0.8rem; }
 .bootcamp .bc-ledger-filters { margin-block: 0.65rem; }
 .bootcamp .bc-ledger-tools { border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 1rem; }
 .bootcamp .bc-ledger-tools summary { cursor: pointer; color: var(--muted-foreground); font-size: 0.75rem; }
@@ -108,7 +102,6 @@
 .bootcamp .bc-ledger-legal h2 { font-size: 1rem; }
 .bootcamp .bc-ledger-legal summary { cursor: pointer; font-weight: 600; }
 .bootcamp .bc-ledger-legal .bc-legal-text { margin-top: 0.65rem; }
-.bootcamp .bc-ledger :is(a, summary, button):focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
 @media (max-width: 64rem) {
 	.bootcamp.bc-ledger { grid-template-columns: minmax(0, 1fr); }
 	.bootcamp .bc-ledger-nav { flex-direction: row; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--border); padding: 0.65rem; }

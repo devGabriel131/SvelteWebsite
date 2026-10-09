@@ -3,12 +3,14 @@ import { defaultLegalText } from '../../bootcamp/legal';
 import { parseEventSchedule } from '../../bootcamp/rules';
 import type { Language } from '../../i18n/translations';
 import { isSupportedPdfText } from '../../bootcamp/pdf-text';
+import { readBoundedBody } from '../request-body';
 
 export type BootcampErrorCode = 'invalid' | 'unavailable' | 'closed' | 'ineligible' | 'stale' | 'notLinked' | 'payment' | 'storage' | 'unsupportedText' | 'activeEvent';
 export class BootcampError extends Error {
 	constructor(readonly code: BootcampErrorCode) { super(code); this.name = 'BootcampError'; }
 }
-export const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+// `$` also accepts a final newline; IDs must end at the actual string boundary.
+export const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\s\S])/i;
 export function id(value: unknown): string {
 	if (typeof value !== 'string' || !uuidPattern.test(value)) throw new BootcampError('invalid');
 	return value;
@@ -51,19 +53,12 @@ export async function readForm(request: Request, limit = 2_300_000): Promise<For
 	if (!/^(multipart\/form-data|application\/x-www-form-urlencoded)(;|$)/i.test(contentType)) throw new BootcampError('invalid');
 	const reader = request.body?.getReader();
 	if (!reader) throw new BootcampError('invalid');
-	const chunks: Uint8Array[] = [];
-	let size = 0;
 	try {
-		while (true) {
-			const { value, done } = await reader.read();
-			if (done) break;
-			size += value.byteLength;
-			if (size > limit) { await reader.cancel(); throw new BootcampError('invalid'); }
-			chunks.push(value);
-		}
-		return await new Response(Buffer.concat(chunks), { headers: { 'content-type': contentType } }).formData();
+		const body = await readBoundedBody(reader, limit);
+		if (body === null) throw new BootcampError('invalid');
+		return await new Response(body, { headers: { 'content-type': contentType } }).formData();
 	} catch (error) {
 		if (error instanceof BootcampError) throw error;
 		throw new BootcampError('invalid');
-	} finally { reader.releaseLock(); }
+	}
 }

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
-import { inflateSync } from 'node:zlib';
+import { readPdf, type PdfBounds as Bounds, type PdfPage, type PdfText } from './pdf';
 import PDFDocument from 'pdfkit';
 import { presentAttendanceCertificate, type AttendanceDocument } from '../src/lib/attendance/presentation';
 import type { AttendanceCertificate } from '../src/lib/attendance/types';
@@ -46,121 +46,7 @@ function makeDocument(language: AttendanceDocument['language']): AttendanceDocum
 
 const compact = (text: string) => text.replace(/\s/g, '');
 const contentBottom = 792 - 54;
-type Bounds = { left: number; right: number; top: number; bottom: number };
-type PdfText = { text: string; x: number; baseline: number; size: number; font: string };
-type PdfImage = { name: string; width: number; height: number; data: Buffer };
-type PdfPage = {
-	headerBottom: number;
-	texts: PdfText[];
-	images: PdfImage[];
-	imageDraws: (Bounds & { name: string })[];
-};
 type LocatedText = PdfText & { page: number; order: number };
-type Matrix = [number, number, number, number, number, number];
-
-function multiply(a: Matrix, b: Matrix): Matrix {
-	return [
-		a[0] * b[0] + a[2] * b[1], a[1] * b[0] + a[3] * b[1],
-		a[0] * b[2] + a[2] * b[3], a[1] * b[2] + a[3] * b[3],
-		a[0] * b[4] + a[2] * b[5] + a[4], a[1] * b[4] + a[3] * b[5] + a[5]
-	];
-}
-
-function streamData(object: string): Buffer {
-	const data = object.match(/stream\n([\s\S]*?)\nendstream/);
-	expect(data).not.toBeNull();
-	return Buffer.from(data![1], 'latin1');
-}
-
-// Adapted from the IST inspector: only PDFKit's standard-font text, image XObjects,
-// and positioned drawing commands, not a general PDF parser or an external PDF utility.
-function readPdf(pdf: Buffer): PdfPage[] {
-	const source = pdf.toString('latin1');
-	expect(source.startsWith('%PDF-1.3\n')).toBe(true);
-	expect(source.trimEnd().endsWith('%%EOF')).toBe(true);
-	const xrefOffset = Number(source.match(/startxref\n(\d+)\n/)?.[1]);
-	expect(source.slice(xrefOffset, xrefOffset + 4)).toBe('xref');
-	const objects = new Map([...source.matchAll(/(\d+) 0 obj\n([\s\S]*?)\nendobj/g)]
-		.map((match) => [Number(match[1]), match[2]]));
-	const decoder = new TextDecoder('windows-1252');
-	const pages: PdfPage[] = [];
-	for (const object of objects.values()) {
-		if (!/\/Type \/Page\b/.test(object)) continue;
-		expect(object).toContain('/MediaBox [0 0 612 792]');
-		const resources = objects.get(Number(object.match(/\/Resources (\d+) 0 R/)?.[1]))!;
-		const fonts = new Map([...resources.matchAll(/\/(F\d+) (\d+) 0 R/g)].map((match) => [
-			match[1], objects.get(Number(match[2]))!.match(/\/BaseFont \/([^\s]+)/)![1]
-		]));
-		for (const font of fonts.values()) {
-			expect(['Times-Roman', 'Times-Bold', 'Times-Italic', 'Helvetica', 'Helvetica-Bold']).toContain(font);
-		}
-		const xObjects = resources.match(/\/XObject\s*<<([\s\S]*?)>>/)?.[1] ?? '';
-		const images = [...xObjects.matchAll(/\/(\S+) (\d+) 0 R/g)].map((match) => {
-			const image = objects.get(Number(match[2]))!;
-			expect(image).toContain('/Subtype /Image');
-			expect(image).toContain('/Filter /FlateDecode');
-			const data = streamData(image);
-			expect(inflateSync(data).byteLength).toBeGreaterThan(0);
-			return { name: match[1], width: Number(image.match(/\/Width (\d+)/)?.[1]),
-				height: Number(image.match(/\/Height (\d+)/)?.[1]), data };
-		});
-		const content = objects.get(Number(object.match(/\/Contents (\d+) 0 R/)?.[1]))!;
-		expect(content).toContain('/Filter /FlateDecode');
-		const commands = inflateSync(streamData(content)).toString('latin1');
-		const texts: PdfText[] = [];
-		const imageDraws: PdfPage['imageDraws'] = [];
-		const rules: number[] = [];
-		const savedMatrices: Matrix[] = [];
-		let matrix: Matrix = [1, 0, 0, 1, 0, 0];
-		let points: number[][] = [];
-		for (const match of commands.matchAll(/BT\n([\s\S]*?)\nET|([^\n]+)/g)) {
-			if (match[1] !== undefined) {
-				const position = match[1].match(/1 0 0 1 ([\d.-]+) ([\d.-]+) Tm/)!;
-				const font = match[1].match(/\/(F\d+) ([\d.]+) Tf/)!;
-				const bytes = Buffer.concat([...match[1].matchAll(/<([\da-f]+)>/gi)]
-					.map((hex) => Buffer.from(hex[1], 'hex')));
-				texts.push({ text: decoder.decode(bytes), x: Number(position[1]),
-					baseline: 792 - Number(position[2]), size: Number(font[2]), font: fonts.get(font[1])! });
-				continue;
-			}
-			const command = match[2].trim();
-			if (command === 'q') savedMatrices.push([...matrix]);
-			if (command === 'Q') matrix = savedMatrices.pop()!;
-			const tokens = command.split(/\s+/);
-			const operator = tokens.at(-1);
-			const numbers = tokens.slice(0, -1).map(Number);
-			if (operator === 'cm') matrix = multiply(matrix, numbers as Matrix);
-			const draw = command.match(/^\/(\S+) Do$/);
-			if (draw) {
-				const corners = [[0, 0], [0, 1], [1, 0], [1, 1]].map(([x, y]) => [
-					matrix[0] * x + matrix[2] * y + matrix[4],
-					792 - (matrix[1] * x + matrix[3] * y + matrix[5])
-				]);
-				imageDraws.push({ name: draw[1], left: Math.min(...corners.map(([x]) => x)),
-					right: Math.max(...corners.map(([x]) => x)), top: Math.min(...corners.map(([, y]) => y)),
-					bottom: Math.max(...corners.map(([, y]) => y)) });
-			}
-			if (operator === 'm' || operator === 'l') {
-				const [x, y] = numbers;
-				points.push([
-					matrix[0] * x + matrix[2] * y + matrix[4],
-					792 - (matrix[1] * x + matrix[3] * y + matrix[5])
-				]);
-			}
-			if (operator === 'S') {
-				for (const [, y] of points) expect(y).toBeLessThanOrEqual(contentBottom);
-				if (points.length === 2 && points[0][1] === points[1][1]) rules.push(points[0][1]);
-				points = [];
-			}
-		}
-		expect(rules).toEqual([130]);
-		pages.push({ headerBottom: rules[0], texts, images, imageDraws });
-	}
-	const pageTree = [...objects.values()].find((object) => /\/Type \/Pages\b/.test(object))!;
-	expect(Number(pageTree.match(/\/Count (\d+)/)?.[1])).toBe(pages.length);
-	expect(pages.length).toBeGreaterThan(0);
-	return pages;
-}
 
 function textRegion(page: PdfPage, text: PdfText): 'header' | 'body' {
 	return text.baseline < page.headerBottom ? 'header' : 'body';
@@ -226,7 +112,7 @@ function pngData(url: URL): { width: number; height: number; data: Buffer } {
 	return { width: png.readUInt32BE(16), height: png.readUInt32BE(20), data: Buffer.concat(chunks) };
 }
 const logo = pngData(new URL('../static/logo.png', import.meta.url));
-const signature = pngData(new URL('../src/lib/server/assets/attendance-signature.png', import.meta.url));
+const signature = pngData(new URL('../src/lib/server/assets/organizer-signature.png', import.meta.url));
 
 function expectAssets(pages: PdfPage[]): void {
 	for (const page of pages) {
@@ -264,6 +150,11 @@ function expectReadable(pages: PdfPage[]): void {
 	const metrics = new PDFDocument({ autoFirstPage: false });
 	try {
 		for (const [index, page] of pages.entries()) {
+			for (const font of page.fonts) {
+				expect(['Times-Roman', 'Times-Bold', 'Times-Italic', 'Helvetica', 'Helvetica-Bold']).toContain(font);
+			}
+			expect(page.rules).toEqual([130]);
+			for (const stroke of page.strokes) expect(stroke.bottom).toBeLessThanOrEqual(contentBottom);
 			const boxes = page.texts.map((line) => ({ ...textBounds(line, metrics), description: line.text, line }));
 			for (const box of boxes) {
 				expect(box.left).toBeGreaterThanOrEqual(53.99);

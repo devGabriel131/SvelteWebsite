@@ -15,11 +15,11 @@
 		answerCard,
 		advanceRound,
 		getCompleteness,
-		roundSize,
 		startRound,
 		wordsToReview,
 		type PracticeRound
 	} from '#lib/frequency/practice.ts';
+	import { roundSize } from '#lib/frequency/rules.ts';
 	import { frequencyWords, getOtherSpanishAnswers, searchSpanishOptions } from '#lib/frequency/vocabulary.ts';
 
 
@@ -54,7 +54,6 @@
 	const reviewWords = $derived(round ? wordsToReview(round) : []);
 	const answeredCount = $derived(round?.answers.length ?? 0);
 	const completeness = $derived(getCompleteness(frequencyWords, round?.progress ?? {}));
-	const phase = $derived(!round ? 'setup' : round.complete && !currentCard ? 'finished' : 'running');
 	const steps = ['recall', 'search', 'repeat'] as const;
 
 	function poolProgress(count: number): string {
@@ -123,7 +122,7 @@
 	}
 </script>
 
-<div class="vocabulary-practice" data-phase={phase}>
+<div class="vocabulary-practice">
 	<noscript><p class="notice">{messages.javascriptRequired}</p></noscript>
 
 	<section class="vocabulary-progress" aria-labelledby="vocabulary-progress-title">
@@ -259,7 +258,7 @@
 								{round.complete ? messages.finishRound : messages.nextCard}
 								<span aria-hidden="true">→</span>
 							</Button>
-							<p id="revealed-answer" class="visually-hidden">
+							<p id="revealed-answer" class="sr-only">
 								{messages[feedback.outcome]}. <span lang="en">{currentWord.english}</span>: <span lang="es">{currentWord.spanish}</span>.
 								{#if currentWord.alternatives?.length}
 									{messages.alsoAccepted}: <span lang="es">{currentWord.alternatives.join(', ')}</span>.
@@ -289,7 +288,7 @@
 								onblur={() => { suggestionsOpen = false; }}
 								onkeydown={handleSearchKey}
 							/>
-							<span id="current-prompt" class="visually-hidden" lang="en">{currentWord.english}</span>
+							<span id="current-prompt" class="sr-only" lang="en">{currentWord.english}</span>
 							<div class="search-results">
 								<ul id="spanish-suggestions" role="listbox" aria-label={messages.suggestionsLabel} hidden={!popupOpen}>
 									{#each suggestions as option, index (option)}
@@ -313,7 +312,7 @@
 								{#if !query.trim()}<p class="search-empty">{messages.searchPrompt}</p>
 								{:else if !suggestions.length}<p class="search-empty">{messages.noMatches}</p>{/if}
 							</div>
-							<p class="visually-hidden" role="status">
+							<p class="sr-only" role="status">
 								{query.trim() ? (suggestions.length ? formatMessage(messages.suggestionCount, { count: suggestions.length }) : messages.noMatches) : ''}
 							</p>
 							<div class="answer-actions">
@@ -453,7 +452,6 @@
 
 	noscript { grid-column: 1 / -1; }
 	.notice { padding: 1rem; border: 1px solid var(--border); border-radius: 0.5rem; }
-	.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 	@keyframes reveal { from { opacity: 0; transform: translateY(0.25rem); } to { opacity: 1; transform: translateY(0); } }
 	@media (max-width: 75rem) and (min-width: 56.01rem), (max-width: 44rem) {
 		.start-layout, .study-layout { grid-template-columns: minmax(0, 1fr); gap: 1rem; }

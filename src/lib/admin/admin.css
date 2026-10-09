@@ -5,6 +5,12 @@
 	font-size: 0.875rem;
 }
 
+:where(.admin-console) .console-brand { display: flex; align-items: center; gap: 0.6rem; color: var(--foreground); text-decoration: none; }
+:where(.admin-console) .console-brand img { flex-shrink: 0; width: 2.65rem; height: 2.65rem; object-fit: contain; }
+:where(.admin-console) .console-brand span { display: grid; gap: 0.4rem; }
+:where(.admin-console) .console-brand strong { font-family: var(--font-display); font-size: 0.7rem; letter-spacing: -0.04em; }
+:where(.admin-console) .console-brand small { color: var(--primary); font-family: var(--font-mono); font-size: 0.56rem; letter-spacing: 0.1em; text-transform: uppercase; }
+
 .admin-console-dialog {
 	width: min(36rem, calc(100% - 2rem));
 	max-width: min(36rem, calc(100% - 2rem));
@@ -18,23 +24,26 @@
 
 :where(.admin-console, .admin-console-dialog) .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .admin-console .eyebrow { margin: 0; color: var(--primary); font-family: var(--font-mono); font-size: 0.65rem; font-weight: 500; letter-spacing: 0.13em; text-transform: uppercase; }
-.admin-console .panel { min-width: 0; }
 .admin-console .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.25rem 1.4rem; border-bottom: 1px solid var(--border); }
 .admin-console .panel-title { margin: 0; font-size: 0.95rem; font-weight: 700; letter-spacing: -0.02em; }
 .admin-console .panel-subtitle { margin: 0.3rem 0 0; color: var(--muted-foreground); font-size: 0.73rem; line-height: 1.6; }
 :where(.admin-console, .admin-console-dialog) .status-badge { color: var(--primary); background: var(--accent); border-color: var(--border); font-family: var(--font-mono); font-size: 0.59rem; line-height: 1.6; }
 :where(.admin-console, .admin-console-dialog) .status-badge::before { content: ''; width: 4px; height: 4px; border-radius: 50%; background: currentColor; }
-:where(.admin-console, .admin-console-dialog) .status-badge.invited,
 :where(.admin-console, .admin-console-dialog) .status-badge.neutral { color: var(--brand-slate); background: var(--muted); }
-:where(.admin-console, .admin-console-dialog) .status-badge.paused,
 :where(.admin-console, .admin-console-dialog) .status-badge.warning { color: var(--warning); background: color-mix(in srgb, var(--warning) 10%, var(--card)); border-color: color-mix(in srgb, var(--warning) 30%, transparent); }
 :where(.admin-console, .admin-console-dialog) .field { display: flex; flex-direction: column; gap: 0.5rem; min-width: 0; font-size: 0.74rem; }
 :where(.admin-console, .admin-console-dialog) .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.2rem; }
-:where(.admin-console, .admin-console-dialog) .form-grid .full-width { grid-column: 1 / -1; }
-:where(.admin-console, .admin-console-dialog) .modal-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.3rem; padding-right: 2.75rem; }
-:where(.admin-console, .admin-console-dialog) .modal-heading h2 { margin: 0; font-size: 1.3rem; }
 :where(.admin-console, .admin-console-dialog) .modal-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 0.65rem; margin-top: 1.5rem; }
 
+@media (max-width: 70rem) {
+	:where(.admin-console) .console-brand { gap: 0.4rem; }
+	:where(.admin-console) .console-brand strong { font-size: 0.6rem; }
+	:where(.admin-console) .console-brand img { width: 2.2rem; height: 2.2rem; }
+}
+@media (max-width: 52rem) {
+	:where(.admin-console) .console-brand strong { font-size: 0.8rem; }
+	:where(.admin-console) .console-brand img { width: 2.5rem; height: 2.5rem; }
+}
 @media (max-width: 40rem) {
 	.admin-console .panel-heading { padding: 1rem; }
 	:where(.admin-console, .admin-console-dialog) .form-grid { grid-template-columns: minmax(0, 1fr); }

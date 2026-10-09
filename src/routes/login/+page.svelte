@@ -17,7 +17,7 @@
 	<meta name="robots" content="noindex, nofollow" />
 </svelte:head>
 
-<section class="sign-in-panel" aria-labelledby="sign-in-title" lang={language.current}>
+<section class="sign-in-panel" aria-labelledby="sign-in-title">
 	<Card.Root class="gap-0 p-[clamp(1.25rem,4vw,2.5rem)] text-base">
 		<p class="eyebrow">{messages.student.eyebrow}</p>
 		{#if data.viewer}

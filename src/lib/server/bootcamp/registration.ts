@@ -1,14 +1,24 @@
 import { createHash } from 'node:crypto';
 import { and, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import type { Database } from '../db/connection';
-import { students, type Student } from '../db/schema';
-import { bootcampAccounts as accounts, bootcampDocuments as documents, bootcampEvents as events, bootcampPayments as payments, bootcampRegistrations as registrations } from '../db/bootcamp-schema';
-import { isAdult, registrationAvailable, validBirthDate } from '../../bootcamp/rules';
+import { studentAccounts as accounts, students, type Student } from '../db/schema';
+import { bootcampDocuments as documents, bootcampEvents as events, bootcampPayments as payments, bootcampRegistrations as registrations } from '../db/bootcamp-schema';
+import { isAdult, registrationAvailable } from '../../bootcamp/rules';
 import { sectionKeys, type BootcampEvent, type LetterSnapshot, type StudentBootcampPage, type StudentSnapshot, type WaiverSnapshot } from '../../bootcamp/types';
+import { creditedCents, paymentNeedsAttention } from '../../bootcamp/payment-rules';
 import { BootcampError, employerFields, field, id, languageField, revisionField } from './validation';
 import { validateSignature } from './signatures';
 import { renderLetterPdf, renderWaiverPdf } from './pdf';
 import { createPreviewProof, studentIdentityVersion } from './signing';
+
+type RegistrationContext = { student: Student; event: typeof events.$inferSelect };
+export type RegistrationService = {
+	start(userId: string, eventId: string): Promise<string>;
+	previewDocument(userId: string, form: FormData): Promise<{ pdf: Buffer; token: string }>;
+	submitWaiver(userId: string, form: FormData): Promise<string>;
+	submitLetter(userId: string, form: FormData): Promise<string | null>;
+	ownedRegistration(userId: string, eventId: string, requireActive?: boolean): Promise<typeof registrations.$inferSelect>;
+};
 
 export function eventView(event: typeof events.$inferSelect): BootcampEvent {
 	return {
@@ -22,8 +32,11 @@ export async function linkedStudent(db: Database, userId: string): Promise<Stude
 	const [row] = await db.select({ student: students }).from(accounts).innerJoin(students, eq(students.id, accounts.studentId)).where(eq(accounts.userId, userId));
 	return row?.student ?? null;
 }
-function eligible(student: Student, now: Date, requireDob = false) {
-	if (!student.isActive || (student.dateOfBirth ? !isAdult(student.dateOfBirth, now) : requireDob)) throw new BootcampError('ineligible');
+function provisionallyEligible(student: Student, now: Date): boolean {
+	return student.status === 'active' && (!student.dateOfBirth || isAdult(student.dateOfBirth, now));
+}
+function eligible(student: Student, now: Date) {
+	if (!provisionallyEligible(student, now)) throw new BootcampError('ineligible');
 }
 function openEvent(event: typeof events.$inferSelect | undefined, now: Date) {
 	if (!event || !registrationAvailable(eventView(event), now)) throw new BootcampError('closed');
@@ -33,27 +46,28 @@ function openEvent(event: typeof events.$inferSelect | undefined, now: Date) {
 export async function studentPage(db: Database, userId: string, paymentEnabled: boolean, now = new Date()): Promise<StudentBootcampPage> {
 	const student = await linkedStudent(db, userId);
 	if (!student) return { student: null, events: [], registrations: [], paymentEnabled };
+	const canRegister = provisionallyEligible(student, now);
 	const own = await db.select().from(registrations).where(eq(registrations.studentId, student.id));
 	const visible = (await db.select().from(events).orderBy(desc(events.startsAt))).filter((event) =>
-		event.endsAt >= now && ((student.isActive && (!student.dateOfBirth || isAdult(student.dateOfBirth, now)) && registrationAvailable(eventView(event), now)) || own.some((r) => r.eventId === event.id)));
+		event.endsAt >= now && ((canRegister && registrationAvailable(eventView(event), now)) || own.some((r) => r.eventId === event.id)));
 	const ownVisible = own.filter((r) => visible.some((e) => e.id === r.eventId));
 	const ids = ownVisible.map((r) => r.id);
 	const docs = ids.length ? await db.select({ id: documents.id, registrationId: documents.registrationId, kind: documents.kind, language: documents.language }).from(documents).where(inArray(documents.registrationId, ids)) : [];
 	const attempts = ids.length ? await db.select({ id: payments.id, registrationId: payments.registrationId, status: payments.status, amountCents: payments.amountCents, lastError: payments.lastError }).from(payments).where(inArray(payments.registrationId, ids)).orderBy(desc(payments.createdAt)) : [];
 	return {
 		student: { id: student.id, name: `${student.firstName} ${student.lastName}`, email: student.email, dateOfBirth: student.dateOfBirth, identityVersion: studentIdentityVersion(student) },
-		events: visible.map((e) => ({ ...eventView(e), registrationOpen: e.registrationOpen && student.isActive && (!student.dateOfBirth || isAdult(student.dateOfBirth, now)) })),
+		events: visible.map((e) => ({ ...eventView(e), registrationOpen: e.registrationOpen && canRegister })),
 		registrations: ownVisible.map((r) => {
 			const payment = attempts.find((p) => p.registrationId === r.id);
 			return { id: r.id, eventId: r.eventId, waiver: r.waiver, letterChoice: r.letterChoice,
-				paidCents: attempts.filter((p) => p.registrationId === r.id && p.status === 'completed').reduce((sum, p) => sum + p.amountCents, 0),
-				payment: payment ? { id: payment.id, status: payment.status, uncertain: payment.lastError !== null } : undefined,
+				paidCents: creditedCents(attempts.filter((p) => p.registrationId === r.id)),
+				payment: payment ? { id: payment.id, status: payment.status, uncertain: paymentNeedsAttention(payment) } : undefined,
 				documents: docs.filter((d) => d.registrationId === r.id).map(({ id, kind, language }) => ({ id, kind, language })) };
 		}), paymentEnabled
 	};
 }
 
-export function createRegistrationService(db: Database, backupDocument: (id: string) => Promise<unknown> = async () => {}, previewSecret?: string) {
+export function createRegistrationService(db: Database, backupDocument: (id: string) => Promise<unknown> = async () => {}, previewSecret?: string): RegistrationService {
 	const proof = createPreviewProof(previewSecret);
 	async function context(userId: string, eventId: string, now = new Date()) {
 		const student = await linkedStudent(db, userId);
@@ -74,13 +88,10 @@ export function createRegistrationService(db: Database, backupDocument: (id: str
 			return registration.id;
 		});
 	}
-	async function prepareWaiver(userId: string, form: FormData) {
-		const eventId = id(form.get('eventId'));
-		const now = new Date();
-		const { student, event } = await context(userId, eventId, now);
+	async function prepareWaiver(userId: string, form: FormData, { student, event }: RegistrationContext, now: Date) {
 		if (event.revision !== revisionField(form) || form.get('identityVersion') !== studentIdentityVersion(student)) throw new BootcampError('stale');
 		const dateOfBirth = field(form, 'dateOfBirth', 10);
-		if (!validBirthDate(dateOfBirth, now) || !isAdult(dateOfBirth, now)) throw new BootcampError('ineligible');
+		if (!isAdult(dateOfBirth, now)) throw new BootcampError('ineligible');
 		if (student.dateOfBirth && dateOfBirth !== student.dateOfBirth) throw new BootcampError('stale');
 		const signatures = {} as WaiverSnapshot['signatures'];
 		for (const section of sectionKeys) {
@@ -101,32 +112,33 @@ export function createRegistrationService(db: Database, backupDocument: (id: str
 		try { pdf = await renderWaiverPdf(snapshot); } catch { throw new BootcampError('invalid'); }
 		return { snapshot, pdf, student };
 	}
-	async function preview(userId: string, form: FormData) { return (await prepareWaiver(userId, form)).pdf; }
 	async function previewDocument(userId: string, form: FormData) {
-		const { snapshot, pdf, student } = await prepareWaiver(userId, form);
+		const now = new Date();
+		const loaded = await context(userId, id(form.get('eventId')), now);
+		const { snapshot, pdf, student } = await prepareWaiver(userId, form, loaded, now);
 		return { pdf, token: proof.sign(userId, snapshot, studentIdentityVersion(student)) };
 	}
 	async function submitWaiver(userId: string, form: FormData) {
 		const eventId = id(form.get('eventId'));
-		const { student: owner } = await context(userId, eventId);
+		const now = new Date();
+		const loaded = await context(userId, eventId, now);
 		const [completed] = await db.select({ id: documents.id }).from(documents)
 			.innerJoin(registrations, eq(registrations.id, documents.registrationId))
-			.where(and(eq(registrations.eventId, eventId), eq(registrations.studentId, owner.id), isNotNull(registrations.waiver), eq(documents.kind, 'waiver')));
+			.where(and(eq(registrations.eventId, eventId), eq(registrations.studentId, loaded.student.id), isNotNull(registrations.waiver), eq(documents.kind, 'waiver')));
 		// A lost response can be retried even if the first save filled in DOB/updated_at.
 		// Return existing evidence; never apply the retried form to an already-signed document.
 		if (completed) {
 			try { await backupDocument(completed.id); } catch { /* The stored document remains retryable. */ }
 			return completed.id;
 		}
-		const { snapshot, pdf, student } = await prepareWaiver(userId, form);
+		const { snapshot, pdf, student } = await prepareWaiver(userId, form, loaded, now);
 		const documentId = await db.transaction(async (tx) => {
 			const [event] = await tx.select().from(events).where(eq(events.id, snapshot.event.id)).for('update');
 			openEvent(event, new Date());
 			if (event.revision !== snapshot.event.revision) throw new BootcampError('stale');
 			const [currentStudent] = await tx.select().from(students).where(eq(students.id, student.id)).for('update');
 			eligible(currentStudent, new Date());
-			if (studentIdentityVersion(currentStudent) !== studentIdentityVersion(student) || `${currentStudent.firstName} ${currentStudent.lastName}` !== snapshot.student.name || currentStudent.email !== snapshot.student.email ||
-				(currentStudent.dateOfBirth && currentStudent.dateOfBirth !== snapshot.student.dateOfBirth)) throw new BootcampError('stale');
+			if (studentIdentityVersion(currentStudent) !== studentIdentityVersion(student)) throw new BootcampError('stale');
 			await tx.insert(registrations).values({ eventId: event.id, studentId: student.id }).onConflictDoNothing();
 			const [registration] = await tx.select().from(registrations).where(and(eq(registrations.eventId, event.id), eq(registrations.studentId, student.id))).for('update');
 			if (registration.waiver) {
@@ -160,7 +172,8 @@ export function createRegistrationService(db: Database, backupDocument: (id: str
 			openEvent(event, new Date());
 			if (snapshot && event.revision !== snapshot.event.revision) throw new BootcampError('stale');
 			const [currentStudent] = await tx.select().from(students).where(eq(students.id, student.id)).for('update');
-			eligible(currentStudent, new Date(), true);
+			eligible(currentStudent, new Date());
+			if (!currentStudent.dateOfBirth) throw new BootcampError('ineligible');
 			const [current] = await tx.select().from(registrations).where(eq(registrations.id, registration.id)).for('update');
 			if (current.letterChoice !== null) return null;
 			await tx.update(registrations).set({ letterChoice: choice === 'true', updatedAt: new Date() }).where(eq(registrations.id, current.id));
@@ -174,19 +187,22 @@ export function createRegistrationService(db: Database, backupDocument: (id: str
 	async function ownedRegistration(userId: string, eventId: string, requireActive = true) {
 		const student = await linkedStudent(db, userId);
 		if (!student) throw new BootcampError('notLinked');
-		if (requireActive) eligible(student, new Date(), true);
+		if (requireActive) {
+			eligible(student, new Date());
+			if (!student.dateOfBirth) throw new BootcampError('ineligible');
+		}
 		const [registration] = await db.select().from(registrations).where(and(eq(registrations.eventId, id(eventId)), eq(registrations.studentId, student.id)));
 		if (!registration) throw new BootcampError('invalid');
 		return registration;
 	}
-	return { start, preview, previewDocument, submitWaiver, submitLetter, ownedRegistration };
+	return { start, previewDocument, submitWaiver, submitLetter, ownedRegistration };
 }
 
 export async function documentForViewer(db: Database, documentId: string, viewer: { id: string; role: string }, now = new Date()) {
 	id(documentId);
 	// Access predicates execute in SQL; unauthorized requests never load another student's PDF bytes.
 	const ownership = viewer.role === 'admin' ? sql`true` : and(
-		sql`${registrations.studentId} IN (SELECT student_id FROM bootcamp_accounts WHERE user_id = ${viewer.id})`,
+		sql`${registrations.studentId} IN (SELECT student_id FROM student_accounts WHERE user_id = ${viewer.id})`,
 		sql`${events.endsAt} >= ${now.toISOString()}::timestamptz`
 	);
 	const [doc] = await db.select({ id: documents.id, pdf: documents.pdf, kind: documents.kind, sha256: documents.sha256, language: documents.language }).from(documents)

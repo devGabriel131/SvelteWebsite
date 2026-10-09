@@ -3,13 +3,13 @@
 	import { useLanguage } from '#lib/i18n/language.svelte.ts';
 	import { formatMessage } from '#lib/i18n/translations.ts';
 	import ActionForm from './ActionForm.svelte';
+	import { formatMoney } from './format';
+	import { normalizePhone } from './payment-rules';
 	import { depositCents, priceCents, type StudentRegistration } from './types';
 
 	let { eventId, registration, canPay, paymentEnabled, now }: {
 		eventId: string;
-		registration?: StudentRegistration & {
-			payment?: NonNullable<StudentRegistration['payment']> & { uncertain?: boolean };
-		};
+		registration: StudentRegistration | undefined;
 		canPay: boolean;
 		paymentEnabled: boolean;
 		now: number;
@@ -36,9 +36,6 @@
 		&& automaticChecksUntil !== null && now < automaticChecksUntil);
 	const displayStatus = $derived(submissionLocked && canStartAttempt ? 'uncertain'
 		: payment && Object.hasOwn(messages.stateHints, payment.status) ? payment.status : payment ? 'unknown' : null);
-	const money = (cents: number) => new Intl.NumberFormat(language.current === 'es' ? 'es-PR' : 'en-US', {
-		style: 'currency', currency: 'USD'
-	}).format(cents / 100);
 
 	$effect(() => {
 		if (unresolved && automaticChecksUntil === null) automaticChecksUntil = Date.now() + 10 * 60 * 1000;
@@ -56,9 +53,8 @@
 
 	function preparePayment(fields: FormData) {
 		if (!canPay || !paymentEnabled || !canStartAttempt || submissionLocked || checkPending) return false;
-		const phone = String(fields.get('phone') ?? '');
-		const match = /^(?:\+?1)?(\d{10})$/.exec(phone.replace(/[\s().-]/g, ''));
-		if (!match || phone.length > 40) {
+		const phone = normalizePhone(fields.get('phone'));
+		if (phone === null) {
 			phoneInvalid = true;
 			phoneInput?.setCustomValidity(messages.invalidPhone);
 			phoneInput?.reportValidity();
@@ -66,8 +62,8 @@
 		}
 		phoneInvalid = false;
 		phoneInput?.setCustomValidity('');
-		if (phoneInput) phoneInput.value = match[1];
-		fields.set('phone', match[1]);
+		if (phoneInput) phoneInput.value = phone;
+		fields.set('phone', phone);
 		// Even an unsuccessful HTTP response can follow a provider-side charge.
 		// Only an authoritative status check may unlock this local attempt guard.
 		submissionLocked = true;
@@ -79,16 +75,16 @@
 	<h3>{messages.title}</h3>
 	<p class="bc-hint">{messages.description}</p>
 	<dl class="bc-details">
-		<div><dt>{messages.total}</dt><dd>{money(priceCents)}</dd></div>
-		<div><dt>{messages.paid}</dt><dd>{money(paid)}</dd></div>
-		<div><dt>{messages.remaining}</dt><dd>{money(remaining)}</dd></div>
+		<div><dt>{messages.total}</dt><dd>{formatMoney(priceCents, language.current)}</dd></div>
+		<div><dt>{messages.paid}</dt><dd>{formatMoney(paid, language.current)}</dd></div>
+		<div><dt>{messages.remaining}</dt><dd>{formatMoney(remaining, language.current)}</dd></div>
 	</dl>
 	<p class="bc-hint">{messages.recordsNotice}</p>
 	{#if confirmed}
 		<p class="bc-notice" role="status">{messages.confirmed}</p>
 		{#if remaining === 0}<p class="bc-hint">{messages.complete}</p>{/if}
 	{/if}
-	{#if paid > 0 && remaining > 0}<p class="bc-notice">{formatMessage(messages.remainingNotice, { amount: money(remaining) })}</p>{/if}
+	{#if paid > 0 && remaining > 0}<p class="bc-notice">{formatMessage(messages.remainingNotice, { amount: formatMoney(remaining, language.current) })}</p>{/if}
 	{#if displayStatus}
 		<div class="bc-stack" role="status">
 			<p class="bc-status">{messages.statuses[displayStatus]}</p>
@@ -98,7 +94,7 @@
 	{#if payment?.uncertain}<p class="bc-notice" role="status">{messages.verificationAttention}</p>{/if}
 	{#if registration && (payment || submissionLocked || paid > 0)}
 		<ActionForm action="?/checkPayment" bind:formElement={checkForm} bind:pending={checkPending}
-			updatePageForm={false} successMessage={messages.checked}
+			successMessage={messages.checked}
 			beforeSubmit={() => !paymentPending}
 			onSuccess={() => submissionLocked = false} onFailure={() => automaticChecksStopped = true}>
 			{#snippet children(pending)}
@@ -124,8 +120,8 @@
 					<p id={`${id}-phone-hint`} class="bc-hint">{messages.phoneHint}</p>
 					{#if phoneInvalid}<p id={`${id}-phone-error`} class="bc-error" role="alert">{messages.invalidPhone}</p>{/if}
 					<div class="bc-actions">
-						<Button type="submit" name="amountCents" value={String(priceCents)} disabled={pending || submissionLocked || checkPending}>{formatMessage(messages.full, { amount: money(priceCents) })}</Button>
-						<Button type="submit" name="amountCents" value={String(depositCents)} variant="outline" disabled={pending || submissionLocked || checkPending}>{formatMessage(messages.deposit, { amount: money(depositCents) })}</Button>
+						<Button type="submit" name="amountCents" value={String(priceCents)} disabled={pending || submissionLocked || checkPending}>{formatMessage(messages.full, { amount: formatMoney(priceCents, language.current) })}</Button>
+						<Button type="submit" name="amountCents" value={String(depositCents)} variant="outline" disabled={pending || submissionLocked || checkPending}>{formatMessage(messages.deposit, { amount: formatMoney(depositCents, language.current) })}</Button>
 					</div>
 				</fieldset>
 			{/snippet}

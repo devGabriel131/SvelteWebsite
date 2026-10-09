@@ -1,17 +1,19 @@
 import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from 'node:crypto';
-import { and, asc, eq, gt, inArray, isNotNull, isNull, lte, ne, or, sql } from 'drizzle-orm';
-import { depositCents, priceCents } from '../../bootcamp/types';
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lte, ne, or, sql } from 'drizzle-orm';
+import { isPaymentAmount, normalizePhone, paymentNeedsAttention } from '../../bootcamp/payment-rules';
 import { isAdult } from '../../bootcamp/rules';
 import type { Database } from '../db/connection';
 import { students } from '../db/schema';
 import { bootcampEvents as events, bootcampPayments as payments, bootcampRegistrations as registrations } from '../db/bootcamp-schema';
-import { AthError, normalizeAthPhone, type AthClient, type AthVerification } from './ath';
+import { AthError, bearerPattern, type AthClient, type AthVerification } from './ath';
+import { uuidPattern } from './validation';
 
 type Payment = typeof payments.$inferSelect;
 export type PaymentState = Pick<Payment, 'amountCents' | 'status'> & { attemptId: string; uncertain: boolean };
 export type PaymentService = {
 	start(registrationId: string, amountCents: number, phone: string): Promise<PaymentState>;
 	reconcile(attemptId: string): Promise<PaymentState | null>;
+	reconcileLatest(registrationId: string): Promise<void>;
 	drain(eventId?: string, limit?: number): Promise<PaymentState[]>;
 	notify(hints: { attemptId?: string; reference?: string }): Promise<void>;
 };
@@ -34,8 +36,7 @@ export class PaymentError extends Error {
 	}
 }
 
-const uuid = /^[\da-f]{8}-[\da-f]{4}-[1-8][\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/i;
-const validId = (value: unknown): value is string => typeof value === 'string' && uuid.test(value);
+const validId = (value: unknown): value is string => typeof value === 'string' && uuidPattern.test(value);
 const now = sql`clock_timestamp()`;
 // Millisecond precision permits exact round trips through Drizzle's Date representation.
 const lease = sql`date_trunc('milliseconds', clock_timestamp()) + interval '2 minutes'`;
@@ -45,7 +46,7 @@ const freeLease = () => or(isNull(payments.leaseUntil), lte(payments.leaseUntil,
 const owned = (row: Payment) => and(eq(payments.id, row.id), eq(payments.leaseUntil, row.leaseUntil!), gt(payments.leaseUntil, now));
 const safeState = (row: Payment): PaymentState => ({
 	attemptId: row.id, amountCents: row.amountCents, status: row.status,
-	uncertain: row.status === 'uncertain' || row.lastError !== null
+	uncertain: paymentNeedsAttention(row)
 });
 
 export type PaymentTokenContext = Pick<Payment, 'id' | 'registrationId' | 'amountCents'> & { reference: string };
@@ -59,7 +60,7 @@ export function createPaymentTokenVault(encryptionKey: string) {
 	]));
 	return {
 		seal(token: string, context: PaymentTokenContext): string {
-			if (typeof token !== 'string' || !token.length || token.length > 16_384 || !/^[A-Za-z0-9\-._~+/]+=*$/.test(token)) {
+			if (typeof token !== 'string' || !token.length || token.length > 16_384 || !bearerPattern.test(token)) {
 				throw new PaymentError('token');
 			}
 			const nonce = randomBytes(12);
@@ -141,7 +142,7 @@ export function createPaymentService(db: Database, client: AthClient, encryption
 				}
 				transactionId = result.transactionId;
 				status = saved.status === 'refunded' ? 'refunded' : result.status;
-			} else if (['pending', 'cancelled', 'expired'].includes(result.status)) {
+			} else if (result.status === 'pending' || result.status === 'cancelled') {
 				if (saved.status === 'completed' || saved.status === 'refunded') lastError = 'stale_provider_status';
 				else if (saved.authorizationStarted) { status = 'uncertain'; lastError = 'authorization_unresolved'; }
 				else status = result.status === 'pending' ? 'pending' : 'cancelled';
@@ -192,11 +193,11 @@ export function createPaymentService(db: Database, client: AthClient, encryption
 
 	return {
 		async start(registrationId, amountCents, phone) {
-			if (!validId(registrationId) || !Number.isSafeInteger(amountCents) || ![depositCents, priceCents].includes(amountCents)) {
+			if (!validId(registrationId) || !isPaymentAmount(amountCents)) {
 				throw new PaymentError('invalid_input');
 			}
-			let normalizedPhone: string;
-			try { normalizedPhone = normalizeAthPhone(phone); } catch { throw new PaymentError('invalid_input'); }
+			const normalizedPhone = normalizePhone(phone);
+			if (normalizedPhone === null) throw new PaymentError('invalid_input');
 			return storage(async () => {
 				const prepared = await db.transaction(async (tx) => {
 					// Discover immutable associations without taking the registration lock out of order.
@@ -218,7 +219,7 @@ export function createPaymentService(db: Database, client: AthClient, encryption
 					if (!available) throw new PaymentError('unavailable');
 					const checkedAt = new Date(available.checkedAt);
 					if (!Number.isFinite(checkedAt.getTime())) throw new PaymentError('storage');
-					if (!student.isActive || !isAdult(student.dateOfBirth, checkedAt)) throw new PaymentError('ineligible');
+					if (student.status !== 'active' || !isAdult(student.dateOfBirth, checkedAt)) throw new PaymentError('ineligible');
 					// Submitted documents are immutable: a later event revision does not invalidate this waiver.
 					if (registration.waiver?.event?.id !== event.id || typeof registration.letterChoice !== 'boolean') {
 						throw new PaymentError('prerequisites');
@@ -255,6 +256,18 @@ export function createPaymentService(db: Database, client: AthClient, encryption
 			});
 		},
 		reconcile,
+		async reconcileLatest(registrationId) {
+			if (!validId(registrationId)) throw new PaymentError('invalid_input');
+			let attemptId: string | undefined;
+			try {
+				const [latest] = await db.select({ id: payments.id }).from(payments)
+					.where(eq(payments.registrationId, registrationId)).orderBy(desc(payments.createdAt)).limit(1);
+				attemptId = latest?.id;
+			} catch {
+				throw new Error('Payment lookup failed.');
+			}
+			if (attemptId) await reconcile(attemptId);
+		},
 		async drain(eventId, limit = 10) {
 			if ((eventId !== undefined && !validId(eventId)) || !Number.isInteger(limit) || limit < 1 || limit > 50) {
 				throw new PaymentError('invalid_input');

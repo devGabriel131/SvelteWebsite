@@ -17,7 +17,7 @@ All four variables below are required **when Gmail is used**:
 
 `EMAIL_TEST_MODE` is optional. After trimming and case normalization, `1`, `true`, `yes`, and `on` enable it; `0`, `false`, `no`, `off`, blank, and missing disable it. **All other values are configuration errors.** This is deliberately stricter than the legacy behavior so a misspelling cannot silently select normal sending.
 
-Credential values are trimmed. Sender control characters are rejected before trimming surrounding whitespace. Missing/blank required values are reported together by variable name, never by value. Imports and ordinary development/builds do not require Gmail credentials: the application client is initialized and cached only on the first `getGmailClient()` or `sendEmail()` call. Missing configuration throws `GmailError`; there is no disabled/null client or silent no-op. Restart the application after changing configuration so the cached client is replaced.
+Credential values are trimmed; sender controls are rejected before surrounding whitespace is trimmed. Missing/blank requirements are named together, never echoed. Public development/builds need no Gmail config: first `getGmailClient()` call lazily constructs/caches the client. Bad/missing config throws `GmailError`, never a null/no-op client. Constructor validates nonnull config, boolean test mode, sender, credentials, and timeout before invitation provisioning writes; every send still validates configuration for MIME composition plus original recipients/content. Restart after config changes to replace the snapshot.
 
 ### Google prerequisites and refresh token provision
 
@@ -25,14 +25,15 @@ Credential values are trimmed. Sender control characters are rejected before tri
 2. Use an existing valid Gmail refresh token tied to that client and sender account, or run an authorized OAuth consent flow outside this website. Request `https://www.googleapis.com/auth/gmail.send` with `access_type=offline`; use `prompt=consent` when new consent is needed to obtain a refresh token. Exchange the resulting authorization code using the same OAuth client and redirect URI, then store the returned refresh token privately as `GOOGLE_OAUTH_REFRESH_TOKEN`. The backend exchanges that refresh token for short-lived access tokens; it does not provide a setup/consent endpoint or obtain consent itself.
 3. Do not substitute the Drive-only refresh token. Shared client ID/secret values do not grant Gmail scopes. Review OAuth app publishing and Workspace policy: external apps in Testing can have short-lived refresh tokens, and consent or administrator approval may be required.
 4. Set `GMAIL_SENDER_ADDRESS` to that account's own mailbox or an address already configured and verified in Gmail's **Send mail as** settings. Merely putting an arbitrary address in this variable does not authorize it. This module does not create or verify aliases.
-5. Before enabling any future workflow, perform a controlled send using fictitious content and an account you control. Test mode is suitable for this check, but it still contacts Google and delivers a real message. Check the configured sender's mailbox and Sent mail, and verify permissions and expected attachment contents.
+5. Before importing real students, perform an authorized controlled send with fictitious content and an account you control. Test mode still contacts Google and delivers a real message. Check sender mailbox/Sent mail, permissions, canonical invitation domain, and attachment contents. Offline tests do not perform this operational check.
 
 ## Server API
 
 Import the application wrapper only from server-side code:
 
 ```ts
-import { sendEmail, type Email } from '$lib/server/gmail';
+import { getGmailClient } from '$lib/server/gmail';
+import type { Email } from '$lib/server/gmail/message';
 
 // Run only after the server has authenticated the caller and authorized these recipients and contents.
 const email: Email = {
@@ -47,15 +48,16 @@ const email: Email = {
   }]
 };
 
-const gmailId: string = await sendEmail(email);
+const gmailId: string = await getGmailClient().send(email);
 ```
 
-`sendEmail(email, signal?)` returns the Gmail message ID, not a MIME `Message-ID` header or proof of delivery. `getGmailClient()` returns the same lazily cached client. Both use the private environment above.
+`getGmailClient()` is the composition entry point's only export. It returns the same lazily cached client using the private environment above. `client.send(email, signal?)` returns the Gmail message ID, not a MIME `Message-ID` header or proof of delivery. Its copied `send` method closes over construction-time configuration and needs no receiver.
 
-The entry point also exports `createGmailClient`, `readGmailConfig`, `GmailError`, and the `GmailClient`, `GmailConfig`, `GmailEnvironment`, `Email`, `EmailAttachment`, `GoogleClientOptions`, and `GoogleErrorKind` types. For explicit server configuration or isolated tests, use `readGmailConfig(env)` and `createGmailClient(config, { fetch, timeoutMs })`; the pure modules can be imported directly from `config.ts` and `client.ts` without SvelteKit's private-env entry point.
+For explicit server configuration or isolated tests, import `readGmailConfig` and its configuration types from `config.ts`, `createGmailClient` and `GmailClient` from `client.ts`, `GmailError` from `error.ts`, and `Email`/`EmailAttachment` from `message.ts`. Shared `GoogleClientOptions` and `GoogleErrorKind` belong to `../google/client.ts`. These pure modules do not load SvelteKit's private-env entry point.
 
 - `GmailConfig` contains `clientId`, `clientSecret`, `refreshToken`, `senderAddress`, and `testMode`.
-- `GmailClient.send(email, signal?)` has the same `Promise<string>` result as the wrapper. An optional `AbortSignal` bounds a caller's wait; cancellation is not a recall operation.
+- `GmailClient` exposes readonly `testMode`, the same construction-time snapshot used for MIME rewriting, plus `send(email, signal?): Promise<string>`. An optional `AbortSignal` bounds a caller's wait; cancellation is not a recall operation.
+- Invitation runtime adapts the cached client to `{ baseURL, testMode: client.testMode, send: client.send }` after private auth-origin validation. Preflight happens before account writes; persisted invitation claim/send/result state and explicit resend belong to [student intake](student-import.md), not a generic Gmail outbox.
 - `Email` requires `to: string[]` and `subject: string`; `cc`, `bcc`, `body`, `htmlBody`, and `attachments` are optional. Supply each recipient as its own array element, not a comma-separated string. Text and HTML can be supplied together.
 - `EmailAttachment` is `{ filename: string; bytes: Uint8Array; mimeType?: string }`. Attachment contents stay in memory: there are no filesystem path or remote-URL attachment inputs. `filename` must be a basename without paths or control characters; it is message metadata, not a path to read. `mimeType` accepts a `type/subtype` without parameters and defaults to `application/octet-stream`. Callers must obtain/authorize bytes themselves and enforce suitable size limits for their runtime and Google's sending limits.
 
@@ -63,7 +65,7 @@ The entry point also exports `createGmailClient`, `readGmailConfig`, `GmailError
 
 Sender and recipient parsing intentionally accepts a **subset** of email mailbox syntax: ASCII dot-atom addresses with DNS domains, optionally accompanied by Unicode display names, including quoted names such as `"Menéndez, María" <recipient@example.com>`. Lists inside a single string, groups, comments, quoted local parts, address literals, non-ASCII addr-specs, and controls are rejected. Some addresses valid under broader email standards are therefore unsupported; validation does not prove a mailbox exists or is deliverable.
 
-**Being server-only is not authorization.** Any caller that exposes sending through a future action, endpoint, or job must authenticate and authorize the operation, recipients, sender use, content, and attachments. Never forward arbitrary browser-supplied recipient lists directly to this primitive. Add workflow-specific consent, quotas, abuse protection, and safe localized UI errors at that boundary; none are provided by this port. The sender is chosen from trusted server configuration, not from `Email`.
+**Being server-only is not authorization.** Intake already authenticates admins, authorizes reviewed new-student recipients, and bounds its workbook before calling Gmail. Any other action/endpoint/job must authorize caller, recipients, sender use, content, and attachments itself. Never forward arbitrary browser recipient lists. This primitive supplies no general consent/quota/abuse/UI policy; sender comes only from trusted configuration, not `Email`.
 
 ## Test mode is a real send
 
@@ -82,14 +84,14 @@ Sending transfers sender and recipient addresses/display names, subject, body, a
 
 The backend does not log raw message content, attachments, recipient lists, credentials, or Google response bodies. `GmailError` extends the shared `GoogleApiError`, with safe generic messages, a `kind` of `configuration`, `auth`, `bad_input`, or `upstream`, and an optional numeric HTTP `status`. Configuration errors may name offending variables but do not echo their values; mailbox errors contain no input details. Callers should report only safe categories/statuses operationally, not log the `Email` object, private configuration, or raw provider responses.
 
-The shared transport caches access tokens in memory, coalesces concurrent refreshes, and supports bounded requests and cancellation. The default timeout is 30 seconds **per HTTP request**; refreshing a token and sending are separate requests, not one 30-second overall transaction.
+OAuth/token lifetime, single-flight/cancellation, timeouts, redirects, no implicit replay, and safe transport classification are owned by `src/lib/server/google/client.ts` and documented once under [shared Google transport](google-drive.md#shared-google-transport). Gmail retains its MIME/test-mode/config/result boundaries; cancellation is not message recall.
 
-**There are no automatic retries, idempotence guarantees, durable outbox, cross-request deduplication, or delivery guarantees.** A timeout, cancellation, or lost response can occur after Google has accepted the message. Retrying may send duplicates. A returned Gmail ID confirms an API result, not inbox placement, successful downstream delivery, or recipient receipt; Gmail/recipient policy can still reject, filter, or bounce mail. Reconcile ambiguous outcomes before manually resending, and design a separate authorized workflow if durable sending or status tracking is needed.
+Gmail has no generic durable outbox, idempotence, cross-request deduplication, automatic retry, or delivery guarantee. Google may accept a message before timeout/cancellation/response loss; replay can duplicate mail. A returned ID is API acknowledgment, not inbox placement/receipt. Intake separately persists claim/result states and offers **explicit token-rotating resend**, not automatic retry; it still cannot prove delivery or eliminate ambiguous acceptance. Reconcile uncertainty before resending.
 
 ## Validation
 
 ```sh
-bun test tests/gmail-config.test.ts tests/gmail-message.test.ts tests/gmail-client.test.ts tests/google-client.test.ts
+bun --no-env-file test tests/gmail-config.test.ts tests/gmail-message.test.ts tests/gmail-client.test.ts tests/google-client.test.ts
 ```
 
 The config tests use explicit fictitious environment objects and pure validation: they do not read or mutate `process.env`, need live credentials, or send email. Client tests use injected fetch mocks; message tests compose MIME in memory. Neither performs network requests or live sends.

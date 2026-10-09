@@ -1,8 +1,8 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import type { StudentImportOptions } from '../student-invitations';
 
 export const IMPORT_REVIEW_TTL_MS = 15 * 60 * 1000;
 
-export type StudentImportOptions = { classType: 'basic' | 'regular'; emailLanguage: 'en' | 'es' };
 type ReviewInput = StudentImportOptions & { adminId: string; file: Uint8Array };
 
 function fingerprint(input: ReviewInput) {

@@ -4,7 +4,7 @@ import { drizzle } from 'drizzle-orm/pg-proxy';
 import {
 	BootcampBackupError, createBootcampBackup, type BootcampBackupDatabase
 } from '../src/lib/server/bootcamp/backup';
-import { DriveError, type DriveClient, type DriveClientWithFileIds, type DriveFile } from '../src/lib/server/drive/client';
+import { DriveError, type DriveClient, type DriveFile } from '../src/lib/server/drive/client';
 
 const documentId = '11111111-1111-4111-8111-111111111111';
 const eventId = '22222222-2222-4222-8222-222222222222';
@@ -143,7 +143,7 @@ function drive() {
 		if (!file) throw new DriveError('bad_input', 'Not found.', 404);
 		return file;
 	});
-	const client: DriveClientWithFileIds = { upload, generateFileId, getFile, createFolder: async () => { throw new Error('No folders expected.'); } };
+	const client: Pick<DriveClient, 'upload' | 'generateFileId' | 'getFile'> = { upload, generateFileId, getFile };
 	return { client, files, generateFileId, upload, getFile };
 }
 
@@ -175,7 +175,7 @@ describe('persistent bootcamp backups', () => {
 			expect(signal).toBeInstanceOf(AbortSignal);
 			return upload(file, signal);
 		};
-		const backup = createBootcampBackup(store.db, remote.client, folderId);
+		const backup = createBootcampBackup(store.db, { client: remote.client, folderId });
 		expect(await backup.backupDocument(documentId)).toEqual(saved());
 		expect(row).toMatchObject({ backupStatus: 'saved', backupError: null, backupLeaseUntil: null, backedUpAt: store.now() });
 		expect(row.pdf).toEqual(pdf);
@@ -196,13 +196,13 @@ describe('persistent bootcamp backups', () => {
 			await upload(file, signal);
 			throw new Error(secret);
 		};
-		expect(await createBootcampBackup(store.db, remote.client, folderId).backupDocument(documentId)).toEqual({
+		expect(await createBootcampBackup(store.db, { client: remote.client, folderId }).backupDocument(documentId)).toEqual({
 			documentId, status: 'failed', error: 'drive_unavailable'
 		});
 		expect(row).toMatchObject({ driveFileId: 'reserved-1', backupStatus: 'failed', backupAttempts: 1, backupError: 'drive_unavailable' });
 		expect(row.backupLeaseUntil).toBe(store.now() + 30_000);
 		remote.client.upload = upload;
-		const restarted = createBootcampBackup(store.db, remote.client, folderId);
+		const restarted = createBootcampBackup(store.db, { client: remote.client, folderId });
 		expect(await restarted.backupDocument(documentId)).toEqual({ documentId, status: 'busy' });
 		store.advance(30_000);
 		expect(await restarted.backupDocument(documentId)).toEqual(saved());
@@ -212,28 +212,25 @@ describe('persistent bootcamp backups', () => {
 		expect(row.backupAttempts).toBe(2);
 	});
 
-	test('missing or legacy Drive configuration leaves documents queued and does not consume attempts', async () => {
+	test('disabled Drive leaves documents queued and does not consume attempts or query storage', async () => {
 		const row = document({ backupStatus: 'failed', backupError: 'drive_auth' });
 		const store = database(row);
-		const remote = drive();
-		for (const [client, folder] of [
-			[undefined, folderId], [null, folderId], [remote.client, undefined], [remote.client, '  '],
-			[{ upload: remote.upload, createFolder: remote.client.createFolder }, folderId]
-		] as const) {
-			const backup = createBootcampBackup(store.db, client, folder);
-			expect(await backup.backupDocument(documentId)).toEqual({ documentId, status: 'queued', error: 'not_configured' });
-			expect(await backup.drain()).toEqual([]);
+		const backup = createBootcampBackup(store.db, null);
+		expect(await backup.backupDocument(documentId)).toEqual({ documentId, status: 'queued', error: 'not_configured' });
+		expect(await backup.drain()).toEqual([]);
+		for (const limit of [0, -1, 1.5, 51, Infinity, NaN]) {
+			await expect(backup.drain({ limit })).rejects.toBeInstanceOf(RangeError);
 		}
 		expect(store.queries).toHaveLength(0);
 		expect(row.backupAttempts).toBe(0);
 		expect(row.backupStatus).toBe('failed');
-		expect(remote.generateFileId).not.toHaveBeenCalled();
+		expect(row.backupError).toBe('drive_auth');
 	});
 
 	test('only one concurrent claimant uploads; missing documents do not reach Drive', async () => {
 		const store = database(document());
 		const remote = drive();
-		const workers = Array.from({ length: 5 }, () => createBootcampBackup(store.db, remote.client, folderId));
+		const workers = Array.from({ length: 5 }, () => createBootcampBackup(store.db, { client: remote.client, folderId }));
 		const results = await Promise.all(workers.map((worker) => worker.backupDocument(documentId)));
 		expect(results.filter((result) => result.status === 'saved')).toHaveLength(1);
 		expect(results.filter((result) => result.status === 'busy')).toHaveLength(4);
@@ -253,10 +250,10 @@ describe('persistent bootcamp backups', () => {
 			const oldClient = { ...remote.client, upload: async (file: Parameters<DriveClient['upload']>[0]) => {
 				await upload(file); started.resolve(); return response.promise;
 			} };
-			const old = createBootcampBackup(store.db, oldClient, folderId).backupDocument(documentId);
+			const old = createBootcampBackup(store.db, { client: oldClient, folderId }).backupDocument(documentId);
 			await started.promise;
 			store.advance(120_001);
-			expect(await createBootcampBackup(store.db, remote.client, folderId).backupDocument(documentId)).toEqual(saved());
+			expect(await createBootcampBackup(store.db, { client: remote.client, folderId }).backupDocument(documentId)).toEqual(saved());
 			if (lateOutcome === 'success') response.resolve('reserved-1');
 			else response.reject(new Error(secret));
 			expect(await old).toEqual({ documentId, status: 'busy' });
@@ -273,10 +270,10 @@ describe('persistent bootcamp backups', () => {
 		const started = deferred<void>();
 		const generated = deferred<string>();
 		const oldClient = { ...remote.client, generateFileId: async () => { started.resolve(); return generated.promise; } };
-		const old = createBootcampBackup(store.db, oldClient, folderId).backupDocument(documentId);
+		const old = createBootcampBackup(store.db, { client: oldClient, folderId }).backupDocument(documentId);
 		await started.promise;
 		store.advance(120_001);
-		expect(await createBootcampBackup(store.db, remote.client, folderId).backupDocument(documentId)).toEqual(saved());
+		expect(await createBootcampBackup(store.db, { client: remote.client, folderId }).backupDocument(documentId)).toEqual(saved());
 		generated.resolve('orphan-generated-id');
 		expect(await old).toEqual({ documentId, status: 'busy' });
 		expect(row.driveFileId).toBe('reserved-1');
@@ -290,13 +287,13 @@ describe('persistent bootcamp backups', () => {
 				const store = database(row);
 				const remote = drive();
 				store.setFault((operation, when) => { if (operation === stage && when === point) throw new Error(secret); });
-				expect(await createBootcampBackup(store.db, remote.client, folderId).backupDocument(documentId)).toEqual({
+				expect(await createBootcampBackup(store.db, { client: remote.client, folderId }).backupDocument(documentId)).toEqual({
 					documentId, status: 'queued', error: 'storage_unavailable'
 				});
 				if (stage === 'reserve') expect(remote.upload).not.toHaveBeenCalled();
 				store.setFault();
 				store.advance(120_001);
-				const result = await createBootcampBackup(store.db, remote.client, folderId).backupDocument(documentId);
+				const result = await createBootcampBackup(store.db, { client: remote.client, folderId }).backupDocument(documentId);
 				expect(result.status).toBe('saved');
 				expect(remote.files.size).toBe(1);
 				expect(remote.generateFileId).toHaveBeenCalledTimes(stage === 'reserve' && point === 'before' ? 2 : 1);
@@ -309,7 +306,7 @@ describe('persistent bootcamp backups', () => {
 			const row = document(change);
 			const store = database(row);
 			const remote = drive();
-			expect(await createBootcampBackup(store.db, remote.client, folderId).backupDocument(documentId)).toEqual({
+			expect(await createBootcampBackup(store.db, { client: remote.client, folderId }).backupDocument(documentId)).toEqual({
 				documentId, status: 'failed', error: 'invalid_pdf'
 			});
 			expect(remote.generateFileId).not.toHaveBeenCalled();
@@ -336,7 +333,7 @@ describe('persistent bootcamp backups', () => {
 					if (conflict) throw new DriveError('bad_input', secret, 409);
 					return id;
 				};
-				expect(await createBootcampBackup(store.db, remote.client, folderId).backupDocument(documentId)).toEqual({
+				expect(await createBootcampBackup(store.db, { client: remote.client, folderId }).backupDocument(documentId)).toEqual({
 					documentId, status: 'failed', error: 'drive_mismatch'
 				});
 				expect(row.backedUpAt).toBeNull();
@@ -355,7 +352,7 @@ describe('persistent bootcamp backups', () => {
 				if (response === 'conflict') throw new DriveError('bad_input', secret, 409);
 				return 'wrong-id';
 			};
-			expect(await createBootcampBackup(store.db, remote.client, folderId).backupDocument(documentId)).toEqual({
+			expect(await createBootcampBackup(store.db, { client: remote.client, folderId }).backupDocument(documentId)).toEqual({
 				documentId, status: 'failed', error: response === 'conflict' ? 'drive_rejected' : 'drive_mismatch'
 			});
 			expect(row.backupStatus).toBe('failed');
@@ -373,7 +370,7 @@ describe('persistent bootcamp backups', () => {
 			const store = database(row);
 			const remote = drive();
 			remote.client.generateFileId = async () => { throw error; };
-			const result = await createBootcampBackup(store.db, remote.client, folderId).backupDocument(documentId);
+			const result = await createBootcampBackup(store.db, { client: remote.client, folderId }).backupDocument(documentId);
 			expect(result).toEqual({ documentId, status: 'failed', error: code });
 			expect(row.backupError).toBe(code);
 			expect(JSON.stringify(result)).not.toContain(secret);
@@ -386,7 +383,7 @@ describe('persistent bootcamp backups', () => {
 		const store = database(row);
 		const remote = drive();
 		remote.client.generateFileId = async () => { throw new Error(secret); };
-		await createBootcampBackup(store.db, remote.client, folderId).backupDocument(documentId);
+		await createBootcampBackup(store.db, { client: remote.client, folderId }).backupDocument(documentId);
 		expect(row.backupAttempts).toBe(101);
 		expect(row.backupLeaseUntil).toBe(store.now() + 30 * 60_000);
 	});
@@ -403,7 +400,7 @@ describe('bounded backup draining', () => {
 		];
 		const store = database(...initial);
 		const remote = drive();
-		const results = await createBootcampBackup(store.db, remote.client, folderId).drain({ eventId, limit: 2 });
+		const results = await createBootcampBackup(store.db, { client: remote.client, folderId }).drain({ eventId, limit: 2 });
 		expect(results).toEqual([{ documentId: 'a', status: 'failed', error: 'invalid_pdf' }, saved('b')]);
 		expect(initial.slice(2).map((row) => row.backupAttempts)).toEqual([0, 0, 0, 0, 0]);
 		expect(remote.upload.mock.calls[0][0].filename).toBe('bootcamp-b-letter-en.pdf');
@@ -415,7 +412,7 @@ describe('bounded backup draining', () => {
 			document({ id: 'b', backupStatus: 'uploading', backupLeaseUntil: 1, backupAttempts: 1, driveFileId: 'reserved-before-restart' })
 		);
 		const remote = drive();
-		expect(await createBootcampBackup(store.db, remote.client, folderId).drain()).toEqual([
+		expect(await createBootcampBackup(store.db, { client: remote.client, folderId }).drain()).toEqual([
 			saved('a'), saved('b', 'reserved-before-restart')
 		]);
 		expect(remote.generateFileId).toHaveBeenCalledTimes(1);
@@ -424,7 +421,7 @@ describe('bounded backup draining', () => {
 	test('has a default batch of ten, validates bounds, and performs no unbounded loop', async () => {
 		const store = database(...Array.from({ length: 12 }, (_, index) => document({ id: `doc-${index}` })));
 		const remote = drive();
-		const backup = createBootcampBackup(store.db, remote.client, folderId);
+		const backup = createBootcampBackup(store.db, { client: remote.client, folderId });
 		expect(await backup.drain()).toHaveLength(10);
 		expect(remote.upload).toHaveBeenCalledTimes(10);
 		for (const limit of [0, -1, 1.5, 51, Infinity, NaN]) {
@@ -438,7 +435,7 @@ describe('bounded backup draining', () => {
 		const row = document();
 		const store = database(row);
 		const remote = drive();
-		const backup = createBootcampBackup(store.db, remote.client, folderId);
+		const backup = createBootcampBackup(store.db, { client: remote.client, folderId });
 		store.setFault(() => { throw new Error(secret); });
 		await expect(backup.drain()).rejects.toEqual(new BootcampBackupError('storage_unavailable'));
 		expect(await backup.backupDocument(documentId)).toEqual({ documentId, status: 'queued', error: 'storage_unavailable' });

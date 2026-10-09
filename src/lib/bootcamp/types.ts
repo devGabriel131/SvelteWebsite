@@ -1,4 +1,5 @@
 import type { Language } from '../i18n/translations';
+import type { StudentClassType } from '../student';
 
 export const sectionKeys = ['agreement', 'liability', 'media'] as const;
 export type SectionKey = typeof sectionKeys[number];
@@ -57,7 +58,7 @@ export type StudentBootcampPage = {
 };
 export type ReportRow = {
 	studentId: string;
-	classType: 'basic' | 'regular';
+	classType: StudentClassType;
 	name: string;
 	email: string;
 	eligibility: 'eligible' | 'underage' | 'unknown' | 'inactive';

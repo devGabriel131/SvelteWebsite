@@ -2,16 +2,15 @@ import { describe, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { drizzle } from 'drizzle-orm/pg-proxy';
 import { translations } from '../src/lib/i18n/translations';
-import { INVITATIONS_PAGE_SIZE, type EnrollmentProfile } from '../src/lib/student-invitations';
+import { INVITATIONS_PAGE_SIZE, MAX_IMPORT_ROWS, type EnrollmentProfile, type StudentImportOptions } from '../src/lib/student-invitations';
 import type { Database } from '../src/lib/server/db/connection';
 import { completeEnrollmentAction, loadStudentEnrollment } from '../src/lib/server/student-enrollment';
 import {
-	hashInvitationToken, INVITATION_TTL_MS, isInvitationToken, isValidStudentName,
+	completeStudentEnrollment, hashInvitationToken, INVITATION_TTL_MS, isInvitationToken, isValidStudentName,
 	parseEnrollmentProfile, parseInvitationPage, provisionImportedStudents, readAdminStudentInvitations, readStudentEnrollment,
 	studentInvitationEmail, StudentInvitationError
 } from '../src/lib/server/student-invitations';
-import { MAX_IMPORT_ROWS, type ImportedStudent } from '../src/lib/server/student-import-file';
-import type { StudentImportOptions } from '../src/lib/server/student-import-review';
+import type { ImportedStudent } from '../src/lib/server/student-import-file';
 
 const origin = 'https://students.example.test';
 const token = 'ab'.repeat(32);
@@ -58,11 +57,11 @@ describe('student invitation tokens and email', () => {
 		});
 	}
 
-	test('allows HTTP only for explicit loopback origins and rejects paths or unsafe origins', () => {
-		for (const baseURL of ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://[::1]:5173']) {
+	test('allows HTTP only for loopback origins and rejects paths or unsafe origins', () => {
+		for (const baseURL of ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://127.10.20.30:5173', 'http://[::1]:5173']) {
 			expect(studentInvitationEmail('en', 'Student', row.email, token, baseURL).body).toContain(`${baseURL}/enroll?token=${token}`);
 		}
-		for (const baseURL of ['http://students.example.test', `${origin}/`, `${origin}/admin`, `${origin}?redirect=evil`, `${origin}#fragment`, 'https://user:password@students.example.test', 'ftp://students.example.test']) {
+		for (const baseURL of ['not-a-url', 'http://students.example.test', `${origin}/`, `${origin}/admin`, `${origin}?redirect=evil`, `${origin}#fragment`, 'https://user:password@students.example.test', 'ftp://students.example.test']) {
 			expect(() => studentInvitationEmail('en', 'Student', row.email, token, baseURL)).toThrow('unavailable');
 		}
 		expect(() => studentInvitationEmail('en', 'Student', row.email, 'bad-token', origin)).toThrow('invalid');
@@ -139,6 +138,16 @@ describe('required enrollment profile', () => {
 		expect(isValidStudentName('a'.repeat(100))).toBe(true);
 		for (const name of ['', '  ', ' Student', 'Student ', 'A\tB', 'A\u007fB', 'A\u0085B', 'A\u2029B']) expect(isValidStudentName(name)).toBe(false);
 	});
+
+	test('service revalidates selected profile fields before opening a transaction', async () => {
+		let databaseReads = 0;
+		const db = new Proxy({}, { get() { databaseReads++; throw new Error('Database must not be read'); } }) as Database;
+		for (const changed of [{ firstName: ' ' }, { lastName: 'A\u0000B' }, { dateOfBirth: '2023-02-29' }, { gender: 'other' }]) {
+			await expect(completeStudentEnrollment(db, 'student', token, { ...profile, ...changed } as EnrollmentProfile)).rejects.toMatchObject({ code: 'invalid' });
+		}
+		await expect(completeStudentEnrollment(db, 'student', 'bad-token', profile)).rejects.toMatchObject({ code: 'invitation' });
+		expect(databaseReads).toBe(0);
+	});
 });
 
 describe('provisioning guards before database writes', () => {
@@ -179,7 +188,7 @@ describe('enrollment load and action boundaries', () => {
 		const anonymous = { user: null, session: null };
 		for (const viewer of [anonymous, locals('student'), locals('admin')]) {
 			for (const invalid of [null, '', 'bad-token', `${token}\n`]) {
-				expect(await loadStudentEnrollment(viewer, invalid, database)).toEqual({ state: 'invalid', student: null, returnTo: '/enroll' });
+				expect(await loadStudentEnrollment(viewer, invalid, database)).toEqual({ state: 'invalid', student: null });
 			}
 		}
 		expect(await loadStudentEnrollment(anonymous, token, database)).toMatchObject({ state: 'signIn', student: null });

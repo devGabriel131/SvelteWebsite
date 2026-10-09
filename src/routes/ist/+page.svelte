@@ -4,43 +4,45 @@
 	import { tick, untrack } from 'svelte';
 	import IstAssessmentReport from '#lib/components/IstAssessmentReport.svelte';
 	import ReportArchiveStatus from '#lib/components/ReportArchiveStatus.svelte';
-		import IstChoiceGroup from '#lib/components/IstChoiceGroup.svelte';
+	import ChoiceGroup from '#lib/components/ChoiceGroup.svelte';
 	import IstExerciseInput from '#lib/components/IstExerciseInput.svelte';
-	import IstField from '#lib/components/IstField.svelte';
+	import FormField from '#lib/components/FormField.svelte';
 	import * as Alert from '#lib/components/ui/alert/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Card from '#lib/components/ui/card/index.js';
 	import { useLanguage } from '#lib/i18n/language.svelte.ts';
 	import { presentIstAssessment } from '#lib/ist/presentation.ts';
 	import { exerciseKeys, istFields, type IstErrors, type IstFormValues } from '#lib/ist/types.ts';
-	import { readIstFormData, revalidateIstErrors, validateIstInput } from '#lib/ist/validation.ts';
+	import { validateIstInput } from '#lib/ist/validation.ts';
+	import { formValues, readFormFields, refreshVisibleErrors } from '#lib/form-fields.ts';
 	import type { PageProps } from './$types';
 
 	let { form, data }: PageProps = $props();
 	const language = useLanguage();
 	const messages = $derived(language.messages.ist);
-	let values = $state<IstFormValues>(untrack(() => form?.values ??
-		Object.fromEntries(istFields.map((field) => [field, ''])) as IstFormValues));
-	let errors = $state<IstErrors>(untrack(() => form?.errors ?? {}));
+	let values = $state<IstFormValues>(untrack(() => form?.values ?? formValues({}, istFields)));
+	let errors = $state<IstErrors>(untrack(() => form && 'errors' in form ? form.errors ?? {} : {}));
 	let submitting = $state(false);
 	let requestError = $state(false);
 	let formElement = $state<HTMLFormElement>();
 	let resultsElement = $state<HTMLElement>();
 	const hasErrors = $derived(Object.keys(errors).length > 0);
-	const report = $derived(form?.assessment && !hasErrors && !requestError && !form.serverError
-		? presentIstAssessment(form.assessment, language.current) : null);
+	const success = $derived(form && 'reports' in form ? form : null);
+	const failure = $derived(form && 'failure' in form ? form.failure : null);
+	const report = $derived(success?.assessment && !hasErrors && !requestError
+		? presentIstAssessment(success.assessment, language.current) : null);
 
 	$effect(() => {
 		if (form) {
 			values = { ...form.values };
-			errors = form.errors;
+			errors = 'errors' in form ? form.errors ?? {} : {};
 		}
 	});
 
 	$effect(() => {
 		const currentValues = { ...values };
 		untrack(() => {
-			if (Object.keys(errors).length > 0) errors = revalidateIstErrors(currentValues, errors);
+			if (Object.keys(errors).length > 0) errors = refreshVisibleErrors(validateIstInput(currentValues), errors);
 		});
 	});
 
@@ -76,7 +78,7 @@
 
 		use:enhance={({ formElement, cancel }) => {
 			requestError = false;
-			const validation = validateIstInput(readIstFormData(new FormData(formElement)));
+			const validation = validateIstInput(readFormFields(new FormData(formElement), istFields));
 			if (!validation.valid) {
 				cancel();
 				errors = validation.errors;
@@ -108,7 +110,7 @@
 		<!-- Keep Enter mapped to assessment rather than a native exercise-choice button. -->
 		<noscript><button type="submit" hidden>{messages.submit}</button></noscript>
 		<fieldset class="form-body" disabled={submitting}>
-			<legend class="visually-hidden">{messages.title}</legend>
+			<legend class="sr-only">{messages.title}</legend>
 			<section class="form-section" aria-labelledby="student-details-title">
 				<div class="section-heading">
 					<h2 id="student-details-title">{messages.studentDetails}</h2>
@@ -116,17 +118,19 @@
 				</div>
 				<div class="student-fields">
 					<div class="student-name">
-						<IstField name="studentName" label={messages.fields.studentName} bind:value={values.studentName}
-							inputMode="text" autocomplete="name" error={errors.studentName} />
+						<FormField name="studentName" id="ist-studentName" label={messages.fields.studentName} bind:value={values.studentName}
+							inputMode="text" autocomplete="name" error={errors.studentName ? messages.errors[errors.studentName] : undefined} />
 					</div>
 					<div class="sex-field">
-						<IstChoiceGroup name="sex" label={messages.fields.sex} bind:value={values.sex} error={errors.sex}
+						<ChoiceGroup name="sex" id="ist-sex" label={messages.fields.sex} bind:value={values.sex}
+							error={errors.sex ? messages.errors[errors.sex] : undefined}
 							choices={[
 								{ value: 'male', label: messages.sexOptions.male },
 								{ value: 'female', label: messages.sexOptions.female }
 							]} />
 					</div>
-					<IstField name="age" label={messages.fields.age} bind:value={values.age} hint={messages.hints.age} error={errors.age} />
+					<FormField name="age" id="ist-age" inputMode="numeric" label={messages.fields.age} bind:value={values.age}
+						hint={messages.hints.age} error={errors.age ? messages.errors[errors.age] : undefined} />
 				</div>
 			</section>
 
@@ -136,10 +140,10 @@
 					<p>{messages.measurementsHint}</p>
 				</div>
 				<div class="measurements-grid">
-					<IstField name="weightLb" label={messages.fields.weightLb} bind:value={values.weightLb}
-						inputMode="decimal" hint={messages.hints.weightLb} error={errors.weightLb} />
-					<IstField name="waistIn" label={messages.fields.waistIn} bind:value={values.waistIn}
-						inputMode="decimal" hint={messages.hints.waistIn} error={errors.waistIn} />
+					<FormField name="weightLb" id="ist-weightLb" label={messages.fields.weightLb} bind:value={values.weightLb}
+						inputMode="decimal" hint={messages.hints.weightLb} error={errors.weightLb ? messages.errors[errors.weightLb] : undefined} />
+					<FormField name="waistIn" id="ist-waistIn" label={messages.fields.waistIn} bind:value={values.waistIn}
+						inputMode="decimal" hint={messages.hints.waistIn} error={errors.waistIn ? messages.errors[errors.waistIn] : undefined} />
 				</div>
 			</section>
 
@@ -162,13 +166,13 @@
 					<Alert.Description>{messages.errorSummary}</Alert.Description>
 				</Alert.Root>
 			{/if}
-			{#if requestError || form?.serverError}
+			{#if requestError || failure === 'generation'}
 				<Alert.Root variant="destructive" class="mb-4">
 					<Alert.Description>{messages.serverError}</Alert.Description>
 				</Alert.Root>
 			{/if}
-			{#if form?.archiveError}
-				<ReportArchiveStatus state={form.archiveError} />
+			{#if failure === 'signIn' || failure === 'unavailable'}
+				<ReportArchiveStatus state={failure} />
 			{/if}
 			<Button class="min-h-[2.8rem]" type="submit" disabled={submitting} aria-busy={submitting}>
 				{submitting ? messages.submitting : messages.submit}
@@ -178,18 +182,18 @@
 		</Card.Root>
 	</form>
 
-	{#if report && form?.reports}
+	{#if report && success?.reports}
 		<section class="assessment" aria-labelledby="assessment-title" tabindex="-1" bind:this={resultsElement}>
 			<Card.Root class="gap-0 rounded-2xl border border-border p-[clamp(1.1rem,3vw,1.75rem)] ring-0">
 			<div class="assessment-heading">
 				<h2 id="assessment-title">{messages.resultsTitle}</h2>
-				<Button variant="outline" class="min-h-[2.8rem]" href={`data:application/pdf;base64,${form.reports[language.current]}`}
-					download={`${messages.reportFilename}-${report.assessedAt.slice(0, 10)}.pdf`}>
+				<Button variant="outline" class="min-h-[2.8rem]" href={`data:application/pdf;base64,${success.reports[language.current]}`}
+					download={report.filename}>
 					<svg class="download-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4" /></svg>
 					{messages.download}
 				</Button>
 			</div>
-			{#if form.archived}<ReportArchiveStatus state="saved" />{/if}
+			<ReportArchiveStatus state={success.archived ? 'saved' : 'localOnly'} />
 			<IstAssessmentReport {report} />
 			</Card.Root>
 		</section>
@@ -216,7 +220,6 @@
 	svg { flex-shrink: 0; width: 1.1rem; height: 1.1rem; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 	.assessment { margin-top: 2rem; }
 	.assessment-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.25rem; }
-	.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 	@media (max-width: 55rem) { .student-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } .student-name { grid-column: 1 / -1; } }
 	@media (max-width: 45rem) { .exercises-grid { grid-template-columns: minmax(0, 1fr); } }
 	@media (max-width: 30rem) {

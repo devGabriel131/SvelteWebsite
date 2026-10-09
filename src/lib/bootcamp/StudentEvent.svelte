@@ -19,7 +19,6 @@
 	} = $props();
 	const dateFields = ['startsAt', 'endsAt', 'arrivalAt', 'registrationClosesAt'] as const;
 	const employerFields = ['employer', 'contact', 'position', 'workplace'] as const;
-	const basePath = resolve('/').replace(/\/$/, '');
 	const language = useLanguage();
 	const messages = $derived(language.messages.bootcamp);
 	const canRegister = $derived(registrationAvailable(event, new Date(now)));
@@ -52,7 +51,7 @@
 			<p class="bc-hint">{formatMessage(messages.event.downloadsUntil, { date: date(event.endsAt) })}</p>
 			<div class="bc-actions">
 				{#each registration.documents as document (document.id)}
-					<Button variant="outline" href={`${basePath}/bootcamps/documents/${encodeURIComponent(document.id)}`}>
+					<Button variant="outline" href={resolve('/bootcamps/documents/[id]', { id: document.id })}>
 						{formatMessage(messages.event.document, { kind: messages.event.documentKinds[document.kind], language: messages.common.languages[document.language] })}
 					</Button>
 				{/each}
@@ -61,7 +60,7 @@
 	{/if}
 
 	{#if canRegister && student && !registration}
-		<ActionForm action="?/start" beforeSubmit={() => canRegister && !registration}>
+		<ActionForm action="?/start">
 			{#snippet children(pending)}
 				<input type="hidden" name="eventId" value={event.id} />
 				<Button type="submit" disabled={pending}>{pending ? messages.common.saving : messages.registration.begin}</Button>

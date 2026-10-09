@@ -7,8 +7,9 @@
 	import AdminOverview from '#lib/admin/AdminOverview.svelte';
 	import AdminStudents from '#lib/admin/AdminStudents.svelte';
 	import AdminOperations from '#lib/admin/AdminOperations.svelte';
+	import StudentInvitations from '#lib/admin/StudentInvitations.svelte';
 
-	import { resolveAdminSection } from '#lib/admin/navigation.ts';
+	import { adminSectionHref, isAdminPreviewSection, resolveAdminSection, type AdminSection } from '#lib/admin/navigation.ts';
 	import LanguageSelector from '#lib/components/LanguageSelector.svelte';
 	import SignInForm from '#lib/components/SignInForm.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
@@ -16,19 +17,19 @@
 	import * as Alert from '#lib/components/ui/alert/index.js';
 	import type { PageProps } from './$types';
 	import { useLanguage } from '#lib/i18n/language.svelte.ts';
-	import { type AdminSection } from '#lib/admin/demo.ts';
 	import '#lib/admin/admin.css';
 
 	let { data }: PageProps = $props();
 	const language = useLanguage();
 	const messages = $derived(language.messages.admin);
 	const section = $derived(resolveAdminSection(page.url.searchParams.get('section')));
+	const preview = $derived(isAdminPreviewSection(section));
 	const students = $derived(data.students);
 	let title = $state<HTMLHeadingElement>();
 	const intro = $derived(messages.intro[section]);
 
 	async function navigate(next: AdminSection) {
-		await goto(next === 'overview' ? resolve('/admin') : resolve('/admin') + '?section=' + next, { reset: false });
+		await goto(adminSectionHref(next, resolve('/admin')), { reset: false });
 		await tick();
 		title?.focus();
 	}
@@ -41,7 +42,7 @@
 </svelte:head>
 
 {#if !data.isAdmin}
-	<div class="admin-console admin-sign-in" lang={language.current}>
+	<div class="admin-console admin-sign-in">
 		<header class="sign-in-header">
 			<a class="console-brand" href={resolve('/')} aria-label={language.messages.auth.studentWorkspace}>
 				<img src={asset('logo.png')} alt="" width="42" height="42" />
@@ -60,10 +61,10 @@
 	</div>
 {:else}
 	<div class="admin-overview">
-		<Alert.Root role="note" class={`preview-banner text-muted-foreground ${section === 'invitations' ? 'border-primary/30 bg-primary/10' : 'border-warning/30 bg-warning/10'}`}>
-			<span class="preview-light" class:connected={section === 'invitations'} aria-hidden="true"></span>
-			<strong class={`mono shrink-0 text-[0.59rem] font-medium uppercase tracking-[0.05em] ${section === 'invitations' ? 'text-primary' : 'text-warning'}`}>{section === 'invitations' ? messages.roster.connected : messages.prototype}</strong>
-			{#if section !== 'invitations'}<span class="preview-copy">{messages.roster.workspaceNote}</span>{/if}
+		<Alert.Root role="note" class={`preview-banner text-muted-foreground ${preview ? 'border-warning/30 bg-warning/10' : 'border-primary/30 bg-primary/10'}`}>
+			<span class="preview-light" class:connected={!preview} aria-hidden="true"></span>
+			<strong class={`mono shrink-0 text-[0.59rem] font-medium uppercase tracking-[0.05em] ${preview ? 'text-warning' : 'text-primary'}`}>{preview ? messages.prototype : messages.roster.connected}</strong>
+			{#if preview}<span class="preview-copy">{messages.roster.workspaceNote}</span>{/if}
 		</Alert.Root>
 
 		<section class="page-intro" aria-labelledby="console-title">
@@ -75,11 +76,10 @@
 			<div class="quick-controls" role="group" aria-label={messages.overview.quickActions}><span class="quick-label mono">{messages.overview.quickActions}<span aria-hidden="true">/</span></span><Button variant="ghost" type="button" onclick={() => navigate('payments')}><AdminIcon name="payments" size={16} />{messages.overview.createPayment}<AdminIcon name="arrow" size={14} /></Button><Button variant="ghost" type="button" onclick={() => navigate('invitations')}><AdminIcon name="invitations" size={16} />{messages.overview.inviteStudent}<AdminIcon name="arrow" size={14} /></Button><Button variant="ghost" type="button" onclick={() => navigate('reports')}><AdminIcon name="upload" size={16} />{messages.overview.uploadGrades}<AdminIcon name="arrow" size={14} /></Button></div>
 		{/if}
 
-		<div id="console-view">
-			{#if section === 'overview'}<AdminOverview {students} />
-			{:else if section === 'students'}<AdminStudents {students} />{/if}
-			<AdminOperations {section} {students} invitations={data.invitations} invitationPage={data.invitationPage} hasMoreInvitations={data.hasMoreInvitations} />
-		</div>
+		{#if section === 'overview'}<AdminOverview {students} />
+		{:else if section === 'students'}<AdminStudents {students} />
+		{:else if section === 'invitations'}<StudentInvitations invitations={data.invitations} invitationPage={data.invitationPage} hasMoreInvitations={data.hasMoreInvitations} />{/if}
+		<AdminOperations {section} {students} />
 	</div>
 {/if}
 
@@ -89,11 +89,6 @@
 	.sign-in-panel { width: min(100%, 30rem); margin: clamp(3rem, 10vh, 7rem) auto; }
 	.sign-in-panel h1 { font-size: clamp(1.75rem, 4vw, 2.3rem); }
 	.sign-in-introduction { margin: 1rem 0 2rem; color: var(--muted-foreground); line-height: 1.7; }
-	.console-brand { display: flex; align-items: center; gap: 0.6rem; color: var(--foreground); text-decoration: none; }
-	.console-brand img { flex-shrink: 0; width: 2.65rem; height: 2.65rem; object-fit: contain; }
-	.console-brand span { display: grid; gap: 0.4rem; }
-	.console-brand strong { font-family: var(--font-display); font-size: 0.7rem; letter-spacing: -0.04em; }
-	.console-brand small { color: var(--primary); font-family: var(--font-mono); font-size: 0.56rem; letter-spacing: 0.1em; text-transform: uppercase; }
 	.admin-overview > :global(.preview-banner) { display: flex; align-items: center; gap: 0.7rem; padding: 0.7rem 0.9rem; font-size: 0.63rem; line-height: 1.6; }
 	.preview-light { flex-shrink: 0; width: 5px; height: 5px; border-radius: 50%; background: var(--warning); }
 	.preview-light.connected { background: var(--primary); }
@@ -113,20 +108,14 @@
 	.quick-controls :global([data-slot='button']) { display: flex; gap: 0.6rem; padding: 0.5rem 0.8rem; font-size: 0.68rem; }
 
 	@media (max-width: 70rem) {
-		.console-brand { gap: 0.4rem; } .console-brand strong { font-size: 0.6rem; }
-		.console-brand img { width: 2.2rem; height: 2.2rem; }
 		.admin-overview > :global(.preview-banner) { flex-wrap: wrap; gap: 0.4rem 0.6rem; }
 		.preview-copy { flex-basis: 100%; }
 	}
 	@media (max-width: 52rem) {
-		.console-brand strong { font-size: 0.8rem; }
-		.console-brand img { width: 2.5rem; height: 2.5rem; }
 		.page-intro { flex-wrap: wrap; gap: 1.2rem; padding: 1.8rem 0; }
-		.page-intro :global(.hero-action) { margin-left: auto; }
 		.intro-instrument { right: 0; }
 	}
 	@media (max-width: 35rem) {
-		.page-intro :global(.hero-action) { margin-left: 0; }
 		.quick-label { width: 100%; margin-bottom: 0.2rem; }
 		.quick-controls { gap: 0.45rem; }
 		.quick-controls :global([data-slot='button']) { flex: 1 1 auto; justify-content: space-between; }

@@ -1,17 +1,14 @@
 import { and, inArray, sql } from 'drizzle-orm';
-import { createDatabase, requireDatabaseUrl } from '../../src/lib/server/db/connection';
 import { students, studentSubjectScores } from '../../src/lib/server/db/schema';
-import { assertLocalDatabaseUrl, verifyLocalDatabase } from './local-target';
+import { openLocalDatabase } from './local-target';
 
 export const fixtureEmails = Array.from({ length: 100 }, (_, index) =>
 	`fake.student.${String(index + 1).padStart(3, '0')}@example.test`
 );
 
-export async function seedSubjectScores(databaseUrl: string) {
-	const target = assertLocalDatabaseUrl(databaseUrl, 'seed');
-	const connection = createDatabase(databaseUrl);
+export async function seedSubjectScores(databaseUrl: string | undefined) {
+	const connection = await openLocalDatabase(databaseUrl, 'seed');
 	try {
-		await verifyLocalDatabase(connection, target);
 		return await connection.db.transaction(async (tx) => {
 			const roster = await tx.select({ id: students.id }).from(students)
 				.where(and(inArray(students.email, fixtureEmails), sql`${students.lastName} ~ '(^Test$| [(]Test[)]$)'`));
@@ -31,6 +28,6 @@ export async function seedSubjectScores(databaseUrl: string) {
 }
 
 if (import.meta.main) {
-	const inserted = await seedSubjectScores(requireDatabaseUrl(process.env.DATABASE_URL));
+	const inserted = await seedSubjectScores(process.env.DATABASE_URL);
 	console.info(`Inserted ${inserted.length} fictional subject-score rows; existing students and scores were left unchanged.`);
 }

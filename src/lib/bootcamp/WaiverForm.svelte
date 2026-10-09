@@ -8,8 +8,7 @@
 	import LegalSignature from './LegalSignature.svelte';
 	import { sectionKeys, type BootcampEvent, type SectionKey, type StudentBootcampPage } from './types';
 
-	let { event, student }: { event: BootcampEvent; student: NonNullable<StudentBootcampPage['student']> & { identityVersion?: string } } = $props();
-	const basePath = resolve('/').replace(/\/$/, '');
+	let { event, student }: { event: BootcampEvent; student: NonNullable<StudentBootcampPage['student']> } = $props();
 	const language = useLanguage();
 	const messages = $derived(language.messages.bootcamp);
 	let dateOfBirth = $state(untrack(() => student.dateOfBirth ?? ''));
@@ -18,7 +17,7 @@
 	let signingCity = $state('');
 	let formElement = $state<HTMLFormElement>();
 	let drafts = $state<Partial<Record<SectionKey, { key: string; signature: string; read: boolean }>>>({});
-	const identityVersion = $derived(student.identityVersion ?? '');
+	const identityVersion = $derived(student.identityVersion);
 	const identityKey = $derived(JSON.stringify([
 		event.id, event.revision, event.legal.es, student.id, identityVersion, student.name, student.email,
 		student.dateOfBirth ?? dateOfBirth, phone, municipality, signingCity
@@ -63,7 +62,7 @@
 		if (preview) URL.revokeObjectURL(preview.url);
 		preview = null;
 		try {
-			const response = await fetch(`${basePath}/bootcamps/preview`, {
+			const response = await fetch(resolve('/bootcamps/preview'), {
 				method: 'POST', body: fields, credentials: 'same-origin', signal: request.signal,
 				headers: { Accept: 'application/pdf' }
 			});
@@ -98,7 +97,6 @@
 			<input type="hidden" name="language" value="es" />
 			<input type="hidden" name="identityVersion" value={identityVersion} />
 			<input type="hidden" name="previewToken" value={currentPreview?.token ?? ''} />
-			{#if !identityVersion}<FormFeedback result={{ error: 'stale' }} />{/if}
 			<p class="bc-hint">{messages.identity.known}</p>
 			<dl class="bc-details">
 				<div><dt>{messages.identity.name}</dt><dd>{student.name}</dd></div>

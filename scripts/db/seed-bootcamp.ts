@@ -1,20 +1,17 @@
 import { asc, eq } from 'drizzle-orm';
-import { createDatabase, requireDatabaseUrl } from '../../src/lib/server/db/connection';
 import { students } from '../../src/lib/server/db/schema';
 import { user } from '../../src/lib/server/db/auth-schema';
 import { bootcampEvents, bootcampRegistrations } from '../../src/lib/server/db/bootcamp-schema';
 import { defaultLegalText } from '../../src/lib/bootcamp/legal';
-import { LOCAL_ADMIN_EMAIL } from '../../src/lib/server/auth/local-admin';
-import { assertLocalDatabaseUrl, verifyLocalDatabase } from './local-target';
+import { LOCAL_ADMIN_EMAIL } from '../../src/lib/server/auth/config';
+import { openLocalDatabase } from './local-target';
 
-export const demoBootcampId = '00000000-0000-4000-8000-00000000bc01';
+const demoBootcampId = '00000000-0000-4000-8000-00000000bc01';
 const title = '[DEMO] ASVAB intensive · November';
 
-export async function seedBootcamp(databaseUrl: string) {
-	const target = assertLocalDatabaseUrl(databaseUrl, 'seed');
-	const connection = createDatabase(databaseUrl);
+export async function seedBootcamp(databaseUrl: string | undefined) {
+	const connection = await openLocalDatabase(databaseUrl, 'seed');
 	try {
-		await verifyLocalDatabase(connection, target);
 		return await connection.db.transaction(async (tx) => {
 			const [admin] = await tx.select().from(user).where(eq(user.email, LOCAL_ADMIN_EMAIL));
 			if (admin?.role !== 'admin') throw new Error('Run db:seed:admin first. No bootcamp data inserted.');
@@ -51,7 +48,7 @@ export async function seedBootcamp(databaseUrl: string) {
 }
 
 if (import.meta.main) {
-	const result = await seedBootcamp(requireDatabaseUrl(process.env.DATABASE_URL));
+	const result = await seedBootcamp(process.env.DATABASE_URL);
 	console.info(`Local DEMO bootcamp: ${result.selected}/${result.roster} students selected; ${result.inserted} registrations inserted. Registration is closed; no signatures, documents, or payments were created.`);
 	console.info(`/admin/bootcamps/${result.eventId}/report`);
 }

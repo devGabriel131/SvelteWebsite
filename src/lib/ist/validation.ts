@@ -1,6 +1,7 @@
 import { calculateRawBodyFat } from './assessment';
 import {
-	istFields,
+	exerciseValueFields,
+	type ExerciseKey,
 	type ExerciseResult,
 	type IstErrors,
 	type IstField,
@@ -11,15 +12,6 @@ import {
 // Accept decimal notation (including exponents), never partial parses or non-decimal literals.
 const decimalPattern = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
 
-export function readIstFormData(data: FormData): Record<IstField, unknown> {
-	const raw = {} as Record<IstField, unknown>;
-	for (const field of istFields) {
-		const values = data.getAll(field);
-		// Keep duplicate entries and Files untrusted rather than silently selecting a string.
-		raw[field] = values.length > 1 ? values : values[0];
-	}
-	return raw;
-}
 
 export function validateIstInput(raw: unknown): ValidationResult {
 	const values = typeof raw === 'object' && raw !== null && !Array.isArray(raw)
@@ -74,12 +66,11 @@ export function validateIstInput(raw: unknown): ValidationResult {
 		return number;
 	}
 
-	function readExercise(
-		statusField: IstField,
-		valueFields: readonly IstField[],
-		timed = false
-	): ExerciseResult | undefined {
-		const status = readChoice(statusField, ['recorded', 'unable_to_complete'], 'status');
+	function readExercise(key: ExerciseKey): ExerciseResult | undefined {
+		const valueFields = exerciseValueFields[key];
+		const [firstField, secondField] = valueFields;
+		const timed = secondField !== undefined;
+		const status = readChoice(`${key}Status`, ['recorded', 'unable_to_complete'], 'status');
 		if (status === undefined) return undefined;
 		if (status === 'unable_to_complete') {
 			for (const field of valueFields) {
@@ -88,14 +79,14 @@ export function validateIstInput(raw: unknown): ValidationResult {
 			return { status };
 		}
 
-		const first = readNumber(valueFields[0], 0, timed ? Infinity : 300);
+		const first = readNumber(firstField, 0, timed ? Infinity : 300);
 		if (!timed) return first === undefined ? undefined : { status, value: first };
 
-		const seconds = readNumber(valueFields[1], 0, 59);
+		const seconds = readNumber(secondField, 0, 59);
 		if (first === undefined || seconds === undefined) return undefined;
 		const total = first * 60 + seconds;
 		if (total < 1 || total > 3600) {
-			errors[valueFields[0]] = 'range';
+			errors[firstField] = 'range';
 			return undefined;
 		}
 		return { status, value: total };
@@ -108,10 +99,10 @@ export function validateIstInput(raw: unknown): ValidationResult {
 	const age = readNumber('age', 17, 51);
 	const weightLb = readNumber('weightLb', 70, 400, false);
 	const waistIn = readNumber('waistIn', 18, 60, false);
-	const pushUps = readExercise('pushUpsStatus', ['pushUpsValue']);
-	const sitUps = readExercise('sitUpsStatus', ['sitUpsValue']);
-	const run = readExercise('runStatus', ['runMinutes', 'runSeconds'], true);
-	const plank = readExercise('plankStatus', ['plankMinutes', 'plankSeconds'], true);
+	const pushUps = readExercise('pushUps');
+	const sitUps = readExercise('sitUps');
+	const run = readExercise('run');
+	const plank = readExercise('plank');
 
 	if (sex !== undefined && weightLb !== undefined && waistIn !== undefined) {
 		const rawBodyFat = calculateRawBodyFat(sex, weightLb, waistIn);
@@ -134,14 +125,3 @@ export function validateIstInput(raw: unknown): ValidationResult {
 	};
 }
 
-export function revalidateIstErrors(raw: unknown, visibleErrors: IstErrors): IstErrors {
-	const validation = validateIstInput(raw);
-	if (validation.valid) return {};
-
-	// Refresh only existing errors; untouched fields stay quiet until submission.
-	const errors: IstErrors = {};
-	for (const field of istFields) {
-		if (visibleErrors[field] && validation.errors[field]) errors[field] = validation.errors[field];
-	}
-	return errors;
-}

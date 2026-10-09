@@ -1,3 +1,4 @@
+import type { GoogleCredentials } from '../google/client';
 import { DriveError } from './client';
 
 export type DriveEnvironment = {
@@ -7,10 +8,7 @@ export type DriveEnvironment = {
 	DRIVE_REPORTS_FOLDER_ID?: string;
 };
 
-export type DriveConfig = {
-	clientId: string;
-	clientSecret: string;
-	refreshToken: string;
+export type DriveConfig = GoogleCredentials & {
 	reportsFolderId: string;
 };
 

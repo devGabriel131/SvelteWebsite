@@ -6,9 +6,8 @@
 		attendanceClassTimes, attendanceFields, attendanceTextLimits,
 		type AttendanceErrors, type AttendanceFormValues
 	} from '#lib/attendance/types.ts';
-	import {
-		readAttendanceFormData, revalidateAttendanceErrors, validateAttendanceInput
-	} from '#lib/attendance/validation.ts';
+	import { validateAttendanceInput } from '#lib/attendance/validation.ts';
+	import { formValues, readFormFields, refreshVisibleErrors } from '#lib/form-fields.ts';
 	import ChoiceGroup from '#lib/components/ChoiceGroup.svelte';
 	import FormField from '#lib/components/FormField.svelte';
 	import ReportArchiveStatus from '#lib/components/ReportArchiveStatus.svelte';
@@ -22,9 +21,8 @@
 	let { form, data }: PageProps = $props();
 	const language = useLanguage();
 	const messages = $derived(language.messages.attendance);
-	let values = $state<AttendanceFormValues>(untrack(() => form?.values ??
-		Object.fromEntries(attendanceFields.map((field) => [field, ''])) as AttendanceFormValues));
-	let errors = $state<AttendanceErrors>(untrack(() => form?.errors ?? {}));
+	let values = $state<AttendanceFormValues>(untrack(() => form?.values ?? formValues({}, attendanceFields)));
+	let errors = $state<AttendanceErrors>(untrack(() => form && 'errors' in form ? form.errors ?? {} : {}));
 	let submitting = $state(false);
 	let requestError = $state(false);
 	let formElement = $state<HTMLFormElement>();
@@ -33,20 +31,22 @@
 	const schedule = $derived((values.cohort === 'basic' || values.cohort === 'regular') &&
 		(values.classTime === 'am' || values.classTime === 'pm')
 		? attendanceSchedule(values.cohort, values.classTime, language.current) : null);
-	const certificate = $derived(form?.certificate && !hasErrors && !requestError && !form.serverError
-		? presentAttendanceCertificate(form.certificate, language.current) : null);
+	const success = $derived(form && 'reports' in form ? form : null);
+	const failure = $derived(form && 'failure' in form ? form.failure : null);
+	const certificate = $derived(success?.certificate && !hasErrors && !requestError
+		? presentAttendanceCertificate(success.certificate, language.current) : null);
 
 	$effect(() => {
 		if (form) {
 			values = { ...form.values };
-			errors = form.errors;
+			errors = 'errors' in form ? form.errors ?? {} : {};
 		}
 	});
 
 	$effect(() => {
 		const currentValues = { ...values };
 		untrack(() => {
-			if (Object.keys(errors).length > 0) errors = revalidateAttendanceErrors(currentValues, errors);
+			if (Object.keys(errors).length > 0) errors = refreshVisibleErrors(validateAttendanceInput(currentValues), errors);
 		});
 	});
 
@@ -78,7 +78,7 @@
 	<form method="POST" novalidate bind:this={formElement}
 		use:enhance={({ formElement, cancel }) => {
 			requestError = false;
-			const validation = validateAttendanceInput(readAttendanceFormData(new FormData(formElement)));
+			const validation = validateAttendanceInput(readFormFields(new FormData(formElement), attendanceFields));
 			if (!validation.valid) {
 				cancel();
 				errors = validation.errors;
@@ -107,7 +107,7 @@
 		}}>
 		<Card.Root class="gap-0 p-0">
 		<fieldset class="form-body" disabled={submitting}>
-			<legend class="visually-hidden">{messages.title}</legend>
+			<legend class="sr-only">{messages.title}</legend>
 			<section class="form-section" aria-labelledby="student-details-title">
 				<div class="section-heading">
 					<h2 id="student-details-title">{messages.studentDetails}</h2>
@@ -193,13 +193,13 @@
 					<Alert.Description>{messages.errorSummary}</Alert.Description>
 				</Alert.Root>
 			{/if}
-			{#if requestError || form?.serverError}
+			{#if requestError || failure === 'generation'}
 				<Alert.Root variant="destructive" class="mb-4">
 					<Alert.Description>{messages.serverError}</Alert.Description>
 				</Alert.Root>
 			{/if}
-			{#if form?.archiveError}
-				<ReportArchiveStatus state={form.archiveError} />
+			{#if failure === 'signIn' || failure === 'unavailable'}
+				<ReportArchiveStatus state={failure} />
 			{/if}
 			<Button class="min-h-[2.8rem] gap-[0.6rem] px-[1.05rem] py-[0.7rem] font-bold disabled:cursor-wait max-[30rem]:w-full"
 				type="submit" disabled={submitting} aria-busy={submitting}>
@@ -210,17 +210,17 @@
 		</Card.Root>
 	</form>
 
-	{#if certificate && form?.certificate && form.reports}
+	{#if certificate && success?.certificate && success.reports}
 		<section class="results" aria-labelledby="certificate-title" tabindex="-1" bind:this={resultsElement}>
 			<Card.Root class="gap-0 p-[clamp(1.1rem,3vw,1.75rem)]">
 			<h2 id="certificate-title">{messages.resultsTitle}</h2>
 			<p class="ready-message">{messages.ready}</p>
-			{#if form.archived}<ReportArchiveStatus state="saved" />{/if}
+			<ReportArchiveStatus state={success.archived ? 'saved' : 'localOnly'} />
 			<div class="downloads">
 				{#each languages as { code } (code)}
 					<Button variant="outline" class="min-h-[2.8rem] gap-[0.6rem] px-[1.05rem] py-[0.7rem] font-bold max-[30rem]:w-full"
-						href={`data:application/pdf;base64,${form.reports[code]}`}
-						download={presentAttendanceCertificate(form.certificate, code).filename}>
+						href={`data:application/pdf;base64,${success.reports[code]}`}
+						download={presentAttendanceCertificate(success.certificate, code).filename}>
 						<svg class="size-[1.1rem] text-secondary group-hover/button:text-primary" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4" /></svg>
 						{code === 'en' ? messages.downloadEnglish : messages.downloadSpanish}
 					</Button>
@@ -268,7 +268,7 @@
 	.schedule h3 { margin: 0; color: var(--primary); font-size: 0.8125rem; }
 	.schedule p { margin: 0.4rem 0 0; font-size: 0.875rem; }
 	.form-footer { padding: 1.25rem clamp(1.1rem, 3vw, 1.75rem); border-top: 1px solid var(--border); }
-	.snapshot-note { margin: 0 0 1rem; color: var(--muted-foreground); font-size: 0.8125rem; }
+	.snapshot-note { margin: 1rem 0 0; color: var(--muted-foreground); font-size: 0.8125rem; }
 	svg { stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 	.results { margin-top: 2rem; }
 	.ready-message { margin: 0.5rem 0 1rem; color: var(--muted-foreground); font-size: 0.875rem; }
@@ -280,7 +280,5 @@
 	.recipient p, .signature p { margin: 0; }
 	.recipient p:first-child { font-weight: 700; }
 	.signature { margin-top: 1.5rem; text-align: right; }
-	.snapshot-note { margin: 1rem 0 0; }
-	.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 	@media (max-width: 40rem) { .fields-grid { grid-template-columns: minmax(0, 1fr); } }
 </style>

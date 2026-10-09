@@ -46,11 +46,16 @@ export const spanishOptions: string[] = frequencyWords.flatMap(getSpanishAnswers
 	return true;
 });
 
-const searchOptions = spanishOptions.map((spanish) => ({
-	spanish,
-	spelling: optionSpelling(spanish),
-	normalized: normalizeAnswer(spanish)
-}));
+const normalizedSpanishOptions = new Set<string>();
+const searchOptions = spanishOptions.map((spanish) => {
+	const normalized = normalizeAnswer(spanish);
+	normalizedSpanishOptions.add(normalized);
+	return { spanish, spelling: optionSpelling(spanish), normalized };
+});
+
+export function isSpanishOption(value: string): boolean {
+	return normalizedSpanishOptions.has(normalizeAnswer(value));
+}
 
 function boundedEditDistance(query: string, value: string, maximum: number): number {
 	if (Math.abs(query.length - value.length) > maximum) return maximum + 1;

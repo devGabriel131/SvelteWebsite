@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { getTableColumns } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/pg-proxy';
 import { defaultLegalText } from '../src/lib/bootcamp/legal';
-import { activateEvent, eventReport, getEvent, listEvents, saveEvent } from '../src/lib/server/bootcamp/admin';
+import { activateEvent, eventReport, getEvent, listEvents, updateEvent } from '../src/lib/server/bootcamp/admin';
 import { eventView } from '../src/lib/server/bootcamp/registration';
 import { bootcampEvents as events } from '../src/lib/server/db/bootcamp-schema';
 import type { Database } from '../src/lib/server/db/connection';
@@ -32,6 +32,7 @@ function form(overrides: Record<string, string> = {}) {
 }
 
 type Query = { sql: string; params: unknown[] };
+type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 // Compile real Drizzle SQL without connecting to PostgreSQL. The integration suite covers persistence/locking.
 function database(respond: (query: Query) => unknown[][] = () => []) {
 	const queries: Query[] = [];
@@ -39,9 +40,9 @@ function database(respond: (query: Query) => unknown[][] = () => []) {
 		const query = { sql, params };
 		queries.push(query);
 		return { rows: respond(query) };
-	}) as unknown as Database;
+	}) as unknown as Database & Transaction;
 	// Proxy does not implement transactions; persistence/rollback are tested against PostgreSQL.
-	db.transaction = ((work: (tx: Database) => Promise<unknown>) => work(db)) as Database['transaction'];
+	db.transaction = <T>(work: (tx: Transaction) => Promise<T>) => work(db);
 	return { db, queries };
 }
 
@@ -104,16 +105,16 @@ describe('bootcamp admin route data and mutations', () => {
 		for (const submittedId of [undefined, '', 'invalid', otherId]) {
 			const input = form({ revision: '1', legalSource: 'standard', legalApproved: 'true' });
 			if (submittedId !== undefined) input.set('id', submittedId);
-			await expect(saveEvent(db, adminId, input, eventId)).rejects.toMatchObject({ code: 'invalid' });
+			await expect(updateEvent(db, eventId, input)).rejects.toMatchObject({ code: 'invalid' });
 		}
-		await expect(saveEvent(db, adminId, form({ id: eventId }), 'invalid')).rejects.toMatchObject({ code: 'invalid' });
+		await expect(updateEvent(db, 'invalid', form({ id: eventId }))).rejects.toMatchObject({ code: 'invalid' });
 		expect(queries).toHaveLength(0);
 	});
 
 	test('scoped edits keep the revision predicate and preserve open registration only before both cutoffs', async () => {
 		const { db, queries } = database(() => [[eventId]]);
 		const input = form({ id: eventId, revision: '1', legalSource: 'standard', legalApproved: 'true' });
-		expect(await saveEvent(db, adminId, input, eventId)).toBe(eventId);
+		expect(await updateEvent(db, eventId, input)).toBe(eventId);
 		expect(queries).toHaveLength(1);
 		expect(queries[0].sql).toStartWith('update "bootcamp_events"');
 		expect(queries[0].sql).toContain('"revision" = "bootcamp_events"."revision" + 1');
@@ -124,7 +125,7 @@ describe('bootcamp admin route data and mutations', () => {
 		expect(queries[0].sql).not.toContain('legal_approved');
 		expect(queries[0].sql).not.toContain('approved_by');
 		const stale = database();
-		await expect(saveEvent(stale.db, adminId, input, eventId)).rejects.toMatchObject({ code: 'stale' });
+		await expect(updateEvent(stale.db, eventId, input)).rejects.toMatchObject({ code: 'stale' });
 		expect(stale.queries).toHaveLength(1);
 	});
 

@@ -10,11 +10,8 @@ import {
 	type AttendanceInput,
 	type AttendanceValidationCode
 } from '../src/lib/attendance/types';
-import {
-	readAttendanceFormData,
-	revalidateAttendanceErrors,
-	validateAttendanceInput
-} from '../src/lib/attendance/validation';
+import { validateAttendanceInput } from '../src/lib/attendance/validation';
+import { readFormFields, refreshVisibleErrors } from '../src/lib/form-fields';
 
 const textFields = ['studentName', 'employerName', 'employerPosition', 'employerWorkplace'] as const;
 const invalidCodes: Record<AttendanceField, AttendanceValidationCode> = {
@@ -193,9 +190,9 @@ describe('attendance text normalization and bounds', () => {
 		});
 
 		test(`${field} refreshes and clears a visible unsupported-character error`, () => {
-			expect(revalidateAttendanceErrors(makeRaw({ [field]: '李 Ω 😀' }), { [field]: 'required' }))
+			expect(refreshVisibleErrors(validateAttendanceInput(makeRaw({ [field]: '李 Ω 😀' })), { [field]: 'required' }))
 				.toEqual({ [field]: 'characters' });
-			expect(revalidateAttendanceErrors(makeRaw({ [field]: 'Mari\u0301a Mun\u0303oz — “Sí”' }), { [field]: 'characters' }))
+			expect(refreshVisibleErrors(validateAttendanceInput(makeRaw({ [field]: 'Mari\u0301a Mun\u0303oz — “Sí”' })), { [field]: 'characters' }))
 				.toEqual({});
 		});
 
@@ -282,9 +279,9 @@ describe('attendance rendered-name character coverage', () => {
 		});
 
 		test(`${field} refreshes and clears visible transformed-character errors`, () => {
-			expect(revalidateAttendanceErrors(makeRaw({ [field]: 'µaria' }), { [field]: 'required' }))
+			expect(refreshVisibleErrors(validateAttendanceInput(makeRaw({ [field]: 'µaria' })), { [field]: 'required' }))
 				.toEqual({ [field]: 'characters' });
-			expect(revalidateAttendanceErrors(makeRaw({ [field]: 'Aµna' }), { [field]: 'characters' }))
+			expect(refreshVisibleErrors(validateAttendanceInput(makeRaw({ [field]: 'Aµna' })), { [field]: 'characters' }))
 				.toEqual({});
 		});
 	}
@@ -339,34 +336,13 @@ describe('Gregorian attendance calendar dates', () => {
 });
 
 describe('attendance FormData transport and untrusted entries', () => {
-	test('reads only contracted fields and leaves strings unnormalized until validation', () => {
-		const raw = makeRaw({ studentName: '  Mari\u0301a   SOFÍA  ' });
-		const data = toFormData(raw);
-		data.append('contact', 'Do not collect this contact');
-		data.append('identifier', new File(['private'], 'unrelated.txt'));
-		const entries = [...data.entries()];
-		const result = readAttendanceFormData(data);
-		expect(Object.keys(result)).toEqual([...attendanceFields]);
-		expect(result).toEqual(raw);
-		expect(validated(result).studentName).toBe('María SOFÍA');
-		expect([...data.entries()]).toEqual(entries);
-	});
-
-	test('returns undefined for missing values rather than coercing them', () => {
-		const raw = readAttendanceFormData(new FormData());
-		expect(Object.keys(raw)).toEqual([...attendanceFields]);
-		for (const field of attendanceFields) expect(raw[field]).toBeUndefined();
-		expectErrors(raw, Object.fromEntries(attendanceFields.map((field) => [field, 'required'])));
-	});
-
 	for (const field of attendanceFields) {
 		test(`rejects duplicate ${field} entries even when identical or blank`, () => {
 			for (const value of [String(makeRaw()[field]), '']) {
 				const data = toFormData();
 				data.set(field, value);
 				data.append(field, value);
-				const raw = readAttendanceFormData(data);
-				expect(raw[field]).toEqual([value, value]);
+				const raw = readFormFields(data, attendanceFields);
 				expectErrors(raw, { [field]: invalidCodes[field] });
 			}
 		});
@@ -375,8 +351,7 @@ describe('attendance FormData transport and untrusted entries', () => {
 			for (const content of ['', String(makeRaw()[field])]) {
 				const data = toFormData();
 				data.set(field, new File([content], 'untrusted.txt'));
-				const raw = readAttendanceFormData(data);
-				expect(raw[field]).toBeInstanceOf(File);
+				const raw = readFormFields(data, attendanceFields);
 				expectErrors(raw, { [field]: invalidCodes[field] });
 			}
 		});
@@ -388,7 +363,7 @@ describe('attendance FormData transport and untrusted entries', () => {
 				const data = toFormData();
 				data.delete(field);
 				for (const entry of entries) data.append(field, entry);
-				expectErrors(readAttendanceFormData(data), { [field]: invalidCodes[field] });
+				expectErrors(readFormFields(data, attendanceFields), { [field]: invalidCodes[field] });
 			}
 		});
 	}
@@ -396,7 +371,7 @@ describe('attendance FormData transport and untrusted entries', () => {
 
 describe('visible attendance validation errors while editing', () => {
 	test('clears corrected errors while retaining visible unanswered fields', () => {
-		expect(revalidateAttendanceErrors(makeRaw({ employerName: '' }), {
+		expect(refreshVisibleErrors(validateAttendanceInput(makeRaw({ employerName: '' })), {
 			studentName: 'required', employerName: 'required'
 		})).toEqual({ employerName: 'required' });
 	});
@@ -405,35 +380,13 @@ describe('visible attendance validation errors while editing', () => {
 		test(`refreshes the code for ${field} without introducing unrelated errors`, () => {
 			const raw = Object.fromEntries(attendanceFields.map((key) => [key, '']));
 			raw[field] = 'not\nvalid';
-			expect(revalidateAttendanceErrors(raw, { [field]: 'required' })).toEqual({ [field]: invalidCodes[field] });
+			expect(refreshVisibleErrors(validateAttendanceInput(raw), { [field]: 'required' })).toEqual({ [field]: invalidCodes[field] });
 		});
 	}
 
 	test('updates an overlength text error to required after clearing the field', () => {
-		expect(revalidateAttendanceErrors(makeRaw({ studentName: '' }), { studentName: 'length' }))
+		expect(refreshVisibleErrors(validateAttendanceInput(makeRaw({ studentName: '' })), { studentName: 'length' }))
 			.toEqual({ studentName: 'required' });
 	});
 
-	test('keeps untouched fields quiet even when the whole form is invalid', () => {
-		expect(revalidateAttendanceErrors({}, {})).toEqual({});
-		expect(revalidateAttendanceErrors({}, { cohort: 'required' })).toEqual({ cohort: 'required' });
-	});
-
-	test('returns a fresh empty record for a corrected form and preserves frozen inputs', () => {
-		const raw = Object.freeze(makeRaw());
-		const visibleErrors = Object.freeze<AttendanceErrors>({ studentName: 'required', programStartDate: 'date' });
-		const result = revalidateAttendanceErrors(raw, visibleErrors);
-		expect(result).toEqual({});
-		expect(result).not.toBe(visibleErrors);
-		expect(raw).toEqual(makeRaw());
-		expect(visibleErrors).toEqual({ studentName: 'required', programStartDate: 'date' });
-	});
-
-	test('does not mutate raw input or visible errors when invalid fields remain', () => {
-		const raw = Object.freeze(makeRaw({ studentName: 'Name\n', employerName: '' }));
-		const visibleErrors = Object.freeze<AttendanceErrors>({ studentName: 'required' });
-		expect(revalidateAttendanceErrors(raw, visibleErrors)).toEqual({ studentName: 'text' });
-		expect(raw.studentName).toBe('Name\n');
-		expect(visibleErrors).toEqual({ studentName: 'required' });
-	});
 });

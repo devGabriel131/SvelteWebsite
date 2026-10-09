@@ -1,12 +1,13 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
-import { crc32, deflateSync, inflateSync } from 'node:zlib';
+import { crc32, deflateSync } from 'node:zlib';
+import { hashPassword } from 'better-auth/crypto';
 import { and, eq, inArray } from 'drizzle-orm';
-import { assertLocalDatabaseUrl, verifyLocalDatabase } from '../scripts/db/local-target';
+import { openLocalDatabase } from '../scripts/db/local-target';
 import { migrateDatabase } from '../scripts/db/migrate';
 import { signingDate } from '../src/lib/bootcamp/rules';
 import { sectionKeys, type LetterSnapshot, type WaiverSnapshot } from '../src/lib/bootcamp/types';
-import { activateEvent, eventReport, getEvent, listEvents, reportCsv, saveEvent, toggleEvent } from '../src/lib/server/bootcamp/admin';
+import { activateEvent, eventReport, getEvent, listEvents, reportCsv, toggleEvent, updateEvent } from '../src/lib/server/bootcamp/admin';
 import type { AthClient } from '../src/lib/server/bootcamp/ath';
 import { createBootcampBackup } from '../src/lib/server/bootcamp/backup';
 import { createPaymentService, createPaymentTokenVault } from '../src/lib/server/bootcamp/payments';
@@ -14,12 +15,16 @@ import { renderLetterPdf, renderWaiverPdf } from '../src/lib/server/bootcamp/pdf
 import { createRegistrationService, documentForViewer, eventView, linkedStudent, studentPage } from '../src/lib/server/bootcamp/registration';
 import { validateSignature } from '../src/lib/server/bootcamp/signatures';
 import { studentIdentityVersion } from '../src/lib/server/bootcamp/signing';
-import { BootcampError } from '../src/lib/server/bootcamp/validation';
-import { createDatabase, type DatabaseConnection } from '../src/lib/server/db/connection';
+import { BootcampError, eventFields } from '../src/lib/server/bootcamp/validation';
+import { readAdminRoster } from '../src/lib/server/admin-roster';
+import { updateAdminStudent } from '../src/lib/server/admin-student';
+import { completeStudentEnrollment, provisionImportedStudents } from '../src/lib/server/student-invitations';
+import type { DatabaseConnection } from '../src/lib/server/db/connection';
 import { user } from '../src/lib/server/db/auth-schema';
-import { bootcampAccounts as accounts, bootcampDocuments as documents, bootcampEvents as events, bootcampPayments as payments, bootcampRegistrations as registrations } from '../src/lib/server/db/bootcamp-schema';
-import { students, type NewStudent, type Student } from '../src/lib/server/db/schema';
+import { bootcampDocuments as documents, bootcampEvents as events, bootcampPayments as payments, bootcampRegistrations as registrations } from '../src/lib/server/db/bootcamp-schema';
+import { studentAccounts as accounts, students, type NewStudent, type Student } from '../src/lib/server/db/schema';
 import type { DriveClient, DriveUpload } from '../src/lib/server/drive/client';
+import { readPdf } from './pdf';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const describeDatabase = databaseUrl ? describe : describe.skip;
@@ -99,26 +104,9 @@ function expectPdf(pdf: Buffer) {
 	expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
 	expect(pdf.toString('latin1').trimEnd()).toEndWith('%%EOF');
 }
-// Same PDFKit stream inspection as bootcamp-pdf.test.ts, limited to the legal body.
-// Importing that test module would register its tests a second time.
 function pdfLegalText(pdf: Buffer): string {
-	const objects = new Map([...pdf.toString('latin1').matchAll(/(\d+) 0 obj\n([\s\S]*?)\nendobj/g)]
-		.map((match) => [Number(match[1]), match[2]]));
-	const decoder = new TextDecoder('windows-1252');
-	let text = '';
-	for (const object of objects.values()) {
-		if (!/\/Type \/Page\b/.test(object)) continue;
-		const resources = objects.get(Number(object.match(/\/Resources (\d+) 0 R/)?.[1]))!;
-		const fonts = new Map([...resources.matchAll(/\/(F\d+) (\d+) 0 R/g)]
-			.map((match) => [match[1], objects.get(Number(match[2]))!.match(/\/BaseFont \/([^\s]+)/)![1]]));
-		const content = objects.get(Number(object.match(/\/Contents (\d+) 0 R/)?.[1]))!;
-		const commands = inflateSync(Buffer.from(content.match(/stream\n([\s\S]*?)\nendstream/)![1], 'latin1')).toString('latin1');
-		for (const match of commands.matchAll(/BT\n([\s\S]*?)\nET/g)) {
-			if (fonts.get(match[1].match(/\/(F\d+) [\d.]+ Tf/)![1]) !== 'Times-Roman') continue;
-			text += decoder.decode(Buffer.concat([...match[1].matchAll(/<([\da-f]+)>/gi)].map((hex) => Buffer.from(hex[1], 'hex'))));
-		}
-	}
-	return text;
+	return readPdf(pdf).flatMap((page) => page.texts.filter((text) => text.font === 'Times-Roman'))
+		.map((text) => text.text).join('');
 }
 function postgresError(error: unknown): unknown {
 	let current = error;
@@ -161,9 +149,7 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 	let connection: DatabaseConnection;
 
 	beforeAll(async () => {
-		const target = assertLocalDatabaseUrl(databaseUrl!, 'test');
-		connection = createDatabase(databaseUrl!);
-		await verifyLocalDatabase(connection, target);
+		connection = await openLocalDatabase(process.env.TEST_DATABASE_URL, 'test');
 		await migrateDatabase(connection.db);
 	}, 30000);
 
@@ -195,7 +181,7 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 
 	async function fixtures(owned: { users: string[]; students: string[]; events: string[] }) {
 		const db = connection.db;
-		const service = createRegistrationService(db);
+		const service = createRegistrationService(db, undefined, previewSecret);
 		async function account(role: 'student' | 'admin' = 'student', email = `bootcamp-account-${randomUUID()}@example.test`) {
 			const id = randomUUID();
 			owned.users.push(id);
@@ -208,15 +194,26 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 			owned.students.push(id);
 			const [row] = await db.insert(students).values({
 				firstName: 'María', lastName: 'de Prueba', email: `bootcamp-roster-${id}@example.test`,
-				classType: 'basic', isActive: true, dateOfBirth: '1990-01-01', ...overrides, id
+				classType: 'basic', status: 'active', dateOfBirth: '1990-01-01', ...overrides, id
 			}).returning();
 			return row;
 		}
 		async function participant(overrides: Partial<NewStudent> = {}): Promise<Participant> {
 			const roster = await student(overrides);
 			const login = await account();
-			await db.insert(accounts).values({ userId: login.id, studentId: roster.id, linkedBy: admin.id });
+			await db.insert(accounts).values({ userId: login.id, studentId: roster.id, linkedBy: admin.id, createdAt: new Date() });
 			return { student: roster, account: login };
+		}
+		async function invitedParticipant() {
+			const [invitation] = await provisionImportedStudents(db, admin.id, [{
+				row: 2, firstName: 'Imported', lastName: 'Adult', email: `bootcamp-invitation-${randomUUID()}@example.test`, pin: '0042'
+			}], { classType: 'regular', emailLanguage: 'en' }, hashPassword, true);
+			owned.students.push(invitation.studentId);
+			const [person] = await db.select({ student: students, account: user }).from(accounts)
+				.innerJoin(students, eq(students.id, accounts.studentId)).innerJoin(user, eq(user.id, accounts.userId))
+				.where(eq(accounts.studentId, invitation.studentId));
+			owned.users.push(person.account.id);
+			return { ...person, invitation };
 		}
 		async function event(overrides: Partial<typeof events.$inferInsert> = {}) {
 			const id = randomUUID();
@@ -236,7 +233,8 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 			return row;
 		}
 		async function createEvent(input: FormData, activate = false) {
-			const id = activate ? await activateEvent(db, admin.id, input, true) : await saveEvent(db, admin.id, input);
+			const id = activate ? await activateEvent(db, admin.id, input, true)
+				: (await db.insert(events).values({ ...eventFields(input), createdBy: admin.id }).returning({ id: events.id }))[0].id;
 			owned.events.push(id);
 			const [row] = await db.select().from(events).where(eq(events.id, id));
 			return row;
@@ -257,7 +255,7 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 			await service.submitLetter(person.account.id, form({ eventId: event.id, needsLetter: 'false' }));
 			return { person, registration: await registration(person, event) };
 		}
-		return { db, service, admin, account, student, participant, event, createEvent, registration, document, ready };
+		return { db, service, admin, account, student, participant, invitedParticipant, event, createEvent, registration, document, ready };
 	}
 
 	test('email matching never grants access; an existing account-to-roster association is required', async () => {
@@ -271,8 +269,13 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 			await expect(f.service.start(spoof.id, event.id)).rejects.toMatchObject({ code: 'notLinked' });
 			await expect(f.service.submitWaiver(spoof.id, waiverForm(event, roster, { studentId: roster.id, email: roster.email })))
 				.rejects.toMatchObject({ code: 'notLinked' });
-			await f.db.insert(accounts).values({ userId: intended.id, studentId: roster.id, linkedBy: f.admin.id });
+			await f.db.insert(accounts).values({ userId: intended.id, studentId: roster.id, linkedBy: f.admin.id, createdAt: new Date() });
 			expect((await linkedStudent(f.db, intended.id))?.id).toBe(roster.id);
+			await expect(updateAdminStudent(f.db, form({
+				id: roster.id, firstName: roster.firstName, lastName: roster.lastName, email: `edited-${randomUUID()}@example.test`,
+				dateOfBirth: roster.dateOfBirth!, gender: '', classType: roster.classType, status: roster.status,
+				ar: '', pc: '', wk: '', mk: ''
+			}))).rejects.toMatchObject({ code: 'linkedEmail' });
 			expect(await linkedStudent(f.db, spoof.id)).toBeNull();
 			const other = await f.student();
 			const documentId = await f.service.submitWaiver(intended.id, waiverForm(event, roster, {
@@ -287,6 +290,41 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 		});
 	});
 
+	test('invitation enrollment activates the same canonical account for bootcamp eligibility and document access', async () => {
+		await withFixtures(async (f) => {
+			const person = await f.invitedParticipant();
+			const event = await f.event();
+			const association = await f.db.select().from(accounts).where(eq(accounts.studentId, person.student.id));
+			expect(association).toEqual([expect.objectContaining({
+				userId: person.account.id, studentId: person.student.id, linkedBy: f.admin.id, createdAt: expect.any(Date)
+			})]);
+			expect((await readAdminRoster(f.db)).find((row) => row.id === person.student.id)).toMatchObject({ hasAccount: true, status: 'invited' });
+			expect(await linkedStudent(f.db, person.account.id)).toEqual(person.student);
+			const invited = await studentPage(f.db, person.account.id, false);
+			expect(invited.student?.id).toBe(person.student.id);
+			expect(invited.events.some((row) => row.id === event.id)).toBe(false);
+			await expect(f.service.start(person.account.id, event.id)).rejects.toMatchObject({ code: 'ineligible' });
+			const profile = {
+				firstName: ' Enrolled ', lastName: ' Adult ', dateOfBirth: '1990-01-01', gender: 'female' as const,
+				email: 'attacker@example.test', classType: 'basic', status: 'inactive', authUserId: 'forged'
+			};
+			await completeStudentEnrollment(f.db, person.account.id, person.invitation.token, profile);
+			const enrolled = await linkedStudent(f.db, person.account.id);
+			expect(enrolled).toMatchObject({ id: person.student.id, firstName: 'Enrolled', lastName: 'Adult',
+				email: person.student.email, classType: 'regular', status: 'active', dateOfBirth: '1990-01-01', gender: 'female' });
+			expect(await f.db.select().from(accounts).where(eq(accounts.studentId, person.student.id))).toEqual(association);
+			expect((await studentPage(f.db, person.account.id, false)).events.find((row) => row.id === event.id)?.registrationOpen).toBe(true);
+			const documentId = await f.service.submitWaiver(person.account.id, waiverForm(event, enrolled!));
+			const stored = await f.document(documentId);
+			const other = await f.account();
+			expect(await documentForViewer(f.db, documentId, other)).toBeNull();
+			expect((await documentForViewer(f.db, documentId, person.account))?.pdf).toEqual(stored.pdf);
+			const expired = new Date(event.endsAt.getTime() + 1);
+			expect(await documentForViewer(f.db, documentId, person.account, expired)).toBeNull();
+			expect((await documentForViewer(f.db, documentId, f.admin, expired))?.pdf).toEqual(stored.pdf);
+		});
+	});
+
 	test('existing account-to-roster associations remain one-to-one', async () => {
 		await withFixtures(async (f) => {
 			const person = await f.participant();
@@ -295,7 +333,7 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 			for (const values of [
 				{ studentId: otherStudent.id, userId: person.account.id },
 				{ studentId: person.student.id, userId: otherAccount.id }
-			]) await expect(f.db.insert(accounts).values({ ...values, linkedBy: f.admin.id })
+			]) await expect(f.db.insert(accounts).values({ ...values, linkedBy: f.admin.id, createdAt: new Date() })
 				.catch((error) => { throw postgresError(error); })).rejects.toMatchObject({ code: '23505' });
 			expect((await linkedStudent(f.db, person.account.id))?.id).toBe(person.student.id);
 			expect(await linkedStudent(f.db, otherAccount.id)).toBeNull();
@@ -303,14 +341,14 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 	});
 
 	for (const [label, overrides] of [
-		['inactive adult', { isActive: false }], ['active under 21', { dateOfBirth: birthday(20) }]
+		['inactive adult', { status: 'inactive' }], ['invited adult', { status: 'invited' }], ['active under 21', { dateOfBirth: birthday(20) }]
 	] as const) {
 		test(`server rejects ${label}, even with a forged adult birthday`, async () => {
 			await withFixtures(async (f) => {
 				const person = await f.participant(overrides);
 				const event = await f.event();
 				await expect(f.service.start(person.account.id, event.id)).rejects.toMatchObject({ code: 'ineligible' });
-				await expect(f.service.preview(person.account.id, waiverForm(event, person.student))).rejects.toMatchObject({ code: 'ineligible' });
+				await expect(f.service.previewDocument(person.account.id, waiverForm(event, person.student))).rejects.toMatchObject({ code: 'ineligible' });
 				await expect(f.service.submitWaiver(person.account.id, waiverForm(event, person.student))).rejects.toMatchObject({ code: 'ineligible' });
 				expect(await f.registration(person, event)).toBeUndefined();
 				expect((await studentPage(f.db, person.account.id, true)).events.some((row) => row.id === event.id)).toBe(false);
@@ -353,13 +391,13 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 			const person = await f.participant({ dateOfBirth: null });
 			const event = await f.event();
 			let backups = 0;
-			const service = createRegistrationService(f.db, async () => { backups++; });
-			expectPdf(await service.preview(person.account.id, waiverForm(event, person.student)));
+			const service = createRegistrationService(f.db, async () => { backups++; }, previewSecret);
+			expectPdf((await service.previewDocument(person.account.id, waiverForm(event, person.student))).pdf);
 			expect(await f.registration(person, event)).toBeUndefined();
 			expect((await linkedStudent(f.db, person.account.id))?.dateOfBirth).toBeNull();
 			const registrationId = await service.start(person.account.id, event.id);
 			const before = await f.registration(person, event);
-			expectPdf(await service.preview(person.account.id, waiverForm(event, person.student)));
+			expectPdf((await service.previewDocument(person.account.id, waiverForm(event, person.student))).pdf);
 			expect(await f.registration(person, event)).toEqual(before);
 			expect(await f.db.select().from(documents).where(eq(documents.registrationId, registrationId))).toHaveLength(0);
 			expect(backups).toBe(0);
@@ -455,7 +493,7 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 						: { updatedAt: new Date() };
 				const [current] = await f.db.update(students).set(change).where(eq(students.id, person.student.id)).returning();
 				expect(studentIdentityVersion(current)).not.toBe(staleForm.get('identityVersion'));
-				await expect(f.service.preview(person.account.id, staleForm)).rejects.toMatchObject({ code: 'stale' });
+				await expect(f.service.previewDocument(person.account.id, staleForm)).rejects.toMatchObject({ code: 'stale' });
 				await expect(f.service.submitWaiver(person.account.id, staleForm)).rejects.toMatchObject({ code: 'stale' });
 				expect(await f.registration(person, event)).toEqual(before);
 				expect(await f.db.select().from(documents).where(eq(documents.registrationId, before.id))).toHaveLength(0);
@@ -473,7 +511,7 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 			const event = await f.event();
 			const input = waiverForm(event, person.student);
 			input.delete('identityVersion');
-			await expect(f.service.preview(person.account.id, input)).rejects.toBeInstanceOf(BootcampError);
+			await expect(f.service.previewDocument(person.account.id, input)).rejects.toBeInstanceOf(BootcampError);
 			await expect(f.service.submitWaiver(person.account.id, input)).rejects.toBeInstanceOf(BootcampError);
 			expect(await f.registration(person, event)).toBeUndefined();
 		});
@@ -504,7 +542,6 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 				const input = waiverForm(event, person.student);
 				if (language === null) input.delete('language');
 				else input.set('language', language);
-				await expect(service.preview(person.account.id, input)).rejects.toMatchObject({ name: 'BootcampError', code: 'invalid' });
 				await expect(service.previewDocument(person.account.id, input)).rejects.toMatchObject({ code: 'invalid' });
 				await expect(service.submitWaiver(person.account.id, input)).rejects.toMatchObject({ code: 'invalid' });
 				expect(await f.registration(person, event)).toBeUndefined();
@@ -545,8 +582,8 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 				async getFile() { throw new Error('Unexpected fake Drive read'); },
 				async createFolder() { throw new Error('Unexpected fake Drive folder creation'); }
 			};
-			const backup = createBootcampBackup(f.db, drive, 'fictional-folder');
-			const service = createRegistrationService(f.db, backup.backupDocument);
+			const backup = createBootcampBackup(f.db, { client: drive, folderId: 'fictional-folder' });
+			const service = createRegistrationService(f.db, backup.backupDocument, previewSecret);
 			const documentId = await service.submitWaiver(person.account.id, waiverForm(event, person.student, { ssn: '000-00-0000' }));
 			const registration = await f.registration(person, event);
 			const saved = await f.document(documentId);
@@ -577,7 +614,7 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 			const person = await f.participant();
 			const event = await f.event();
 			const backups: string[] = [];
-			const service = createRegistrationService(f.db, async (id) => { backups.push(id); throw new Error('Fictional outage'); });
+			const service = createRegistrationService(f.db, async (id) => { backups.push(id); throw new Error('Fictional outage'); }, previewSecret);
 			const ids = await concurrent(Array.from({ length: 3 }, () => service.submitWaiver(person.account.id, waiverForm(event, person.student))));
 			expect(new Set(ids).size).toBe(1);
 			const original = await f.document(ids[0]);
@@ -606,7 +643,7 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 			const [competing] = await f.db.insert(documents).values({ registrationId, kind: 'waiver', language: 'en',
 				snapshot, pdf, sha256: sha256(pdf) }).returning();
 			let backups = 0;
-			const service = createRegistrationService(f.db, async () => { backups++; });
+			const service = createRegistrationService(f.db, async () => { backups++; }, previewSecret);
 			const failure = await service.submitWaiver(person.account.id, waiverForm(event, person.student)).then(() => null, postgresError);
 			expect(failure).toMatchObject({ code: '23505', constraint_name: 'bootcamp_document_registration_kind' });
 			expect((await f.registration(person, event)).waiver).toBeNull();
@@ -644,7 +681,7 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 				expect((await f.registration(person, event)).letterChoice).toBeNull();
 			}
 			const backedUp: string[] = [];
-			const service = createRegistrationService(f.db, async (id) => { backedUp.push(id); throw new Error('Fictional backup outage'); });
+			const service = createRegistrationService(f.db, async (id) => { backedUp.push(id); throw new Error('Fictional backup outage'); }, previewSecret);
 			const documentId = await service.submitLetter(person.account.id, letterForm(event, { ssn: '000-00-0000', socialSecurityNumber: '000-00-0000' }));
 			expect(documentId).not.toBeNull();
 			const saved = await f.document(documentId!);
@@ -792,7 +829,7 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 			const letterId = await f.service.submitLetter(person.account.id, letterForm(event));
 			const original = await f.document(waiverId);
 			await f.db.update(events).set({ registrationOpen: false, registrationClosesAt: new Date(Date.now() - 1000), title: 'Changed title' }).where(eq(events.id, event.id));
-			await f.db.update(students).set({ isActive: false, firstName: 'Changed name' }).where(eq(students.id, person.student.id));
+			await f.db.update(students).set({ status: 'inactive', firstName: 'Changed name' }).where(eq(students.id, person.student.id));
 			for (const documentId of [waiverId, letterId!]) {
 				const stored = await f.document(documentId);
 				const owner = { id: person.account.id, role: 'student' };
@@ -819,7 +856,7 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 			const event = await f.event();
 			await f.service.submitWaiver(person.account.id, waiverForm(event, person.student));
 			const before = await f.registration(person, event);
-			await f.db.update(students).set({ isActive: false }).where(eq(students.id, person.student.id));
+			await f.db.update(students).set({ status: 'inactive' }).where(eq(students.id, person.student.id));
 			await expect(f.service.submitLetter(person.account.id, letterForm(event))).rejects.toMatchObject({ code: 'ineligible' });
 			await expect(f.service.ownedRegistration(person.account.id, event.id)).rejects.toMatchObject({ code: 'ineligible' });
 			expect(await f.service.ownedRegistration(person.account.id, event.id, false)).toEqual(before);
@@ -835,7 +872,7 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 			const before = await f.registration(person, event);
 			await f.db.update(events).set({ registrationClosesAt: new Date(Date.now() - 1000) }).where(eq(events.id, event.id));
 			await expect(f.service.start(person.account.id, event.id)).rejects.toMatchObject({ code: 'closed' });
-			await expect(f.service.preview(person.account.id, waiverForm(event, person.student))).rejects.toMatchObject({ code: 'closed' });
+			await expect(f.service.previewDocument(person.account.id, waiverForm(event, person.student))).rejects.toMatchObject({ code: 'closed' });
 			await expect(f.service.submitWaiver(person.account.id, waiverForm(event, person.student))).rejects.toMatchObject({ code: 'closed' });
 			await expect(f.service.submitLetter(person.account.id, letterForm(event))).rejects.toMatchObject({ code: 'closed' });
 			expect(await f.registration(person, event)).toEqual(before);
@@ -965,10 +1002,10 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 	test('editing closes an event at the old or new cutoff without implicitly reopening it', async () => {
 		await withFixtures(async (f) => {
 			const expired = await f.event({ registrationClosesAt: new Date(Date.now() - 1000) });
-			await saveEvent(f.db, f.admin.id, eventForm({ id: expired.id, revision: '1' }));
+			await updateEvent(f.db, expired.id, eventForm({ id: expired.id, revision: '1' }));
 			expect(await getEvent(f.db, expired.id)).toMatchObject({ revision: 2, registrationOpen: false });
 			const active = await f.event();
-			await saveEvent(f.db, f.admin.id, eventForm({ id: active.id, revision: '1', eventDate: '2000-01-01' }));
+			await updateEvent(f.db, active.id, eventForm({ id: active.id, revision: '1', eventDate: '2000-01-01' }));
 			expect(await getEvent(f.db, active.id)).toMatchObject({ revision: 2, registrationOpen: false });
 		});
 	});
@@ -978,15 +1015,15 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 			const event = await f.event();
 			const other = await f.event({ registrationOpen: false });
 			for (const submittedId of [other.id, '', 'invalid', randomUUID()]) {
-				await expect(saveEvent(f.db, f.admin.id, eventForm({ id: submittedId, revision: '1' }), event.id))
+				await expect(updateEvent(f.db, event.id, eventForm({ id: submittedId, revision: '1' })))
 					.rejects.toMatchObject({ code: 'invalid' });
 			}
-			await expect(saveEvent(f.db, f.admin.id, eventForm({ revision: '1' }), event.id)).rejects.toMatchObject({ code: 'invalid' });
+			await expect(updateEvent(f.db, event.id, eventForm({ revision: '1' }))).rejects.toMatchObject({ code: 'invalid' });
 			expect((await f.db.select().from(events).where(eq(events.id, event.id)))[0]).toEqual(event);
 			expect((await f.db.select().from(events).where(eq(events.id, other.id)))[0]).toEqual(other);
 			const edit = eventForm({ id: event.id, revision: '1' });
-			expect(await saveEvent(f.db, f.admin.id, edit, event.id)).toBe(event.id);
-			await expect(saveEvent(f.db, f.admin.id, edit, event.id)).rejects.toMatchObject({ code: 'stale' });
+			expect(await updateEvent(f.db, event.id, edit)).toBe(event.id);
+			await expect(updateEvent(f.db, event.id, edit)).rejects.toMatchObject({ code: 'stale' });
 			expect(await getEvent(f.db, event.id)).toMatchObject({ revision: 2, registrationOpen: true });
 		});
 	});
@@ -1028,7 +1065,7 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 			for (const language of ['en', 'es']) for (const section of sectionKeys) {
 				edit.set(`legal_${language}_${section}`, 'Tampered browser clauses 🖊');
 			}
-			expect(await saveEvent(f.db, f.admin.id, edit)).toBe(event.id);
+			expect(await updateEvent(f.db, event.id, edit)).toBe(event.id);
 			const [saved] = await f.db.select().from(events).where(eq(events.id, event.id));
 			expect(saved).toMatchObject({ revision: 2, registrationOpen: true, venue: 'Cancha Nueva de Ponce',
 				startsAt: new Date(`${date}T13:15:00-04:00`), endsAt: new Date(`${date}T18:00:00-04:00`),
@@ -1045,7 +1082,7 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 			expect(saved.legal.es.agreement).toContain('El registro comienza a las 12:15:00.');
 			expect(saved.legal.es.agreement).toContain('No se aceptarán estudiantes después de las 13:15:00.');
 			expect(saved.legal.es.media).toBe(event.legal.es.media);
-			await expect(saveEvent(f.db, f.admin.id, edit)).rejects.toMatchObject({ code: 'stale' });
+			await expect(updateEvent(f.db, event.id, edit)).rejects.toMatchObject({ code: 'stale' });
 		});
 	});
 
@@ -1085,7 +1122,7 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 			const date = signingDate(new Date(event.startsAt.getTime() + 2 * day));
 			const edit = eventForm({ id: event.id, revision: '1', venue: 'Cancha Nueva de Ponce',
 				eventDate: date, startTime: '13:15', endTime: '18:00' });
-			await saveEvent(f.db, f.admin.id, edit);
+			await updateEvent(f.db, event.id, edit);
 			const [current] = await f.db.select().from(events).where(eq(events.id, event.id));
 			expect(current).toMatchObject({ revision: 2, registrationOpen: true,
 				startsAt: new Date(`${date}T13:15:00-04:00`), endsAt: new Date(`${date}T18:00:00-04:00`),
@@ -1134,13 +1171,13 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 		await withFixtures(async (f) => {
 			const event = await f.event({ registrationOpen: false });
 			const edit = eventForm({ id: event.id, revision: '1', venue: 'Cancha Nueva', legalSource: 'custom', legal_es_media: 'Forged 🖊' });
-			await saveEvent(f.db, f.admin.id, edit);
+			await updateEvent(f.db, event.id, edit);
 			const [saved] = await f.db.select().from(events).where(eq(events.id, event.id));
 			expect(saved).toMatchObject({ revision: 2, registrationOpen: false, venue: 'Cancha Nueva' });
 			expect(saved.legal.en).toEqual(saved.legal.es);
 			expect(saved.legal.es.agreement).toContain('Cancha Nueva');
 			expect(saved.legal.es.media).not.toContain('Forged');
-			await expect(saveEvent(f.db, f.admin.id, edit)).rejects.toMatchObject({ code: 'stale' });
+			await expect(updateEvent(f.db, event.id, edit)).rejects.toMatchObject({ code: 'stale' });
 			const open = form({ eventId: event.id, revision: '2', open: 'true' });
 			await expect(toggleEvent(f.db, open, false)).rejects.toMatchObject({ code: 'unavailable' });
 			await toggleEvent(f.db, open, true);
@@ -1159,10 +1196,11 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 			};
 			const underage = await f.student({ dateOfBirth: birthday(20) });
 			const unknown = await f.student({ dateOfBirth: null });
-			const inactive = await f.student({ isActive: false });
+			const inactive = await f.student({ status: 'inactive' });
+			const invited = await f.student({ status: 'invited' });
 			await f.service.start(people.waiver.account.id, event.id);
 			await f.service.start(people.inactiveRegistered.account.id, event.id);
-			await f.db.update(students).set({ isActive: false }).where(eq(students.id, people.inactiveRegistered.student.id));
+			await f.db.update(students).set({ status: 'inactive' }).where(eq(students.id, people.inactiveRegistered.student.id));
 			await f.service.submitWaiver(people.letter.account.id, waiverForm(event, people.letter.student));
 			for (const key of ['payment', 'deposit', 'full', 'refunded'] as const) {
 				const { registration } = await f.ready(event, people[key]);
@@ -1180,6 +1218,7 @@ describeDatabase('isolated PostgreSQL bootcamp schema and services', () => {
 			expect(row(underage.id)).toMatchObject({ eligibility: 'underage', status: 'not_started' });
 			expect(row(unknown.id)).toMatchObject({ eligibility: 'unknown', status: 'not_started' });
 			expect(row(inactive.id)).toBeUndefined();
+			expect(row(invited.id)).toBeUndefined();
 			expect(row(people.inactiveRegistered.student.id)?.eligibility).toBe('inactive');
 			expect(row(people.refunded.student.id)?.paymentStatus).toBe('refunded');
 			expect(row(people.deposit.student.id)?.documents).toEqual([expect.objectContaining({ kind: 'waiver', backupStatus: 'pending' })]);

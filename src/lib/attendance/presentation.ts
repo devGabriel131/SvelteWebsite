@@ -2,8 +2,6 @@ import { formatMessage, translations, type Language } from '../i18n/translations
 import { attendanceNameSlug, shortAttendanceName, titleAttendanceName } from './names';
 import { attendanceClassTimes, type AttendanceCertificate, type ClassTime, type Cohort } from './types';
 
-export { attendanceNameSlug, shortAttendanceName, titleAttendanceName } from './names';
-
 export interface AttendanceDocument {
 	language: Language;
 	title: string;

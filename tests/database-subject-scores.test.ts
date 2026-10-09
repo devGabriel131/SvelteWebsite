@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { createDatabase, type DatabaseConnection } from '../src/lib/server/db/connection';
-import { assertLocalDatabaseUrl, verifyLocalDatabase } from '../scripts/db/local-target';
+import type { DatabaseConnection } from '../src/lib/server/db/connection';
+import { openLocalDatabase } from '../scripts/db/local-target';
 import { migrateDatabase } from '../scripts/db/migrate';
 import { seedSubjectScores, fixtureEmails } from '../scripts/db/seed-subject-scores';
 
@@ -10,9 +10,7 @@ const suite = url ? describe : describe.skip;
 suite('isolated subject-score storage', () => {
 	let connection: DatabaseConnection;
 	beforeAll(async () => {
-		const target = assertLocalDatabaseUrl(url!, 'test');
-		connection = createDatabase(url!);
-		await verifyLocalDatabase(connection, target);
+		connection = await openLocalDatabase(url, 'test');
 		await migrateDatabase(connection.db);
 	}, 30000);
 	afterAll(async () => { await connection?.client.end(); });
@@ -61,7 +59,7 @@ suite('isolated subject-score storage', () => {
 		expect(fixtureEmails).toHaveLength(100);
 		expect(new Set(fixtureEmails).size).toBe(100);
 		const before = await connection.client`SELECT * FROM student_subject_scores ORDER BY student_id`;
-		await expect(seedSubjectScores(url!)).rejects.toThrow('Expected all 100 fictional Test students');
+		await expect(seedSubjectScores(url)).rejects.toThrow('Expected all 100 fictional Test students');
 		expect(JSON.stringify(await connection.client`SELECT * FROM student_subject_scores ORDER BY student_id`)).toBe(JSON.stringify(before));
 	});
 });

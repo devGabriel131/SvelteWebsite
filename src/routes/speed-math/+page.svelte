@@ -1,5 +1,4 @@
 <script lang="ts">
-	import StudentShell from '#lib/components/StudentShell.svelte';
 	import SpeedMathGame from '#lib/components/SpeedMathGame.svelte';
 	import { useLanguage } from '#lib/i18n/language.svelte.ts';
 
@@ -12,7 +11,6 @@
 	<meta name="description" content={messages.description} />
 </svelte:head>
 
-<StudentShell activePage="speed-math">
 	<div class="page-heading">
 		<p class="eyebrow">{messages.eyebrow}</p>
 		<h1>{messages.title}</h1>
@@ -20,7 +18,6 @@
 	</div>
 
 	<SpeedMathGame />
-</StudentShell>
 
 <style>
 	.page-heading { margin-bottom: 1.75rem; }

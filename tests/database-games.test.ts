@@ -12,15 +12,15 @@ import {
 	speedMathLeaderboardEntries
 } from '../src/lib/server/db/views';
 import { frequencyWords } from '../src/lib/frequency/vocabulary';
-import { createDatabase, type DatabaseConnection } from '../src/lib/server/db/connection';
-import { assertLocalDatabaseUrl, verifyLocalDatabase } from '../scripts/db/local-target';
+import { answerOutcomes, type AnswerOutcome } from '../src/lib/frequency/rules';
+import { operations, type Operation } from '../src/lib/speed-math/game';
+import type { DatabaseConnection } from '../src/lib/server/db/connection';
+import { openLocalDatabase } from '../scripts/db/local-target';
 import { migrateDatabase } from '../scripts/db/migrate';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const describeDatabase = databaseUrl ? describe : describe.skip;
 const startTime = '2026-01-01T10:00:00.000Z';
-type Outcome = 'correct' | 'incorrect' | 'skipped';
-type Operation = 'addition' | 'subtraction' | 'multiplication' | 'division';
 type AttemptOptions = {
 	id?: string;
 	gameType?: 'speed_math' | 'frequency';
@@ -40,9 +40,7 @@ describeDatabase('isolated PostgreSQL game histories and derived progress', () =
 	let connection: DatabaseConnection;
 
 	beforeAll(async () => {
-		const target = assertLocalDatabaseUrl(databaseUrl!, 'test');
-		connection = createDatabase(databaseUrl!);
-		await verifyLocalDatabase(connection, target);
+		connection = await openLocalDatabase(databaseUrl, 'test');
 		await migrateDatabase(connection.db);
 	}, 30000);
 
@@ -160,7 +158,7 @@ describeDatabase('isolated PostgreSQL game histories and derived progress', () =
 		poolId: string,
 		itemId: string,
 		cardPosition: number,
-		outcome: Outcome = 'correct',
+		outcome: AnswerOutcome = 'correct',
 		answeredAt = startTime
 	) {
 		await transaction`
@@ -653,9 +651,8 @@ describeDatabase('isolated PostgreSQL game histories and derived progress', () =
 		await withRollback(async (transaction) => {
 			const pool = await createPool(transaction, 1);
 			const id = await insertRound(transaction, await insertStudent(transaction), pool.id);
-			const outcomes: Outcome[] = ['correct', 'incorrect', 'skipped'];
 			for (let position = 1; position <= 24; position++) {
-				await insertResponse(transaction, id, pool.id, pool.itemIds[0], position, outcomes[(position - 1) % 3]);
+				await insertResponse(transaction, id, pool.id, pool.itemIds[0], position, answerOutcomes[(position - 1) % answerOutcomes.length]);
 			}
 			const [partial] = await transaction`
 				SELECT response_count::integer, is_complete FROM public.vocabulary_round_progress WHERE attempt_id = ${id}
@@ -699,7 +696,7 @@ describeDatabase('isolated PostgreSQL game histories and derived progress', () =
 			const pool = await createPool(transaction, 1);
 			const first = await insertRound(transaction, studentId, pool.id);
 			const second = await insertRound(transaction, studentId, pool.id);
-			const cards: [string, number, Outcome][] = [
+			const cards: [string, number, AnswerOutcome][] = [
 				[first, 1, 'correct'], [first, 2, 'incorrect'], [second, 1, 'incorrect'], [second, 2, 'skipped']
 			];
 			for (const [attemptId, position, outcome] of cards) {
@@ -741,7 +738,7 @@ describeDatabase('isolated PostgreSQL game histories and derived progress', () =
 			const pool = await createPool(transaction, 3);
 			const id = await insertRound(transaction, studentId, pool.id);
 			let position = 0;
-			async function answer(itemIndex: number, outcome: Outcome = 'correct') {
+			async function answer(itemIndex: number, outcome: AnswerOutcome = 'correct') {
 				await insertResponse(transaction, id, pool.id, pool.itemIds[itemIndex], ++position, outcome);
 			}
 			await answer(0);
@@ -893,7 +890,7 @@ describeDatabase('isolated PostgreSQL game histories and derived progress', () =
 				}));
 			}
 			await insertSpeedMath(transaction, studentIds[0], { rulesVersion, correctCount: 1 });
-			await transaction`UPDATE public.students SET is_active = false WHERE id = ${studentIds[1]}`;
+			await transaction`UPDATE public.students SET status = 'inactive' WHERE id = ${studentIds[1]}`;
 			const rows = await transaction`
 				SELECT student_id, attempt_id, correct_count, incorrect_count, rank::integer
 				FROM public.speed_math_leaderboard_entries WHERE rules_version = ${rulesVersion}
@@ -914,7 +911,7 @@ describeDatabase('isolated PostgreSQL game histories and derived progress', () =
 			const rulesVersion = `db-games-rules-${randomUUID()}`;
 			const revisedRulesVersion = `db-games-rules-${randomUUID()}`;
 			const expected: { operation: Operation; duration_minutes: number; rules_version: string; attempt_id: string }[] = [];
-			for (const operation of ['addition', 'subtraction', 'multiplication', 'division'] as const) {
+			for (const operation of operations) {
 				for (const durationMinutes of [5, 10, 15] as const) {
 					expected.push({
 						operation, duration_minutes: durationMinutes, rules_version: rulesVersion,
@@ -943,7 +940,7 @@ describeDatabase('isolated PostgreSQL game histories and derived progress', () =
 		});
 	});
 
-	test('deactivation and reactivation preserve vocabulary, math, and all derived history', async () => {
+	test('status changes preserve vocabulary, math, and all derived history', async () => {
 		await withRollback(async (transaction) => {
 			const studentId = await insertStudent(transaction);
 			const pool = await createPool(transaction, 1);
@@ -962,8 +959,8 @@ describeDatabase('isolated PostgreSQL game histories and derived progress', () =
 				};
 			}
 			const before = await snapshot();
-			for (const isActive of [false, true]) {
-				await transaction`UPDATE public.students SET is_active = ${isActive} WHERE id = ${studentId}`;
+			for (const status of ['inactive', 'invited', 'active']) {
+				await transaction`UPDATE public.students SET status = ${status} WHERE id = ${studentId}`;
 				expect(await snapshot()).toEqual(before);
 			}
 		});

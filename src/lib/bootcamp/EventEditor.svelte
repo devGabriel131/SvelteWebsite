@@ -6,6 +6,7 @@
 	import { useLanguage } from '#lib/i18n/language.svelte.ts';
 	import { formatMessage } from '#lib/i18n/translations.ts';
 	import ActionForm from './ActionForm.svelte';
+	import { formatAdminEventTime } from './format';
 	import { defaultLegalText } from './legal';
 	import { eventTimePattern, parseEventSchedule } from './rules';
 	import { eventTimeZone, sectionKeys, type BootcampEvent } from './types';
@@ -14,24 +15,29 @@
 	const language = useLanguage();
 	const messages = $derived(language.messages.bootcamp);
 	const timeFields = ['startTime', 'endTime'] as const;
-	let details = $state(untrack(() => {
-		const start = localDate(event?.startsAt);
-		const end = localDate(event?.endsAt);
-		return {
-			title: event?.title ?? '', venue: event?.venue ?? '', eventDate: start.slice(0, 10), startTime: start.slice(11),
-			// Older multi-day events need an explicit same-day end time before they can be saved.
-			endTime: start.slice(0, 10) === end.slice(0, 10) ? end.slice(11) : ''
-		};
-	}));
+	let details = $state(untrack(() => eventDetails(event)));
+	const eventVersion = $derived(event ? `${event.id}:${event.revision}` : '');
+
+	$effect(() => {
+		eventVersion;
+		// Keep the form's feedback owner mounted while refreshing its authoritative fields.
+		details = untrack(() => eventDetails(event));
+	});
 	const schedule = $derived(parseEventSchedule(details.eventDate, details.startTime, details.endTime));
 	const cutoffPassed = $derived(Boolean(schedule && schedule.registrationClosesAt.getTime() <= Date.now()));
 	const legalPreview = $derived.by(() => {
 		const venue = details.venue.trim().normalize('NFC');
 		return venue && schedule ? defaultLegalText({ venue, ...schedule }).es : null;
 	});
-	const formatDate = (value: Date) => new Intl.DateTimeFormat(language.current === 'es' ? 'es-PR' : 'en-US', {
-		timeZone: eventTimeZone, dateStyle: 'medium', timeStyle: 'short', hourCycle: 'h23'
-	}).format(value);
+	function eventDetails(value?: BootcampEvent) {
+		const start = localDate(value?.startsAt);
+		const end = localDate(value?.endsAt);
+		return {
+			title: value?.title ?? '', venue: value?.venue ?? '', eventDate: start.slice(0, 10), startTime: start.slice(11),
+			// Older multi-day events need an explicit same-day end time before they can be saved.
+			endTime: start.slice(0, 10) === end.slice(0, 10) ? end.slice(11) : ''
+		};
+	}
 
 	function localDate(value?: string) {
 		if (!value) return '';
@@ -82,8 +88,8 @@
 				<p class="bc-hint">{messages.admin.scheduleAutomatic}</p>
 				{#if schedule}
 					<dl class="bc-details bc-ledger-schedule" aria-live="polite">
-						<div><dt>{messages.event.arrivalAt}</dt><dd>{formatDate(schedule.arrivalAt)}</dd></div>
-						<div><dt>{messages.event.registrationClosesAt}</dt><dd>{formatDate(schedule.registrationClosesAt)}</dd></div>
+						<div><dt>{messages.event.arrivalAt}</dt><dd>{formatAdminEventTime(schedule.arrivalAt, language.current)}</dd></div>
+						<div><dt>{messages.event.registrationClosesAt}</dt><dd>{formatAdminEventTime(schedule.registrationClosesAt, language.current)}</dd></div>
 					</dl>
 				{/if}
 				{#if !event && cutoffPassed}<p class="bc-notice bc-error" role="status">{messages.admin.cutoffPassed}</p>{/if}

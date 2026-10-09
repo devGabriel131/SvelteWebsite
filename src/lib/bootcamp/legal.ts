@@ -1,5 +1,6 @@
-import { formatMessage, translations } from '../i18n/translations';
-import { depositCents, eventTimeZone, priceCents, sectionKeys, type EventSnapshot, type LegalText } from './types';
+import { formatMessage } from '../i18n/translations';
+import { spanishBootcampLegal } from './legal-templates';
+import { depositCents, eventTimeZone, priceCents, sectionKeys, type LegalText } from './types';
 
 type LegalEventDetails = {
 	venue: string;
@@ -27,12 +28,7 @@ export function defaultLegalText(event: LegalEventDetails): LegalText {
 		balance: amount.format((priceCents - depositCents) / 100)
 	};
 	const spanish = {} as LegalText['es'];
-	for (const section of sectionKeys) spanish[section] = formatMessage(translations.es.bootcamp.waiver.legalText[section], values);
+	for (const section of sectionKeys) spanish[section] = formatMessage(spanishBootcampLegal[section], values);
 	// Keep compatibility with historical bilingual snapshots without creating English terms.
 	return { es: spanish, en: { ...spanish } };
-}
-
-export function usesDefaultLegalText(event: EventSnapshot): boolean {
-	const standard = defaultLegalText(event).es;
-	return sectionKeys.every((section) => event.legal.es[section] === standard[section]);
 }

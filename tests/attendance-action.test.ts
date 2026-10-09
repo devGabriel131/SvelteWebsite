@@ -5,6 +5,7 @@ import {
 	attendanceFields, attendanceTextLimits,
 	type AttendanceField, type AttendanceFormValues
 } from '../src/lib/attendance/types';
+import type { ReportActionEvent } from '../src/lib/server/report-downloads';
 
 const actions = createAttendanceActions(() => null);
 
@@ -26,8 +27,9 @@ async function submit(values: Partial<AttendanceFormValues>, ...extras: [string,
 	const headers: Record<string, string> = {};
 	const result = await actions.default({
 		request: new Request('http://localhost/attendance', { method: 'POST', body: data }),
-		setHeaders: (next: Record<string, string>) => Object.assign(headers, next)
-	} as Parameters<typeof actions.default>[0]);
+		setHeaders: (next) => Object.assign(headers, next),
+		locals: { user: null, session: null }
+	} satisfies ReportActionEvent);
 	return { result, headers };
 }
 
@@ -44,13 +46,13 @@ describe('attendance certificate server action', () => {
 					const before = Date.now();
 					const { result, headers } = await submit(values);
 					const after = Date.now();
-					if ('status' in result || !result.certificate || !result.reports) {
+					if ('status' in result || !('certificate' in result) || !result.certificate || !result.reports) {
 						throw new Error('Expected a generated certificate');
 					}
 					expect(headers['cache-control']).toBe('no-store');
 					expect(result.values).toEqual(values);
-					expect(result.errors).toEqual({});
-					expect(result.serverError).toBe(false);
+					expect(result).not.toHaveProperty('errors');
+					expect(result).not.toHaveProperty('failure');
 					expect(result.certificate.input).toEqual(values);
 					expect(result.certificate.input.classTime).toBe(classTime);
 					expect(Date.parse(result.certificate.issuedAt)).toBeGreaterThanOrEqual(before);
@@ -75,7 +77,7 @@ describe('attendance certificate server action', () => {
 		}, ['issuedAt', '1999-01-01T00:00:00.000Z'], ['schedule', 'No classes'],
 			['startTime', '10:00'], ['endTime', '12:00'], ['days', 'Wednesdays and Saturdays'],
 			['city', 'Ponce'], ['studentEmail', 'private@example.com'], ['ssnLast4', '1234']);
-		if ('status' in result || !result.certificate) throw new Error('Expected a certificate');
+		if ('status' in result || !('certificate' in result) || !result.certificate) throw new Error('Expected a certificate');
 		expect(result.certificate.input.studentName).toBe('MARÍA SOFÍA PAGÁN CRUZ');
 		expect(result.certificate.input.classTime).toBe('pm');
 		expect(Object.keys(result.certificate.input)).toEqual([...attendanceFields]);
@@ -100,7 +102,7 @@ describe('attendance certificate server action', () => {
 			employerPosition: 'Ñ'.repeat(attendanceTextLimits.employerPosition),
 			employerWorkplace: 'Ó'.repeat(attendanceTextLimits.employerWorkplace)
 		});
-		if ('status' in result || !result.reports) throw new Error('Expected PDFs for valid long text');
+		if ('status' in result || !('reports' in result) || !result.reports) throw new Error('Expected PDFs for valid long text');
 		for (const language of ['en', 'es'] as const) {
 			expect(Buffer.from(result.reports[language], 'base64').subarray(0, 5).toString()).toBe('%PDF-');
 		}
@@ -109,15 +111,17 @@ describe('attendance certificate server action', () => {
 	for (const field of attendanceFields) {
 		test(`requires ${field} when missing or blank without generating a PDF and preserves other editable values`, async () => {
 			for (const value of [undefined, '', '   ']) {
-				const values = { ...validValues(), [field]: value };
+				const values: Partial<AttendanceFormValues> = validValues();
+				if (value === undefined) delete values[field];
+				else values[field] = value;
 				const { result, headers } = await submit(values);
-				if (!('status' in result)) throw new Error('Missing input unexpectedly accepted');
+				if (!('status' in result) || !('errors' in result.data)) throw new Error('Missing input unexpectedly accepted');
 				expect(result.status).toBe(400);
-				expect(result.data.values).toEqual({ ...values, [field]: value ?? '' });
+				expect(result.data.values).toEqual({ ...validValues(), [field]: value ?? '' });
 				expect(result.data.errors).toEqual({ [field]: 'required' });
-				expect(result.data.certificate).toBeNull();
-				expect(result.data.reports).toBeNull();
-				expect(result.data.serverError).toBe(false);
+				expect(result.data).not.toHaveProperty('certificate');
+				expect(result.data).not.toHaveProperty('reports');
+				expect(result.data).not.toHaveProperty('failure');
 				expect(headers['cache-control']).toBe('no-store');
 			}
 		});
@@ -139,11 +143,11 @@ describe('attendance certificate server action', () => {
 	] as const) {
 		test(`rejects malformed ${field} (${error}) authoritatively`, async () => {
 			const { result } = await submit({ ...validValues(), [field]: value });
-			if (!('status' in result)) throw new Error('Invalid input unexpectedly accepted');
+			if (!('status' in result) || !('errors' in result.data)) throw new Error('Invalid input unexpectedly accepted');
 			expect(result.status).toBe(400);
 			expect(result.data.values[field].replace(/\r\n/g, '\n')).toBe(value);
 			expect(result.data.errors[field]).toBe(error);
-			expect(result.data.reports).toBeNull();
+			expect(result.data).not.toHaveProperty('reports');
 		});
 	}
 
@@ -155,13 +159,13 @@ describe('attendance certificate server action', () => {
 			['employerWorkplace', new File(['Workplace'], 'workplace.txt')]
 		] as [AttendanceField, string | File][]) {
 			const { result } = await submit(validValues(), extra);
-			if (!('status' in result)) throw new Error('Malformed form unexpectedly accepted');
+			if (!('status' in result) || !('errors' in result.data)) throw new Error('Malformed form unexpectedly accepted');
 			expect(result.status).toBe(400);
 			expect(result.data.values[extra[0]]).toBe('');
 			expect(result.data.errors[extra[0]]).toBeDefined();
 			if (extra[0] === 'classTime') expect(result.data.errors.classTime).toBe('classTime');
-			expect(result.data.certificate).toBeNull();
-			expect(result.data.reports).toBeNull();
+			expect(result.data).not.toHaveProperty('certificate');
+			expect(result.data).not.toHaveProperty('reports');
 		}
 	});
 
@@ -173,12 +177,12 @@ describe('attendance certificate server action', () => {
 			delete values[field];
 			for (const content of ['', validValues()[field]]) {
 				const { result } = await submit(values, [field, new File([content], 'choice.txt')]);
-				if (!('status' in result)) throw new Error('Uploaded choice unexpectedly accepted');
+				if (!('status' in result) || !('errors' in result.data)) throw new Error('Uploaded choice unexpectedly accepted');
 				expect(result.status).toBe(400);
-				expect(result.data.values).toEqual({ ...values, [field]: '' });
+				expect(result.data.values).toEqual({ ...validValues(), [field]: '' });
 				expect(result.data.errors).toEqual({ [field]: error });
-				expect(result.data.certificate).toBeNull();
-				expect(result.data.reports).toBeNull();
+				expect(result.data).not.toHaveProperty('certificate');
+				expect(result.data).not.toHaveProperty('reports');
 			}
 		});
 	}

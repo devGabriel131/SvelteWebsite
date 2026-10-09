@@ -1,4 +1,4 @@
-export type StudentStatus = 'active' | 'inactive' | 'invited';
+import type { StudentClassType, StudentGender, StudentStatus } from '../student';
 export const subjects = ['ar', 'pc', 'wk', 'mk'] as const;
 export interface AdminStudent {
 	id: string;
@@ -6,12 +6,12 @@ export interface AdminStudent {
 		firstName: string;
 		lastName: string;
 		dateOfBirth: string | null;
-		gender: 'male' | 'female' | null;
+		gender: StudentGender | null;
 		createdAt: string;
 		updatedAt: string;
 	email: string;
 	hasAccount: boolean;
-	classType: 'basic' | 'regular';
+	classType: StudentClassType;
 	status: StudentStatus;
 	subjectScores: { ar: number; pc: number; wk: number; mk: number; isFixture: boolean } | null;
 }

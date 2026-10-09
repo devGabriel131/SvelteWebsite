@@ -1,6 +1,5 @@
-import { createDatabase, requireDatabaseUrl } from '../../src/lib/server/db/connection';
 import { students, type NewStudent } from '../../src/lib/server/db/schema';
-import { assertLocalDatabaseUrl, verifyLocalDatabase } from './local-target';
+import { openLocalDatabase } from './local-target';
 
 export const fictitiousStudents: NewStudent[] = [
 	{
@@ -27,15 +26,13 @@ export const fictitiousStudents: NewStudent[] = [
 		dateOfBirth: '2002-09-23',
 		gender: 'female',
 		classType: 'regular',
-		isActive: false
+		status: 'inactive'
 	}
 ];
 
-export async function seedStudents(databaseUrl: string): Promise<{ id: string }[]> {
-	const target = assertLocalDatabaseUrl(databaseUrl, 'seed');
-	const connection = createDatabase(databaseUrl);
+export async function seedStudents(databaseUrl: string | undefined): Promise<{ id: string }[]> {
+	const connection = await openLocalDatabase(databaseUrl, 'seed');
 	try {
-		await verifyLocalDatabase(connection, target);
 		return await connection.db
 			.insert(students)
 			.values(fictitiousStudents)
@@ -47,6 +44,6 @@ export async function seedStudents(databaseUrl: string): Promise<{ id: string }[
 }
 
 if (import.meta.main) {
-	const inserted = await seedStudents(requireDatabaseUrl(process.env.DATABASE_URL));
+	const inserted = await seedStudents(process.env.DATABASE_URL);
 	console.info(`Inserted ${inserted.length} fictitious students; existing records were left unchanged.`);
 }

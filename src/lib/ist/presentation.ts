@@ -16,8 +16,7 @@ export interface IstReport {
 	brandDescription: string;
 	title: string;
 	subtitle: string;
-	studentName: string;
-	assessedAt: string;
+	filename: string;
 	details: { label: string; value: string }[];
 	columns: { category: string; result: string; thresholds: string; grade: string; outcome: string };
 	rows: IstReportRow[];
@@ -27,7 +26,6 @@ export interface IstReport {
 	belowBaselineLabel: string;
 	belowBaseline: string;
 	disclaimer: string;
-	pageLabel: string;
 }
 
 export function formatDuration(seconds: number): string {
@@ -83,8 +81,7 @@ export function presentIstAssessment(assessment: IstAssessment, language: Langua
 		brandDescription: translations[language].header.brandDescription,
 		title: messages.report.title,
 		subtitle: messages.report.subtitle,
-		studentName: input.studentName,
-		assessedAt: assessment.assessedAt,
+		filename: `${messages.reportFilename}-${assessment.assessedAt.slice(0, 10)}.pdf`,
 		details: [
 			{ label: messages.fields.studentName, value: input.studentName },
 			{ label: messages.report.date, value: date },
@@ -106,7 +103,6 @@ export function presentIstAssessment(assessment: IstAssessment, language: Langua
 		belowBaseline: assessment.belowBaseline.length
 			? assessment.belowBaseline.map((key) => messages.categories[key]).join(', ')
 			: messages.allPassed,
-		disclaimer: messages.report.disclaimer,
-		pageLabel: messages.report.page
+		disclaimer: messages.report.disclaimer
 	};
 }

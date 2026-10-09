@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { assessIst, calculateRawBodyFat } from '../src/lib/ist/assessment';
-import { readIstFormData, revalidateIstErrors, validateIstInput } from '../src/lib/ist/validation';
+import { validateIstInput } from '../src/lib/ist/validation';
+import { readFormFields, refreshVisibleErrors } from '../src/lib/form-fields';
 import {
 	istFields,
 	type IstErrors,
@@ -67,13 +68,13 @@ function toFormData(raw = makeRaw()): FormData {
 
 describe('visible validation errors while editing', () => {
 	test('clears a corrected field while retaining other unanswered-field errors', () => {
-		expect(revalidateIstErrors(makeRaw({ age: '' }), { studentName: 'required', age: 'required' }))
+		expect(refreshVisibleErrors(validateIstInput(makeRaw({ age: '' })), { studentName: 'required', age: 'required' }))
 			.toEqual({ age: 'required' });
 	});
 
 	for (const sex of ['male', 'female']) {
 		test(`clears the missing-baseline error when ${sex} is chosen`, () => {
-			expect(revalidateIstErrors(makeRaw({ sex }), { sex: 'required' })).toEqual({});
+			expect(refreshVisibleErrors(validateIstInput(makeRaw({ sex })), { sex: 'required' })).toEqual({});
 		});
 	}
 
@@ -82,7 +83,7 @@ describe('visible validation errors while editing', () => {
 			test(`clears the missing ${key} choice after selecting ${selection} without immediately flagging its result fields`, () => {
 				const raw = makeRaw({ [status]: selection });
 				for (const field of fields) raw[field] = '';
-				expect(revalidateIstErrors(raw, { [status]: 'required' })).toEqual({});
+				expect(refreshVisibleErrors(validateIstInput(raw), { [status]: 'required' })).toEqual({});
 			});
 		}
 		test(`clears ${key} numeric errors when inability is selected`, () => {
@@ -92,12 +93,12 @@ describe('visible validation errors while editing', () => {
 				raw[field] = '';
 				visibleErrors[field] = 'required';
 			}
-			expect(revalidateIstErrors(raw, visibleErrors)).toEqual({});
+			expect(refreshVisibleErrors(validateIstInput(raw), visibleErrors)).toEqual({});
 		});
 	}
 
 	test('a recorded zero count clears validation errors even though it fails the fitness minimum', () => {
-		expect(revalidateIstErrors(makeRaw({ pushUpsValue: '0' }), { pushUpsValue: 'required' })).toEqual({});
+		expect(refreshVisibleErrors(validateIstInput(makeRaw({ pushUpsValue: '0' })), { pushUpsValue: 'required' })).toEqual({});
 	});
 
 	for (const [field, value, code] of [
@@ -105,7 +106,7 @@ describe('visible validation errors while editing', () => {
 		['pushUpsValue', '34abc', 'number'], ['pushUpsValue', '', 'required']
 	] as const) {
 		test(`keeps ${field} red with the current error when the edit is still invalid (${code})`, () => {
-			expect(revalidateIstErrors(makeRaw({ [field]: value }), { [field]: 'required' })).toEqual({ [field]: code });
+			expect(refreshVisibleErrors(validateIstInput(makeRaw({ [field]: value })), { [field]: 'required' })).toEqual({ [field]: code });
 		});
 	}
 
@@ -114,11 +115,11 @@ describe('visible validation errors while editing', () => {
 		for (const raw of [
 			makeRaw({ weightLb: '170', waistIn: '33' }),
 			makeRaw({ sex: 'female', weightLb: '400', waistIn: '18' })
-		]) expect(revalidateIstErrors(raw, visibleErrors)).toEqual({});
+		]) expect(refreshVisibleErrors(validateIstInput(raw), visibleErrors)).toEqual({});
 	});
 
 	test('keeps both body-fat errors when changed measurements still give an invalid estimate', () => {
-		expect(revalidateIstErrors(makeRaw({ weightLb: '400', waistIn: '18.5' }), {
+		expect(refreshVisibleErrors(validateIstInput(makeRaw({ weightLb: '400', waistIn: '18.5' })), {
 			weightLb: 'bodyFat', waistIn: 'bodyFat'
 		})).toEqual({ weightLb: 'bodyFat', waistIn: 'bodyFat' });
 	});
@@ -128,21 +129,13 @@ describe('visible validation errors while editing', () => {
 			const minutes = `${key}Minutes` as const;
 			const seconds = `${key}Seconds` as const;
 			for (const [minuteValue, secondValue] of [['0', '1'], ['60', '0']]) {
-				expect(revalidateIstErrors(makeRaw({ [minutes]: minuteValue, [seconds]: secondValue }), {
+				expect(refreshVisibleErrors(validateIstInput(makeRaw({ [minutes]: minuteValue, [seconds]: secondValue })), {
 					[minutes]: 'range'
 				})).toEqual({});
 			}
 		});
 	}
 
-	test('does not add errors to untouched fields or mutate submitted values and previous errors', () => {
-		const raw = Object.freeze(makeRaw({ age: '' }));
-		const visibleErrors = Object.freeze<IstErrors>({ pushUpsValue: 'required' });
-		expect(revalidateIstErrors(raw, visibleErrors)).toEqual({});
-		expect(revalidateIstErrors(raw, {})).toEqual({});
-		expect(raw.age).toBe('');
-		expect(visibleErrors).toEqual({ pushUpsValue: 'required' });
-	});
 });
 
 describe('shared input normalization', () => {
@@ -451,22 +444,6 @@ describe('raw body-fat validity', () => {
 });
 
 describe('FormData transport and untrusted entries', () => {
-	test('reads exactly the contracted fields and leaves strings unnormalized until validation', () => {
-		const raw = makeRaw({ studentName: '  Alex Rivera  ' });
-		const data = toFormData(raw);
-		data.append('unrelated', 'ignored');
-		const result = readIstFormData(data);
-		expect(Object.keys(result)).toEqual([...istFields]);
-		expect(result).toEqual(raw);
-		expect(validated(result).studentName).toBe('Alex Rivera');
-	});
-
-	test('returns undefined for missing values rather than coercing them', () => {
-		const result = readIstFormData(new FormData());
-		for (const field of istFields) expect(result[field]).toBeUndefined();
-		expect(validateIstInput(result).valid).toBe(false);
-	});
-
 	for (const field of istFields) {
 		const code: ValidationCode = field === 'studentName' ? 'required'
 			: field === 'sex' ? 'sex' : field.endsWith('Status') ? 'status' : 'number';
@@ -475,15 +452,13 @@ describe('FormData transport and untrusted entries', () => {
 			const value = data.get(field);
 			if (typeof value !== 'string') throw new Error('Expected string fixture');
 			data.append(field, value);
-			expect(readIstFormData(data)[field]).toEqual([value, value]);
-			expectErrors(readIstFormData(data), { [field]: code });
+			expectErrors(readFormFields(data, istFields), { [field]: code });
 		});
 
 		test(`rejects a File entry for ${field}`, () => {
 			const data = toFormData();
 			data.set(field, new File(['21'], 'untrusted.txt'));
-			expect(readIstFormData(data)[field]).toBeInstanceOf(File);
-			expectErrors(readIstFormData(data), { [field]: code });
+			expectErrors(readFormFields(data, istFields), { [field]: code });
 		});
 	}
 
@@ -494,7 +469,7 @@ describe('FormData transport and untrusted entries', () => {
 				for (const valueField of fields) raw[valueField] = '';
 				const data = toFormData(raw);
 				data.append(field, '');
-				expectErrors(readIstFormData(data), { [field]: 'inconsistent' });
+				expectErrors(readFormFields(data, istFields), { [field]: 'inconsistent' });
 			});
 		}
 	}
@@ -502,7 +477,7 @@ describe('FormData transport and untrusted entries', () => {
 	test('rejects mixed string and File duplicates rather than selecting the valid entry', () => {
 		const data = toFormData();
 		data.append('age', new File(['21'], 'age.txt'));
-		expectErrors(readIstFormData(data), { age: 'number' });
+		expectErrors(readFormFields(data, istFields), { age: 'number' });
 	});
 
 	test('reads omitted unable value fields correctly through FormData', () => {
@@ -511,7 +486,7 @@ describe('FormData transport and untrusted entries', () => {
 			data.set(status, 'unable_to_complete');
 			for (const field of fields) data.delete(field);
 		}
-		const input = validated(readIstFormData(data));
+		const input = validated(readFormFields(data, istFields));
 		for (const { key } of exercises) expect(input[key]).toEqual({ status: 'unable_to_complete' });
 	});
 });

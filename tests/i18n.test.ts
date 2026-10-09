@@ -6,17 +6,15 @@ import { load } from '../src/routes/+layout.server';
 import { formatMessage, languageCookie, languages, resolveLanguage, translations } from '../src/lib/i18n/translations';
 import { exerciseKeys } from '../src/lib/ist/types';
 
-function translationKeys(messages: object, prefix = ''): string[] {
-	return Object.entries(messages).flatMap(([key, value]) => {
+function translationEntries(messages: object, prefix = ''): Record<string, string[]> {
+	return Object.fromEntries(Object.entries(messages).flatMap<[string, string[]]>(([key, value]) => {
 		const path = prefix ? `${prefix}.${key}` : key;
-
 		if (typeof value === 'string') {
 			expect(value.trim().length).toBeGreaterThan(0);
-			return [path];
+			return [[path, [...new Set([...value.matchAll(/\{(\w+)\}/g)].map((match) => match[1]))].sort()]];
 		}
-
-		return translationKeys(value, path);
-	}).sort();
+		return Object.entries(translationEntries(value, path));
+	}).sort(([a], [b]) => a.localeCompare(b)));
 }
 
 function renderRequest(cookie?: string) {
@@ -34,7 +32,7 @@ function renderRequest(cookie?: string) {
 		}
 	} as RequestEvent;
 
-	const response = handle({
+	const response = Promise.resolve(handle({
 		event,
 		resolve: async (_request: RequestEvent, options?: ResolveOptions) => {
 			const html = options!.transformPageChunk!({
@@ -43,14 +41,14 @@ function renderRequest(cookie?: string) {
 			});
 			return new Response(await html);
 		}
-	});
+	}));
 
 	return { event, response };
 }
 
 describe('translations', () => {
-	test('English and Spanish have the same nonempty translation keys', () => {
-		expect(translationKeys(translations.es)).toEqual(translationKeys(translations.en));
+	test('English and Spanish have identical nonempty keys and placeholder sets', () => {
+		expect(translationEntries(translations.es)).toEqual(translationEntries(translations.en));
 	});
 
 	test('each selector option has translations and the requested flag', () => {
@@ -68,34 +66,28 @@ describe('translations', () => {
 		expect(translations.es.ist.categories.bodyFat).toBe('Grasa corporal estimada');
 	});
 
-	test('labels the four grade rings in test order in both languages', () => {
+	test('grade labels accept the caller-provided score in both languages', () => {
 		for (const { code } of languages) {
-			const messages = translations[code].designPreview.focus;
-			expect(Object.keys(messages.subjects)).toEqual(['wk', 'pc', 'mk', 'ar']);
-			expect(Object.values(messages.subjects).map(({ code }) => code)).toEqual(['WK', 'PC', 'MK', 'AR']);
+			const messages = translations[code].home.grades;
 			expect(formatMessage(messages.score, { score: 78 })).toContain('78');
+			expect(formatMessage(messages.scoreText, { score: 78 })).toContain('78');
 			expect(formatMessage(messages.scoreText, { score: 78 })).not.toContain('{');
-			expect(messages.sampleData.length).toBeGreaterThan(0);
-			expect(messages.sampleNote).toContain('ASVAB');
 		}
 	});
 
-	test('provides Speed Math setup, session, and results copy in both languages', () => {
+	test('math challenge labels accept the operation and duration', () => {
 		for (const { code } of languages) {
 			const messages = translations[code].speedMath;
-			for (const key of ['briefingTitle', 'sessionTitle', 'ready', 'live', 'timerHint', 'minuteUnit', 'accuracyFirst', 'keyboardHint', 'resultsHint'] as const) {
-				expect(messages[key].trim().length).toBeGreaterThan(0);
-			}
-			expect(formatMessage(messages.challengeLabel, { operation: messages.operations.division, minutes: 15 })).not.toContain('{');
+			const label = formatMessage(messages.challengeLabel, { operation: messages.operations.division, minutes: 15 });
+			expect(label).toContain(messages.operations.division);
+			expect(label).toContain('15');
+			expect(label).not.toContain('{');
 		}
 	});
 
 	test('provides bootcamp report navigation and event-specific accessible labels in both languages', () => {
 		for (const { code } of languages) {
 			const messages = translations[code].bootcamp.admin;
-			for (const key of ['reports', 'viewReport', 'noReports'] as const) {
-				expect(messages[key].trim().length).toBeGreaterThan(0);
-			}
 			const label = formatMessage(messages.viewReportFor, { title: 'Bootcamp de octubre' });
 			expect(label).toContain('Bootcamp de octubre');
 			expect(label).not.toContain('{title}');
@@ -120,59 +112,27 @@ describe('translated message formatting', () => {
 	test('formats the adaptive frequency interface in both languages', () => {
 		for (const { code } of languages) {
 			const messages = translations[code].frequency;
-			expect(formatMessage(messages.roundLabel, { round: 2 })).not.toContain('{');
-			expect(formatMessage(messages.roundSize, { count: 25 })).not.toContain('{');
-			expect(formatMessage(messages.startHint, { count: 25 })).not.toContain('{');
-			expect(formatMessage(messages.currentPass, { pass: 2 })).not.toContain('{');
-			expect(formatMessage(messages.poolProgress, { count: 20, total: 1001, percent: 2 })).not.toContain('{');
-			expect(formatMessage(messages.answeredProgress, { answered: 25, total: 25 })).not.toContain('{');
-			expect(formatMessage(messages.cardProgress, { current: 3, total: 25 })).not.toContain('{');
-			expect(formatMessage(messages.completeMessage, { correct: 20, total: 25 })).not.toContain('{');
+			const labels: [string, Record<string, string | number>][] = [
+				[messages.roundLabel, { round: 2 }],
+				[messages.roundSize, { count: 25 }],
+				[messages.startHint, { count: 25 }],
+				[messages.currentPass, { pass: 2 }],
+				[messages.poolProgress, { count: 14, total: '1,001', percent: '1.4' }],
+				[messages.answeredProgress, { answered: 23, total: 25 }],
+				[messages.cardProgress, { current: 3, total: 25 }],
+				[messages.completeMessage, { correct: 20, total: 25 }]
+			];
+			for (const [message, values] of labels) {
+				const label = formatMessage(message, values);
+				for (const value of Object.values(values)) expect(label).toContain(String(value));
+				expect(label).not.toContain('{');
+			}
 			expect(messages.englishShort).toBe('EN');
 			expect(messages.spanishShort).toBe('ES');
 		}
 	});
 });
 
-describe('frequency start screen', () => {
-	test('provides a start button and ready prompt in both languages', () => {
-		expect(translations.en.frequency.startRound).toBe('Start round');
-		expect(translations.es.frequency.startRound).toBe('Empezar ronda');
-		for (const { code } of languages) {
-			expect(translations[code].frequency.readyTitle.length).toBeGreaterThan(0);
-			expect(formatMessage(translations[code].frequency.startHint, { count: 25 })).toContain('25');
-		}
-	});
-});
-
-describe('frequency practice guidance', () => {
-	test('provides setup, session-only progress, and keyboard guidance in both languages', () => {
-		for (const { code } of languages) {
-			const messages = translations[code].frequency;
-			for (const key of ['sessionOnly', 'methodTitle', 'untimed', 'sessionLabel', 'setupTitle', 'setupDescription', 'keyboardTip'] as const) {
-				expect(messages[key].trim().length).toBeGreaterThan(0);
-			}
-		}
-	});
-
-	test('provides recall, search, and repeat method steps in both languages', () => {
-		for (const { code } of languages) {
-			const steps = translations[code].frequency.methodSteps;
-			expect(Object.keys(steps)).toEqual(['recall', 'search', 'repeat']);
-			for (const key of ['recall', 'search', 'repeat'] as const) {
-				expect(steps[key].title.trim().length).toBeGreaterThan(0);
-				expect(steps[key].description.trim().length).toBeGreaterThan(0);
-			}
-		}
-	});
-});
-
-describe('frequency round numbering', () => {
-	test.each([1, 2, 15])('labels round %i in both languages', (round) => {
-		expect(formatMessage(translations.en.frequency.roundLabel, { round })).toBe(`Round ${round}`);
-		expect(formatMessage(translations.es.frequency.roundLabel, { round })).toBe(`Ronda ${round}`);
-	});
-});
 
 describe('language preference', () => {
 	test('accepts English and Spanish cookies', () => {

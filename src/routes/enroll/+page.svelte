@@ -14,6 +14,7 @@
 	import { useLanguage } from '#lib/i18n/language.svelte.ts';
 
 	import { INVITATION_REFERRER_POLICY, type EnrollmentData, type EnrollmentActionData } from '#lib/student-invitations.ts';
+	import { studentGenders } from '#lib/student.ts';
 
 	let { data }: { data: EnrollmentData } = $props();
 	const language = useLanguage();
@@ -46,7 +47,7 @@
 	<meta name="referrer" content={INVITATION_REFERRER_POLICY} />
 </svelte:head>
 
-<section class="enrollment" aria-labelledby={`${id}-title`} lang={language.current}>
+<section class="enrollment" aria-labelledby={`${id}-title`}>
 	<Card.Root class="gap-0 p-[clamp(1.25rem,4vw,2.5rem)]">
 		{#if data.state === 'complete'}
 			<CheckCircle class="mb-5 size-9 text-primary" aria-hidden="true" />
@@ -72,7 +73,7 @@
 					</div>
 					<p class="hint" id={`${id}-assigned`}>{messages.assignedHint}</p>
 					<div class="field"><Label class="font-bold" for={`${id}-birth-date`}>{messages.fields.dateOfBirth}</Label><Input id={`${id}-birth-date`} name="dateOfBirth" type="date" autocomplete="bday" value={data.student.dateOfBirth ?? ''} max={today} required aria-describedby={`${id}-birth-hint`} /><p class="hint" id={`${id}-birth-hint`}>{messages.birthDateHint}</p></div>
-					<ChoiceGroup id={`${id}-gender`} name="gender" label={messages.fields.gender} bind:value={gender} choices={[{ value: 'male', label: messages.genders.male }, { value: 'female', label: messages.genders.female }]} />
+					<ChoiceGroup id={`${id}-gender`} name="gender" label={messages.fields.gender} bind:value={gender} choices={studentGenders.map((value) => ({ value, label: messages.genders[value] }))} />
 					{#if error}
 						<Alert.Root variant="destructive"><Alert.Description>{messages.errors[error]}</Alert.Description></Alert.Root>
 					{/if}

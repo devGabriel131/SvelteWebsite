@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import { useLanguage } from '#lib/i18n/language.svelte.ts';
 	import { subjects, type AdminStudent } from './roster';
+	import { studentClassTypes, studentGenders, studentStatuses, type StudentGender } from '#lib/student.ts';
 	import { Button } from '#lib/components/ui/button/index.js';
 	let { student }: { student: AdminStudent } = $props();
 	const language = useLanguage();
@@ -31,13 +32,13 @@
 				{/each}
 			</div>
 			<fieldset><legend>{edit.gender}</legend><div class="options">
-				{#each ['', 'male', 'female'] as gender}<label><input type="radio" name="gender" value={gender} checked={(student.gender ?? '') === gender} />{edit.genders[gender === '' ? 'none' : gender as 'male' | 'female']}</label>{/each}
+				{#each ['', ...studentGenders] as gender}<label><input type="radio" name="gender" value={gender} checked={(student.gender ?? '') === gender} />{edit.genders[gender === '' ? 'none' : gender as StudentGender]}</label>{/each}
 			</div></fieldset>
 			<fieldset><legend>{messages.classType}</legend><div class="options">
-				{#each ['basic', 'regular'] as classType}<label><input type="radio" name="classType" value={classType} checked={student.classType === classType} required />{messages.classes[classType as 'basic' | 'regular']}</label>{/each}
+				{#each studentClassTypes as classType}<label><input type="radio" name="classType" value={classType} checked={student.classType === classType} required />{messages.classes[classType]}</label>{/each}
 			</div></fieldset>
 			<fieldset aria-describedby={`${id}-invited`}><legend>{messages.status}</legend><div class="options">
-				{#each ['active', 'inactive', 'invited'] as status}<label><input type="radio" name="status" value={status} checked={student.status === status} required />{messages.statuses[status as 'active' | 'inactive' | 'invited']}</label>{/each}
+				{#each studentStatuses as status}<label><input type="radio" name="status" value={status} checked={student.status === status} required />{messages.statuses[status]}</label>{/each}
 			</div></fieldset>
 			<p id={`${id}-invited`}>{edit.invitedNote}</p>
 			<fieldset aria-describedby={`${id}-scores`}><legend>{edit.scores}</legend><div class="fields">

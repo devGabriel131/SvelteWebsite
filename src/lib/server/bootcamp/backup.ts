@@ -93,16 +93,14 @@ function verifyFile(file: DriveFile, document: ClaimedDocument, fileId: string, 
  */
 export function createBootcampBackup(
 	db: BootcampBackupDatabase,
-	client?: DriveClient | null,
-	folderId?: string | null
+	drive: { client: Pick<DriveClient, 'upload' | 'generateFileId' | 'getFile'>; folderId: string } | null
 ): BootcampBackup {
-	const folder = folderId?.trim();
-	const configured = Boolean(folder && client?.generateFileId && client?.getFile);
 
 	async function backupDocument(documentId: string): Promise<BootcampBackupResult> {
-		if (!configured || !client?.generateFileId || !client.getFile || !folder) {
+		if (drive === null) {
 			return { documentId, status: 'queued', error: 'not_configured' };
 		}
+		const { client, folderId } = drive;
 
 		let document: ClaimedDocument | undefined;
 		try {
@@ -144,7 +142,7 @@ export function createBootcampBackup(
 					id: fileId,
 					bytes: document.pdf,
 					filename: `bootcamp-${document.id}-${document.kind}-${document.language}.pdf`,
-					mimeType: 'application/pdf', parentFolderId: folder,
+					mimeType: 'application/pdf', parentFolderId: folderId,
 					appProperties: { bootcampDocumentId: document.id, sha256: document.sha256 }
 				}, signal);
 				if (uploadedId !== fileId) throw new BootcampBackupError('drive_mismatch');
@@ -153,7 +151,7 @@ export function createBootcampBackup(
 				// https://developers.google.com/workspace/drive/api/guides/manage-uploads#use_a_pre-generated_id_to_upload_files
 				if (!(error instanceof DriveError) || error.status !== 409) throw error;
 			}
-			verifyFile(await client.getFile(fileId, signal), document, fileId, folder);
+			verifyFile(await client.getFile(fileId, signal), document, fileId, folderId);
 			const saved = await storage(() => db.update(documents).set({
 				backupStatus: 'saved', backedUpAt: sql`statement_timestamp()`,
 				backupLeaseUntil: null, backupError: null
@@ -185,7 +183,7 @@ export function createBootcampBackup(
 			if (!Number.isInteger(limit) || limit < 1 || limit > maxBatchSize) {
 				throw new RangeError('Bootcamp backup limit must be an integer between 1 and 50.');
 			}
-			if (!configured) return [];
+			if (drive === null) return [];
 			// Select IDs only: PDFs are loaded one at a time by the lease winner.
 			// Concurrent drainers may select the same candidates; backupDocument's CAS arbitrates.
 			const candidates = await storage(() => db.select({ id: documents.id }).from(documents)

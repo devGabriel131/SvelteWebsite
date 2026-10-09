@@ -3,9 +3,8 @@ import { BASE_ERROR_CODES, betterAuth } from 'better-auth';
 import { APIError, createAuthMiddleware } from 'better-auth/api';
 import * as authSchema from '../db/auth-schema';
 import type { Database } from '../db/connection';
-import type { AuthConfig } from './config';
-import { isValidCredential, type AuthAudience } from './credentials';
-import { LOCAL_ADMIN_EMAIL } from './local-admin';
+import { LOCAL_ADMIN_EMAIL, type AuthConfig } from './config';
+import { isValidCredential, type AuthAudience } from '../../auth-credentials';
 
 // The server hook must overwrite this header with event.getClientAddress().
 export const AUTH_IP_HEADER = 'x-auth-client-ip';

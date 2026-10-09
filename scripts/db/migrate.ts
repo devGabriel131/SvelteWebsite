@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
-import { createDatabase, requireDatabaseUrl, type Database } from '../../src/lib/server/db/connection';
+import { createDatabase, type Database } from '../../src/lib/server/db/connection';
 
 export async function migrateDatabase(db: Database): Promise<void> {
 	await migrate(db, {
@@ -9,7 +9,7 @@ export async function migrateDatabase(db: Database): Promise<void> {
 }
 
 if (import.meta.main) {
-	const connection = createDatabase(requireDatabaseUrl(process.env.DATABASE_URL));
+	const connection = createDatabase(process.env.DATABASE_URL);
 	try {
 		await migrateDatabase(connection.db);
 		console.info('Database migrations applied.');

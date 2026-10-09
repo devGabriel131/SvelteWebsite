@@ -412,6 +412,21 @@ describe('bounded form request parsing', () => {
 		await expect(readForm(request(body, contentType))).rejects.toMatchObject({ name: 'BootcampError', code: 'invalid', message: 'invalid' });
 		expect(body.locked).toBe(false);
 	});
+
+	test('keeps form/webhook failure policies and unlocks readers when overflow cancellation rejects', async () => {
+		for (const type of [contentType, 'application/json']) {
+			let cancelled = false;
+			const body = new ReadableStream<Uint8Array>({
+				pull(controller) { controller.enqueue(new Uint8Array(32_769)); },
+				cancel() { cancelled = true; throw new Error('private cancellation detail'); }
+			}, { highWaterMark: 0 });
+			const input = request(body, type);
+			if (type === contentType) await expect(readForm(input, 32_768)).rejects.toMatchObject({ name: 'BootcampError', code: 'invalid', message: 'invalid' });
+			else expect(await webhookBody(input)).toBeNull();
+			expect(cancelled).toBe(true);
+			expect(body.locked).toBe(false);
+		}
+	});
 });
 
 describe('untrusted webhook lookup hints', () => {

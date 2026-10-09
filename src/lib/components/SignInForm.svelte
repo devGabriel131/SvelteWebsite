@@ -2,13 +2,14 @@
 	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
 	import { adminAuthClient, authClient } from '#lib/auth-client.ts';
+	import { isValidCredential, type AuthAudience } from '#lib/auth-credentials.ts';
 	import * as Alert from '#lib/components/ui/alert/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
 	import { Label } from '#lib/components/ui/label/index.js';
 	import { useLanguage } from '#lib/i18n/language.svelte.ts';
 
-	let { audience, localAdmin = false, returnTo }: { audience: 'student' | 'admin'; localAdmin?: boolean; returnTo?: string } = $props();
+	let { audience, localAdmin = false, returnTo }: { audience: AuthAudience; localAdmin?: boolean; returnTo?: string } = $props();
 	const language = useLanguage();
 	const id = $props.id();
 	const messages = $derived(language.messages.auth);
@@ -32,9 +33,7 @@
 		error = null;
 
 		// Keep PINs as strings: numeric conversion would discard leading zeros.
-		if (audience === 'student'
-			? password.length !== 4 || !/^[0-9]{4}$/.test(password)
-			: !(allowLocalAdmin && password === 'admin') && (password.length < 8 || password.length > 128)) {
+		if (!(allowLocalAdmin && password === 'admin') && !isValidCredential(audience, password)) {
 			error = 'invalidCredential';
 			return;
 		}
@@ -71,7 +70,7 @@
 	}
 </script>
 
-<form method="POST" onsubmit={signIn} aria-label={copy.title} aria-busy={pending} lang={language.current}>
+<form method="POST" onsubmit={signIn} aria-label={copy.title} aria-busy={pending}>
 	<div class="field">
 		<Label class="font-bold" for={`${id}-email`}>{allowLocalAdmin ? messages.usernameOrEmail : messages.email}</Label>
 		<Input class="min-h-12 text-base md:text-base" id={`${id}-email`} name="email" type={allowLocalAdmin ? 'text' : 'email'}

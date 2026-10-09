@@ -1,13 +1,5 @@
-import {
-	isCorrectAnswer,
-	normalizeAnswer,
-	spanishOptions,
-	type FrequencyWord
-} from './vocabulary';
-
-export const roundSize = 25;
-
-export type AnswerOutcome = 'correct' | 'incorrect' | 'skipped';
+import { roundSize, type AnswerOutcome } from './rules';
+import { isCorrectAnswer, isSpanishOption, type FrequencyWord } from './vocabulary';
 
 export interface ItemProgress {
 	correctCount: number;
@@ -42,8 +34,6 @@ export interface PracticeRound {
 	answers: CardAnswer[];
 	complete: boolean;
 }
-
-const normalizedSpanishOptions = new Set(spanishOptions.map(normalizeAnswer));
 
 export function selectNextWord(
 	pool: readonly FrequencyWord[],
@@ -107,10 +97,7 @@ export function answerCard(
 		return round;
 	}
 
-	if (value !== null) {
-		const normalized = normalizeAnswer(value);
-		if (!normalized || !normalizedSpanishOptions.has(normalized)) return round;
-	}
+	if (value !== null && !isSpanishOption(value)) return round;
 
 	const outcome = value === null ? 'skipped' : isCorrectAnswer(card.word, value) ? 'correct' : 'incorrect';
 	const previous = round.progress[card.word.id] ?? {

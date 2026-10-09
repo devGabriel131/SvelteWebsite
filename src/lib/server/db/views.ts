@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { bigint, boolean, integer, pgView, text, timestamp, uuid } from 'drizzle-orm/pg-core';
-import { roundSize } from '../../frequency/practice';
+import { answerOutcomes, roundSize } from '../../frequency/rules';
+import { operations } from '../../speed-math/game';
 
 export const studentWordProgress = pgView('student_word_progress', {
 	studentId: uuid('student_id').notNull(),
@@ -9,7 +10,7 @@ export const studentWordProgress = pgView('student_word_progress', {
 	incorrectCount: bigint('incorrect_count', { mode: 'number' }).notNull(),
 	skippedCount: bigint('skipped_count', { mode: 'number' }).notNull(),
 	lastPracticedAt: timestamp('last_practiced_at', { withTimezone: true }).notNull(),
-	lastOutcome: text('last_outcome', { enum: ['correct', 'incorrect', 'skipped'] }).notNull()
+	lastOutcome: text('last_outcome', { enum: answerOutcomes }).notNull()
 }).as(sql`
 	SELECT attempt.student_id, response.item_id,
 		count(*) FILTER (WHERE response.outcome = 'correct') AS correct_count,
@@ -82,7 +83,7 @@ export const studentVocabularyCompleteness = pgView('student_vocabulary_complete
 function speedMathBestColumns() {
 	return {
 		studentId: uuid('student_id').notNull(),
-		operation: text('operation', { enum: ['addition', 'subtraction', 'multiplication', 'division'] }).notNull(),
+		operation: text('operation', { enum: operations }).notNull(),
 		durationMinutes: integer('duration_minutes').notNull(),
 		rulesVersion: text('rules_version').notNull(),
 		attemptId: uuid('attempt_id').notNull(),

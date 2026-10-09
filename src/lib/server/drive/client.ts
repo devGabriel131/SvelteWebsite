@@ -1,7 +1,6 @@
-import { createGoogleClient, GoogleApiError, type GoogleClientOptions, type GoogleErrorKind } from '../google/client';
-import type { DriveConfig } from './config';
-
-export type DriveErrorKind = GoogleErrorKind;
+import {
+	createGoogleClient, GoogleApiError, isNonblank, isRecord, type GoogleClientOptions, type GoogleCredentials
+} from '../google/client';
 
 export class DriveError extends GoogleApiError {}
 
@@ -31,30 +30,17 @@ export type DriveFolder = {
 	parentFolderId: string;
 };
 
-export type DriveClientOptions = GoogleClientOptions;
-
 export type DriveClient = {
 	upload(file: DriveUpload, signal?: AbortSignal): Promise<string>;
 	createFolder(folder: DriveFolder, signal?: AbortSignal): Promise<string>;
-	// Optional so existing upload-only adapters remain compatible.
-	generateFileId?(signal?: AbortSignal): Promise<string>;
-	getFile?(id: string, signal?: AbortSignal): Promise<DriveFile>;
+	generateFileId(signal?: AbortSignal): Promise<string>;
+	getFile(id: string, signal?: AbortSignal): Promise<DriveFile>;
 };
-
-export type DriveClientWithFileIds = DriveClient & Required<Pick<DriveClient, 'generateFileId' | 'getFile'>>;
 
 const uploadUrl = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id&supportsAllDrives=true';
 const filesUrl = 'https://www.googleapis.com/drive/v3/files?fields=id&supportsAllDrives=true';
 const generateIdsUrl = 'https://www.googleapis.com/drive/v3/files/generateIds?count=1&space=drive&type=files&fields=ids';
 const fileFields = 'id,name,mimeType,parents,appProperties,trashed,size,sha256Checksum';
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function isNonblank(value: unknown): value is string {
-	return typeof value === 'string' && value.trim().length > 0;
-}
 
 function isFileId(value: unknown): value is string {
 	return typeof value === 'string' && /^[A-Za-z0-9_-]+$/.test(value);
@@ -64,11 +50,7 @@ function isProperties(value: unknown): value is Record<string, string> {
 	return isRecord(value) && Object.entries(value).every(([key, item]) => isNonblank(key) && typeof item === 'string');
 }
 
-
-export function createDriveClient(config: DriveConfig, options: DriveClientOptions = {}): DriveClientWithFileIds {
-	if (![config.clientId, config.clientSecret, config.refreshToken, config.reportsFolderId].every(isNonblank)) {
-		throw new DriveError('configuration', 'Drive client configuration requires nonblank credentials and reportsFolderId.');
-	}
+export function createDriveClient(config: GoogleCredentials, options: GoogleClientOptions = {}): DriveClient {
 	const google = createGoogleClient(config, { ...options, service: 'Google Drive', error: DriveError });
 
 	async function get(url: string, signal?: AbortSignal) {
